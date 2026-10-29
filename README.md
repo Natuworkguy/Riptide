@@ -1,4 +1,10 @@
-<p align="center"><img src="brand/riptide-wordmark.svg" alt="Riptide" width="420"></p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/riptide-wordmark-white.svg">
+    <source media="(prefers-color-scheme: light)" srcset="brand/riptide-wordmark.svg">
+    <img src="brand/riptide-wordmark.svg" alt="Riptide" width="420">
+  </picture>
+</p>
 
 # Riptide
 

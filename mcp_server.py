@@ -119,6 +119,8 @@ async def update_layer(layer: str, props: dict | None = None, at_time: float | N
     """Change a layer. Properties that already have keyframes get a keyframe at `at_time` (default playhead);
     others change everywhere unless `keyframe` is true. `ease` sets the easing of new keyframes.
     Also renames, retimes (start/end seconds), hides, locks, or sets a blend mode ("normal", "multiply", "screen", ...).
+    A fill becomes a gradient with props grad ("linear" or "radial"; "none" for solid), fill2 (the second colour)
+    and gradAngle (degrees for linear: 0 runs left to right, 90 top to bottom); fill2 and gradAngle animate.
     lock_position, lock_width and lock_height lock or unlock x/y, w and h: while locked, nothing changes them, and
     trying is an error. Respect the user's locks; unlock only when they ask."""
     return await acall("update_layer", {"id": layer, "props": props or {}, "time": at_time, "keyframe": keyframe, "ease": ease,

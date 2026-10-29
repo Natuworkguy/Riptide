@@ -44,33 +44,47 @@ function curveSVG(name, w = 34, h = 22) {
 }
 
 // ---------- model ----------
-const ANIM = ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'radius', 'fill', 'stroke', 'strokeWidth',
+const ANIM = ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'radius', 'fill', 'fill2', 'gradAngle', 'stroke', 'strokeWidth',
   'blur', 'shadow', 'size', 'reveal', 'sweep', 'spacing', 'bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert'];
 const ADJUST = ['bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert'];
 const COMMON = ['x', 'y', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'blur', 'shadow', ...ADJUST];
 const PROPS = {
-  rect:    [...COMMON, 'w', 'h', 'radius', 'fill', 'stroke', 'strokeWidth'],
-  ellipse: [...COMMON, 'w', 'h', 'fill', 'stroke', 'strokeWidth'],
-  star:    [...COMMON, 'w', 'h', 'points', 'fill', 'stroke', 'strokeWidth'],
-  polygon: [...COMMON, 'w', 'h', 'points', 'radius', 'fill', 'stroke', 'strokeWidth'],
+  rect:    [...COMMON, 'w', 'h', 'radius', 'fill', 'grad', 'fill2', 'gradAngle', 'stroke', 'strokeWidth'],
+  ellipse: [...COMMON, 'w', 'h', 'fill', 'grad', 'fill2', 'gradAngle', 'stroke', 'strokeWidth'],
+  star:    [...COMMON, 'w', 'h', 'points', 'fill', 'grad', 'fill2', 'gradAngle', 'stroke', 'strokeWidth'],
+  polygon: [...COMMON, 'w', 'h', 'points', 'radius', 'fill', 'grad', 'fill2', 'gradAngle', 'stroke', 'strokeWidth'],
   arc:     [...COMMON, 'w', 'h', 'sweep', 'stroke', 'strokeWidth'],
   wave:    [...COMMON, 'w', 'h', 'reveal', 'stroke', 'strokeWidth'],
-  text:    [...COMMON, 'text', 'size', 'weight', 'spacing', 'reveal', 'fill', 'stroke', 'strokeWidth'],
+  text:    [...COMMON, 'text', 'size', 'weight', 'spacing', 'reveal', 'fill', 'grad', 'fill2', 'gradAngle', 'stroke', 'strokeWidth'],
   image:   [...COMMON, 'w', 'h', 'radius', 'stroke', 'strokeWidth'],
   video:   [...COMMON, 'w', 'h', 'radius', 'stroke', 'strokeWidth'],
 };
 const GROUPS = [['Transform', ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy']],
-  ['Style', ['fill', 'stroke', 'strokeWidth', 'radius', 'points', 'sweep', 'opacity']],
+  ['Style', ['fill', 'grad', 'fill2', 'gradAngle', 'stroke', 'strokeWidth', 'radius', 'points', 'sweep', 'opacity']],
   ['Text', ['text', 'size', 'weight', 'spacing', 'reveal']], ['Effects', ['blur', 'shadow']], ['Adjust', ADJUST]];
 const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', scale: 'Scale', sx: 'Stretch X', sy: 'Stretch Y',
-  opacity: 'Opacity', radius: 'Corners', fill: 'Fill', stroke: 'Stroke', strokeWidth: 'Stroke W', blur: 'Blur', shadow: 'Shadow',
+  opacity: 'Opacity', radius: 'Corners', fill: 'Fill', grad: 'Gradient', fill2: 'Fill 2', gradAngle: 'Angle°', stroke: 'Stroke', strokeWidth: 'Stroke W', blur: 'Blur', shadow: 'Shadow',
   size: 'Font size', text: 'Text', points: 'Points', weight: 'Weight', reveal: 'Reveal', sweep: 'Sweep°', spacing: 'Tracking',
   bright: 'Brightness', contrast: 'Contrast', sat: 'Saturation', hue: 'Hue°', gray: 'Grayscale', sepia: 'Sepia', invert: 'Invert' };
 const STEP = { opacity: .05, scale: .05, sx: .05, sy: .05, reveal: .05 };
 const PALETTE = ['#7c5cff', '#ff5c8a', '#20c997', '#ffb020', '#3fa9ff', '#ff7a45'];
 const DEFAULTS = { rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0,
   size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, sweep: 270, points: 5, w: 300, h: 300,
-  bright: 100, contrast: 100, sat: 100, hue: 0, gray: 0, sepia: 0, invert: 0 };
+  bright: 100, contrast: 100, sat: 100, hue: 0, gray: 0, sepia: 0, invert: 0, grad: 'none', gradAngle: 90 };
+// A fill can be a gradient from Fill to Fill 2: linear at an angle (0° runs left to right, 90° top to bottom), or
+// radial from the middle out. It spans the layer's own box, so it moves, scales and turns with the layer.
+const GRADS = [['none', 'None'], ['linear', 'Linear'], ['radial', 'Radial']];
+const COLORS = ['fill', 'fill2', 'stroke'];
+function fillOf(c, o, w, h) {
+  if ((o.grad !== 'linear' && o.grad !== 'radial') || !isColor(o.fill2)) return o.fill;
+  let g;
+  if (o.grad === 'radial') g = c.createRadialGradient(0, 0, 0, 0, 0, Math.max(1, Math.hypot(w, h) / 2));
+  else { const a = (o.gradAngle || 0) * PI / 180, dx = Math.cos(a), dy = Math.sin(a);
+    const half = Math.max(1, Math.abs(dx) * w / 2 + Math.abs(dy) * h / 2);
+    g = c.createLinearGradient(-dx * half, -dy * half, dx * half, dy * half); }
+  g.addColorStop(0, o.fill); g.addColorStop(1, o.fill2);
+  return g;
+}
 
 let S = { w: 1080, h: 1080, bg: '#0b1026', dur: 5, layers: [] };
 let time = 0, playing = false, loop = true, sel = null, selKey = null, uid = 1, freshLayer = null;
@@ -92,7 +106,7 @@ function lerp(a, b, k) {
   return +a + (+b - +a) * k;
 }
 // Every animatable property but the colours is a number: "0.5", as an agent may send it, is kept as 0.5.
-const keyValue = (prop, v) => ANIM.includes(prop) && prop !== 'fill' && prop !== 'stroke' && typeof v === 'string' && v.trim() !== '' && isFinite(+v) ? +v : v;
+const keyValue = (prop, v) => ANIM.includes(prop) && !['fill', 'fill2', 'stroke'].includes(prop) && typeof v === 'string' && v.trim() !== '' && isFinite(+v) ? +v : v;
 function val(L, prop, t) {
   const ks = L.keys[prop];
   if (!ks || !ks.length) return L.p[prop];
@@ -180,6 +194,7 @@ function drawLayer(c, L, t) {
   if (L.type === 'text') {
     setFont(c, o); c.textAlign = 'left'; c.textBaseline = 'middle';
     const full = String(o.text).split('\n'), shown = textOf(o).split('\n'), lh = o.size * 1.1, y0 = -(full.length - 1) * lh / 2;
+    c.fillStyle = fillOf(c, o, Math.max(10, ...full.map(s => c.measureText(s).width)), lh * full.length);
     // each line is anchored where its full text sits, so a typewriter reveal does not shift it
     shown.forEach((ln, i) => {
       const x = -c.measureText(full[i] || '').width / 2;
@@ -187,6 +202,7 @@ function drawLayer(c, L, t) {
       c.fillText(ln, x, y0 + i * lh);
     });
   } else {
+    c.fillStyle = fillOf(c, o, Math.abs(o.w), Math.abs(o.h));
     shapePath(c, L, o);
     if (L.type === 'image' || L.type === 'video') {
       const img = L.type === 'video' ? videoFrame(L, t) : imageFor(L.p.asset);
@@ -597,15 +613,18 @@ function renderProps() {
       h += `<div class="sec"><div class="sech">${g}</div><div class="grid">`;
       if (g === 'Adjust') h += `<div class="row wide"><label>Look</label><button class="selectbtn" data-menu="look"><span>Apply a look…</span>${ICON.chev}</button></div>`;
       for (const k of ks) {
+        if ((k === 'fill2' || k === 'gradAngle') && (o.grad || 'none') === 'none') continue;
+        if (k === 'gradAngle' && o.grad !== 'linear') continue;
         const anim = ANIM.includes(k), here = L.keys[k]?.some(x => near(x.t, time)), keyed = L.keys[k]?.length, v = o[k];
         const fx = FIX_OF[k], isFixed = fixed(L, k);
         const kb = anim ? `<button class="kf ${keyed ? 'has' : ''} ${here ? 'here' : ''}" data-key="${k}" title="${here ? 'Remove keyframe' : 'Add keyframe at playhead'}"${isFixed ? ' disabled' : ''}>${here ? ICON.key : ICON.keyOff}</button>` : '<span class="kf"></span>';
         let field;
-        if (k === 'fill' || k === 'stroke') field = `<button class="swatch" data-color="${k}"><i style="background:${v}"></i><span>${v.toUpperCase()}</span></button>`;
+        if (k === 'grad') field = `<button class="selectbtn" data-menu="grad"><span>${(GRADS.find(g => g[0] === (v || 'none')) || GRADS[0])[1]}</span>${ICON.chev}</button>`;
+        else if (COLORS.includes(k)) field = `<button class="swatch" data-color="${k}"><i style="background:${v}"></i><span>${v.toUpperCase()}</span></button>`;
         else if (k === 'text') field = `<textarea data-p="text" rows="2" spellcheck="false">${esc(v)}</textarea>`;
         else if (k === 'weight') field = `<button class="selectbtn" data-menu="weight"><span>${WEIGHTS.find(w => w[0] == v)?.[1] || v}</span>${ICON.chev}</button>`;
         else field = `<input data-p="${k}" value="${fmt(v)}" inputmode="decimal" spellcheck="false"${isFixed ? ' disabled' : ''}>`;
-        const wide = ['fill', 'stroke', 'text', 'weight'].includes(k) ? ' wide' : '';
+        const wide = ['fill', 'fill2', 'grad', 'stroke', 'text', 'weight'].includes(k) ? ' wide' : '';
         // Keeping the proportions means nothing once either side is locked.
         const lock = k === 'w' && list.includes('h') && !L.fix?.w && !L.fix?.h ? `<button class="ib aspect ${aspectLocked(L) ? 'on' : ''}" data-cmd="aspect" title="${aspectLocked(L) ? 'Aspect ratio locked: click to unlock' : 'Lock aspect ratio'}">${aspectLocked(L) ? ICON.link : ICON.unlink}</button>` : '';
         const pin = fx ? `<button class="ib fix ${isFixed ? 'on' : ''}" data-fix="${fx}" title="${isFixed ? `${FIX_NAME[fx]} locked: click to unlock` : `Lock ${FIX_NAME[fx].toLowerCase()}`}">${isFixed ? ICON.lock : ICON.unlock}</button>` : '';
@@ -673,6 +692,15 @@ Pn.addEventListener('click', e => {
     UI.color(t, state(L, time)[k], c => { setProp(L, k, c); render(); renderPropsValues(); renderLayers(); }); }
   else if (t.dataset.menu === 'blend')
     UI.menu(t, BLENDS.map(([v, l]) => ({ value: v, label: l })), L.blend || 'source-over', v => { L.blend = v === 'source-over' ? undefined : v; refresh(); });
+  else if (t.dataset.menu === 'grad')
+    UI.menu(t, GRADS.map(([value, label]) => ({ value, label })), L.p.grad || 'none', v => {
+      // A new gradient starts from the fill to the next colour along, rather than to itself.
+      if (v !== 'none' && (!isColor(L.p.fill2) || L.p.fill2 === state(L, time).fill)) {
+        const f = state(L, time).fill, i = PALETTE.indexOf(f);
+        L.p.fill2 = PALETTE[(i + 1) % PALETTE.length] === f ? PALETTE[1] : PALETTE[(i + 1) % PALETTE.length];
+      }
+      L.p.gradAngle ??= 90; L.p.grad = v; refresh(); status(v === 'none' ? 'Solid fill' : `${v[0].toUpperCase() + v.slice(1)} gradient`);
+    });
   else if (t.dataset.menu === 'weight')
     UI.menu(t, WEIGHTS.map(([v, l]) => ({ value: v, label: l, hint: v })), L.p.weight, v => { L.p.weight = v; refresh(); },
       it => `<b style="font-weight:${it.value};width:22px">Aa</b>`);

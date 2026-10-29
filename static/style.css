@@ -525,3 +525,9 @@ body.focus #layers,body.focus #props,body.focus .colresize{display:none}
 .selitem{display:flex;align-items:center;gap:8px;height:24px;padding:0 6px;border-radius:3px;color:#ddd;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .selitem:hover{background:var(--field-h)}
 .selitem .lt{display:flex}
+
+/* Record: the button glows red, and so does the edge of the canvas, while changes become animation. */
+#rec{color:var(--faint)}
+#rec.on{color:#ff4d4f;animation:rec-pulse 1.4s ease-in-out infinite}
+@keyframes rec-pulse{50%{opacity:.45}}
+body.recording .checker{box-shadow:0 0 0 2px #ff4d4f}

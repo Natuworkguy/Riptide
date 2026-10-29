@@ -138,7 +138,23 @@ function toggleFix(L, which) {
   if (!Object.values(L.fix).some(Boolean)) delete L.fix;
   refresh(); status(`${FIX_NAME[which]} ${L.fix?.[which] ? 'locked' : 'unlocked'}`);
 }
-function setProp(L, prop, v) { if (fixed(L, prop)) return; if (L.keys[prop]?.length) setKey(L, prop, time, v); else L.p[prop] = v; }
+// Record: with it on, changing anything away from a layer's start animates the change. The value it had stays
+// keyed at the layer's start and the new one is keyed at the playhead; a value already keyed gets a key here.
+let recording = false;
+function setProp(L, prop, v) {
+  if (fixed(L, prop)) return;
+  if (L.keys[prop]?.length) return setKey(L, prop, time, v);
+  if (recording && ANIM.includes(prop) && time > lin(L) + 0.5 / FPS) {
+    const was = L.p[prop];
+    if (was === v) return;
+    setKey(L, prop, lin(L), was); setKey(L, prop, time, v); return;
+  }
+  L.p[prop] = v;
+}
+function setRecording(on) {
+  recording = on; $('#rec').classList.toggle('on', on); document.body.classList.toggle('recording', on);
+  status(on ? 'Recording: move the playhead, then change anything to animate it' : 'Recording off');
+}
 function toggleKey(L, prop) {
   const ks = L.keys[prop] ||= [];
   const i = ks.findIndex(k => near(k.t, time));
@@ -433,6 +449,7 @@ function editText(L) {
 // ---------- icons (simple line icons, 16px grid) ----------
 const ic = d => `<svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
 const ICON = {
+  rec: '<svg class="ico" viewBox="0 0 16 16"><circle cx="8" cy="8" r="4.5" fill="currentColor"/></svg>',
   rect: '<svg class="ico" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="11" rx="2.2" fill="currentColor"/></svg>',
   ellipse: '<svg class="ico" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.8" fill="currentColor"/></svg>',
   star: ic('<path d="M8 2l1.8 3.8 4.2.5-3.1 2.9.8 4.1L8 11.3l-3.7 2 .8-4.1L2 6.3l4.2-.5z"/>'),
@@ -973,6 +990,7 @@ $('.zoom').addEventListener('pointerdown', e => { const tr = $('.ztrack');
   const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); }; addEventListener('pointermove', mv); addEventListener('pointerup', up); });
 tlEl().addEventListener('wheel', e => { if (!(e.ctrlKey || e.metaKey || e.altKey)) return; e.preventDefault();
   setZoom(zoom * Math.exp(-e.deltaY * .01), e.clientX - tlEl().getBoundingClientRect().left); }, { passive: false });
+$('#rec').onclick = () => setRecording(!recording);
 $('#snap').onclick = () => { snapOn = !snapOn; $('#snap').classList.toggle('on', snapOn); status('Snapping ' + (snapOn ? 'on' : 'off')); };
 
 // markers
@@ -1707,6 +1725,7 @@ const COMMANDS = [
   ['Align', 'Distribute vertically', 'alt+shift+v', () => distribute('y')],
   ['Align', 'Nudge 1 px (Shift: 10 px)', 'arrowleft|arrowright|arrowup|arrowdown', null],
   // Keyframes
+  ['Keyframes', 'Record changes as animation', 'alt+r', () => setRecording(!recording)],
   ['Keyframes', 'Key every property here', 'k', withL(L => { for (const p of PROPS[L.type]) if (ANIM.includes(p)) setKey(L, p, time, val(L, p, time)); refresh(); status('Keyed every property at ' + fmtTime(time)); })],
   ['Keyframes', 'Remove keyframes here', 'shift+k', () => removeKeysHere()],
   ['Keyframes', 'Previous keyframe', 'j|alt+,', () => jumpKey(-1)],

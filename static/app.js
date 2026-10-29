@@ -86,10 +86,13 @@ function newLayer(type) { const L = makeLayer(type); sel = L.id; selKey = null; 
 // ---------- keyframes ----------
 const hex = c => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16));
 const toHex = a => '#' + a.map(v => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
+const isColor = v => typeof v === 'string' && v[0] === '#';
 function lerp(a, b, k) {
-  if (typeof a === 'string') { const A = hex(a), B = hex(b); return toHex(A.map((v, i) => v + (B[i] - v) * k)); }
-  return a + (b - a) * k;
+  if (isColor(a) && isColor(b)) { const A = hex(a), B = hex(b); return toHex(A.map((v, i) => v + (B[i] - v) * k)); }
+  return +a + (+b - +a) * k;
 }
+// Every animatable property but the colours is a number: "0.5", as an agent may send it, is kept as 0.5.
+const keyValue = (prop, v) => ANIM.includes(prop) && prop !== 'fill' && prop !== 'stroke' && typeof v === 'string' && v.trim() !== '' && isFinite(+v) ? +v : v;
 function val(L, prop, t) {
   const ks = L.keys[prop];
   if (!ks || !ks.length) return L.p[prop];
@@ -102,7 +105,7 @@ function val(L, prop, t) {
 }
 const near = (a, b) => Math.abs(a - b) < 0.005;
 function setKey(L, prop, t, v, ease) {
-  t = Math.max(0, Math.min(S.dur, Math.round(t * 1000) / 1000));
+  t = Math.max(0, Math.min(S.dur, Math.round(t * 1000) / 1000)); v = keyValue(prop, v);
   const ks = (L.keys[prop] ||= []);
   const k = ks.find(k => near(k.t, t));
   if (k) { k.v = v; if (ease) k.ease = ease; } else ks.push({ t, v, ease: ease || 'easeInOut' });
@@ -888,7 +891,9 @@ function renderTracks() {
     }
   }
   for (const T of tracks()) C.appendChild(audioTrackRow(T));
-  head.style.height = C.scrollHeight + 'px';
+  // The playhead runs the full height of the rows. It is measured without its own old height, which would otherwise
+  // keep the timeline as tall as it ever was, scrolled into empty space after layers are removed.
+  head.style.height = '0px'; head.style.height = C.scrollHeight + 'px';
   placeHead(); updateEaseButton(); renderZoom();
 }
 const fmtRuler = (t, step) => step < 1 ? (Number.isInteger(+t.toFixed(4)) ? `${Math.round(t)}s` : `${Math.floor(t)}:${String(Math.round((t % 1) * FPS)).padStart(2, '0')}`) : `${+t.toFixed(2)}s`;
@@ -2313,7 +2318,7 @@ const LIVE = (() => {
       for (const [p, v] of Object.entries(props)) {
         checkProp(L, p);
         if (p === 'name') { L.name = String(v); continue; }
-        if (a.keyframe || L.keys[p]?.length) setKey(L, p, t, v, easeOK(a.ease) || 'easeInOut'); else L.p[p] = v;
+        if (a.keyframe || L.keys[p]?.length) setKey(L, p, t, v, easeOK(a.ease) || 'easeInOut'); else L.p[p] = keyValue(p, v);
       }
       if (a.name) L.name = String(a.name);
       if (a.in !== undefined) L.in = a.in == null ? undefined : +a.in;

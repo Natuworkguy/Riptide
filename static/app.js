@@ -278,7 +278,7 @@ function render(showUI = true) {
     const bw = w * Math.abs(sx), bh = h * Math.abs(sy);
     ctx.strokeStyle = '#4c8dff'; ctx.lineWidth = 1 * k; ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
     if (L.type !== 'text' && !(L.fix?.w && L.fix?.h)) { const s = 7 * k; ctx.fillStyle = '#fff'; ctx.lineWidth = 1 * k;
-      for (const [hx, hy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { ctx.fillRect(hx * bw / 2 - s / 2, hy * bh / 2 - s / 2, s, s); ctx.strokeRect(hx * bw / 2 - s / 2, hy * bh / 2 - s / 2, s, s); } }
+      for (const [hx, hy] of HANDLES) { ctx.fillRect(hx * bw / 2 - s / 2, hy * bh / 2 - s / 2, s, s); ctx.strokeRect(hx * bw / 2 - s / 2, hy * bh / 2 - s / 2, s, s); } }
     ctx.restore();
   }
   if (showUI && snapGuides) {
@@ -335,16 +335,39 @@ function hitLayer(px, py) {
   }
   return null;
 }
+// The resize handle under a point, as [hx, hy]: -1, 0 or 1 across and down, so [0, -1] is the top edge. Corners
+// first, then anywhere along an edge.
+const HANDLES = [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, -1], [0, 1], [-1, 0], [1, 0]];
+function handleAt(L, px, py, k) {
+  if (L.type === 'text' || (L.fix?.w && L.fix?.h) || !visibleAt(L, time)) return null;
+  const { w, h, o } = bounds(L, time), [lx, ly] = local(L, px, py), s = 12 * k / (o.scale || 1);
+  for (const [hx, hy] of HANDLES.slice(0, 4))
+    if (Math.abs(lx - hx * w / 2) < s && Math.abs(ly - hy * h / 2) < s) return [hx, hy];
+  if (Math.abs(lx) < w / 2 && Math.abs(Math.abs(ly) - h / 2) < s * .7) return [0, Math.sign(ly)];
+  if (Math.abs(ly) < h / 2 && Math.abs(Math.abs(lx) - w / 2) < s * .7) return [Math.sign(lx), 0];
+  return null;
+}
+// The cursor says which way a handle resizes, turned with the layer.
+const RESIZE_CURSORS = ['ew-resize', 'nwse-resize', 'ns-resize', 'nesw-resize'];
+function resizeCursor(L, [hx, hy]) {
+  const deg = (Math.atan2(hy, hx) * 180 / PI + state(L, time).rotation + 360) % 180;
+  return RESIZE_CURSORS[Math.round(deg / 45) % 4];
+}
+cv.addEventListener('pointermove', e => {
+  if (drag) return; const L = selLayers().length === 1 ? cur() : null;
+  const at = L && handleAt(L, ...toCanvas(e), S.w / cv.getBoundingClientRect().width);
+  cv.style.cursor = at ? resizeCursor(L, at) : '';
+});
 // click selects; Shift/⌘-click adds or removes; dragging empty canvas draws a selection box (Shift/⌘ adds to it);
 // dragging any selected layer moves the whole selection; corner handles resize a single layer
 cv.addEventListener('pointerdown', e => {
   UI.close();
   const [px, py] = toCanvas(e), L0 = cur(), group = selLayers(), k = S.w / cv.getBoundingClientRect().width;
   const additive = e.shiftKey || e.metaKey || e.ctrlKey;
-  if (!additive && group.length === 1 && L0 && L0.type !== 'text' && !(L0.fix?.w && L0.fix?.h) && visibleAt(L0, time)) {
-    const { w, h, o } = bounds(L0, time), [lx, ly] = local(L0, px, py), s = 12 * k / (o.scale || 1);
-    for (const [hx, hy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]])
-      if (Math.abs(lx - hx * w / 2) < s && Math.abs(ly - hy * h / 2) < s) { drag = { mode: 'resize', L: L0, hx, hy, o, w0: w, h0: h }; cv.setPointerCapture(e.pointerId); return; }
+  if (!additive && group.length === 1 && L0) {
+    const at = handleAt(L0, px, py, k);
+    if (at) { const o = state(L0, time);
+      drag = { mode: 'resize', L: L0, hx: at[0], hy: at[1], o, w0: Math.abs(o.w), h0: Math.abs(o.h) }; cv.setPointerCapture(e.pointerId); return; }
   }
   const hit = hitLayer(px, py);
   if (additive && hit) {                                     // toggle one layer in or out of the selection
@@ -401,13 +424,51 @@ cv.addEventListener('pointermove', e => {
       snapGuides = { x: bx ? hits(nx, hx, tx) : [], y: by ? hits(ny, hy, ty) : [] };
     }
     for (const m of drag.members) { setProp(m.L, 'x', Math.round(m.x + dx)); setProp(m.L, 'y', Math.round(m.y + dy)); }
-  } else { const [lx, ly] = local(L, px, py);
-    if (aspectLocked(L) !== e.shiftKey && !L.fix?.w && !L.fix?.h && drag.w0 > 0 && drag.h0 > 0) {     // proportional: follow whichever edge is further out
-      const f = Math.max(Math.abs(lx) * 2 / drag.w0, Math.abs(ly) * 2 / drag.h0);
-      setProp(L, 'w', Math.max(4, Math.round(drag.w0 * f))); setProp(L, 'h', Math.max(4, Math.round(drag.h0 * f)));
-    } else { setProp(L, 'w', Math.max(4, Math.round(Math.abs(lx) * 2))); setProp(L, 'h', Math.max(4, Math.round(Math.abs(ly) * 2))); } }
+  } else resizeTo(drag, px, py, e);
   refresh(false); renderPropsValues();
 });
+// Resize from a handle. The side opposite it stays where it was, so the layer grows towards the pointer; with Alt
+// (or a locked position) it grows from its centre instead. The edge being dragged snaps to the canvas's edges and
+// centre and to other layers', unless snapping is off or ⌘/Ctrl is held. Shift flips keeping the proportions.
+function resizeTo(d, px, py, e) {
+  const L = d.L, a = d.o, kx = a.scale * a.sx || 1, ky = a.scale * a.sy || 1, r = a.rotation * PI / 180;
+  const cos = Math.cos(r), sin = Math.sin(r), dx = px - a.x, dy = py - a.y;
+  const lx = (dx * cos + dy * sin) / kx, ly = (-dx * sin + dy * cos) / ky;      // the pointer, in the layer's frame
+  const fromCentre = e.altKey || !!L.fix?.pos;
+  const along = (hand, l, size0) => fromCentre ? Math.abs(l) * 2 : Math.max(4, (l + hand * size0 / 2) * hand);
+  let w = d.hx ? along(d.hx, lx, d.w0) : d.w0, h = d.hy ? along(d.hy, ly, d.h0) : d.h0;
+  // Snapping, while the layer is upright: where the dragged edge would land, on the canvas, to a target near it.
+  snapGuides = null;
+  if (snapOn && !(e.metaKey || e.ctrlKey) && Math.abs(Math.sin(r)) < 1e-6) {
+    const tol = 7 * S.w / cv.getBoundingClientRect().width, tx = [0, S.w / 2, S.w], ty = [0, S.h / 2, S.h];
+    for (const O of S.layers) if (O !== L && visibleAt(O, time)) { const b = box(O, time); tx.push(b.x - b.ex, b.x, b.x + b.ex); ty.push(b.y - b.ey, b.y, b.y + b.ey); }
+    const snap = (hand, size, size0, k, c, ts) => {
+      const edge = fromCentre ? c + hand * Math.sign(k * cos) * size / 2 * Math.abs(k) : c + Math.sign(k * cos) * (-hand * size0 / 2 + hand * size) * Math.abs(k);
+      let best = null; for (const t of ts) if (Math.abs(t - edge) <= tol && (!best || Math.abs(t - edge) < Math.abs(best - edge))) best = t;
+      if (best == null) return [size, null];
+      const moved = (best - edge) / Math.abs(k) * Math.sign(k * cos) * hand;
+      return [Math.max(4, size + (fromCentre ? 2 * moved : moved)), best];
+    };
+    const guides = { x: [], y: [] };
+    if (d.hx) { const [nw, at] = snap(d.hx, w, d.w0, kx, a.x, tx); w = nw; if (at != null) guides.x.push(Math.round(at)); }
+    if (d.hy) { const [nh, at] = snap(d.hy, h, d.h0, ky, a.y, ty); h = nh; if (at != null) guides.y.push(Math.round(at)); }
+    if (guides.x.length || guides.y.length) snapGuides = guides;
+  }
+  // Keeping the proportions: a corner follows whichever side went further; a side takes the other with it.
+  if (aspectLocked(L) !== e.shiftKey && !L.fix?.w && !L.fix?.h && d.w0 > 0 && d.h0 > 0) {
+    if (d.hx && d.hy) { const f = Math.max(w / d.w0, h / d.h0); w = d.w0 * f; h = d.h0 * f; }
+    else if (d.hx) h = d.h0 * w / d.w0; else w = d.w0 * h / d.h0;
+  }
+  if (L.fix?.w) w = d.w0; if (L.fix?.h) h = d.h0;
+  w = Math.max(4, Math.round(w)); h = Math.max(4, Math.round(h));
+  setProp(L, 'w', w); setProp(L, 'h', h);
+  if (fromCentre) return;
+  // The centre moves by half the growth, towards the dragged side, turned with the layer.
+  const cx = d.hx ? d.hx * (w - d.w0) / 2 * kx : 0, cy = d.hy ? d.hy * (h - d.h0) / 2 * ky : 0;
+  // To the half pixel: an odd size centres between pixels, and the side that stays put stays exactly put.
+  const half = v => Math.round(v * 2) / 2;
+  setProp(L, 'x', half(a.x + cx * cos - cy * sin)); setProp(L, 'y', half(a.y + cx * sin + cy * cos));
+}
 cv.addEventListener('pointerup', () => {
   if (!drag) return; const d = drag; drag = null; snapGuides = null; marqueeEl.remove();
   if (d.mode === 'marquee') { refresh(true, false); const n = selLayers().length; if (d.moved && n) status(`${n} layer${n > 1 ? 's' : ''} selected`); return; }

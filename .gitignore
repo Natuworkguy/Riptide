@@ -1,0 +1,24 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# local projects and test files (projects are saved wherever you choose; keep them out of the repo)
+projects/
+*.rip
+*.wob
+
+# exports and OS / editor clutter
+*.mp4
+*.webm
+*.gif
+.DS_Store
+.idea/
+.vscode/
+
+# secrets
+.env
+.env.*

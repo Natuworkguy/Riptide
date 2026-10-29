@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Riptide</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#161616">
+<link rel="icon" href="riptide-icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="booting">
+<div id="splash" aria-hidden="true">
+  <svg class="slogo" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#e8e8e8"/>
+      <path class="arc" d="M10.4 15 Q16 5.1 21.6 15" fill="none" stroke="#161616" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="0.1 2.2"/>
+      <polygon class="k0" points="8.6,16.8 11.7,19.8 8.6,22.9 5.6,19.8" fill="none" stroke="#161616" stroke-width="1.5" stroke-linejoin="round"/>
+      <polygon class="k1" points="23.4,16 27.2,19.8 23.4,23.7 19.5,19.8" fill="#161616"/>
+    <!-- a keyframe hops along the motion path while the loader runs -->
+    <polygon class="hopper" points="0,-2.6 2.6,0 0,2.6 -2.6,0" fill="#161616">
+      <animateMotion dur="1.1s" repeatCount="indefinite" keyPoints="0;1" keyTimes="0;1" calcMode="spline" keySplines=".65 0 .35 1" path="M8.6 19.8 Q16 2.5 23.4 19.8"/>
+    </polygon></svg>
+  <div class="sname">Riptide</div>
+  <div class="sbar"><i></i></div>
+</div>
+<div id="app">
+<header id="top">
+  <div class="brand">
+    <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#e8e8e8"/>
+      <path class="arc" d="M10.4 15 Q16 5.1 21.6 15" fill="none" stroke="#161616" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="0.1 2.2"/>
+      <polygon class="k0" points="8.6,16.8 11.7,19.8 8.6,22.9 5.6,19.8" fill="none" stroke="#161616" stroke-width="1.5" stroke-linejoin="round"/>
+      <polygon class="k1" points="23.4,16 27.2,19.8 23.4,23.7 19.5,19.8" fill="#161616"/></svg>
+    <span class="word">Riptide</span>
+  </div>
+  <button class="ib mob" id="tLayers" data-icon="layers" title="Layers"></button>
+  <nav class="menubar">
+    <button class="tb" id="new" title="New project">New</button>
+    <button class="tb" id="open" title="Open… (⌘O)">Open</button>
+    <button class="tb" id="save" title="Save (⌘S) · Save as (⇧⌘S)">Save</button>
+  </nav>
+  <div class="doc"><span id="docname">Untitled.rip</span><span id="docstate"></span></div>
+  <div class="seg modeseg" id="mode" role="tablist" aria-label="Editor mode"><button data-mode="video" class="on">Video</button><button data-mode="image">Image</button></div>
+  <div class="tools" role="toolbar" aria-label="Add layer">
+    <button class="tool" data-add="rect" data-icon="rect" data-tip="Rectangle  R"></button>
+    <button class="tool" data-add="ellipse" data-icon="ellipse" data-tip="Ellipse  O"></button>
+    <button class="tool" data-add="polygon" data-icon="polygon" data-tip="Polygon  P"></button>
+    <button class="tool" data-add="star" data-icon="star" data-tip="Star"></button>
+    <button class="tool" data-add="arc" data-icon="arc" data-tip="Arc  A"></button>
+    <button class="tool" data-add="text" data-icon="text" data-tip="Text  T"></button>
+  </div>
+  <div class="spacer"></div>
+  <button class="ib" id="undo" data-icon="undo" data-tip="Undo  ⌘Z"></button>
+  <button class="ib" id="redo" data-icon="redo" data-tip="Redo  ⇧⌘Z"></button>
+  <button class="tb primary" id="export"><span>Export…</span></button>
+  <button class="ib mob" id="tProps" data-icon="sliders" title="Inspector"></button>
+</header>
+<div id="scrim"></div>
+<div class="colresize" id="rsLayers" title="Drag to resize · double-click to reset"></div>
+
+<aside id="layers">
+  <div class="ph"><span>Layers</span></div>
+  <div id="layerList"></div>
+  <div class="lsplit" id="rsList" title="Drag to resize the layer list"></div>
+  <div id="assets" class="sec">
+    <div class="assethead"><span class="sech nocollapse">Media <em id="assetCount"></em></span>
+      <button class="tb small" id="assetUpload" data-icon="upload" title="Import images or audio"><span>Import</span></button></div>
+    <div id="assetGrid"></div>
+  </div>
+  <div id="board" class="sec">
+    <div class="sech">Composition</div>
+    <div class="grid">
+      <div class="row wide"><label>Preset</label><button class="selectbtn" id="asize"></button></div>
+      <div class="row"><label data-scrub="10">W</label><input id="aw" inputmode="numeric"></div>
+      <div class="row"><label data-scrub="10">H</label><input id="ah" inputmode="numeric"></div>
+      <div class="btnrow wide"><div class="seg" id="aresize" title="What happens to the content when you pick a preset"><button data-v="fit">Scale content</button><button data-v="keep">Keep size</button></div>
+        <button class="tb small" id="aswap" title="Swap width and height (portrait / landscape)">Rotate</button></div>
+      <div class="row wide"><label>Background</label><button class="swatch" id="abg"></button></div>
+      <div class="row wide"><label data-scrub=".5">Duration</label><input id="adur" inputmode="decimal"><em class="unit">s</em></div>
+    </div>
+  </div>
+</aside>
+
+<main id="stage">
+  <div class="stagebar">
+    <button class="ib" id="guides" data-icon="guides" data-tip="Safe areas  '"></button>
+    <button class="ib" id="fullscreen" data-icon="expand" data-tip="Fullscreen preview  ⇧F"></button>
+    <span id="stageinfo"></span>
+    <span class="spacer"></span><span id="live" class="live" title="Live link offline"><i></i>Live</span>
+  </div>
+  <div class="checker"><canvas id="c"></canvas></div>
+  <div class="drophint"><span>Drop images or audio to import, or a .rip file to open it</span></div>
+</main>
+
+<aside id="props"></aside>
+
+<section id="timeline">
+  <div id="tbar">
+    <span class="ttl">Timeline</span>
+    <button class="ib" id="addMarker" data-icon="marker" data-tip="Add marker  M"></button>
+    <button class="ib" id="split" data-icon="blade" data-tip="Split layer at playhead  ⌘K"></button>
+    <button class="tb small" id="extend" data-icon="plus" data-tip="Extend or set the timeline length"><span>Length</span></button>
+    <button class="ib on" id="snap" data-icon="magnet" data-tip="Snapping"></button>
+    <div class="spacer"></div>
+    <span class="hint" id="keyinfo"></span>
+    <button class="selectbtn easebtn" id="ease"></button>
+    <button class="ib" id="delKey" data-icon="trash" data-tip="Delete keyframe  ⌫"></button>
+    <span class="sep"></span>
+    <button class="ib" id="zoomOut" data-icon="minus" data-tip="Zoom out  −"></button>
+    <div class="zoom"><div class="ztrack"><div class="zfill"></div><div class="zknob"></div></div></div>
+    <button class="ib" id="zoomIn" data-icon="plus" data-tip="Zoom in  ="></button>
+    <button class="tb small" id="zoomFit">Fit</button>
+  </div>
+  <div id="tl"><div id="tlc"><div id="head"></div></div></div>
+</section>
+<footer id="transport">
+  <div class="transport">
+    <button class="ib" id="toStart" data-icon="start" data-tip="Start  Home"></button>
+    <button class="ib" id="prevFrame" data-icon="prev" data-tip="Previous frame  ,"></button>
+    <button class="ib play" id="play" data-icon="play" data-tip="Play  Space"></button>
+    <button class="ib" id="nextFrame" data-icon="next" data-tip="Next frame  ."></button>
+    <button class="ib" id="toEnd" data-icon="end" data-tip="End  End"></button>
+  </div>
+  <span id="tc" class="tc">00:00:00</span>
+  <span class="field ro click" title="Click to set the timeline length"><em>Duration</em><b id="outtc">00:05:00</b></span>
+  <span id="status" class="status"></span>
+  <div class="spacer"></div>
+  <span class="field ro"><em>Frame rate</em><b>30 fps</b></span>
+  <button class="switch on" id="loop"><span>Loop</span><i></i></button>
+</footer>
+</div>
+<script src="ui.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

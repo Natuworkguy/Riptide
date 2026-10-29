@@ -504,6 +504,15 @@ body.focus #layers,body.focus #props,body.focus .colresize{display:none}
 /* aspect-ratio lock beside the width field */
 .row .ib.aspect{flex:none;width:20px;height:20px;margin-right:2px;color:var(--faint)}
 .row .ib.aspect.on{color:var(--accent)}
+/* A lock on X, Y, Width or Height: faint until hovered or on; a locked field greys out. */
+.row .ib.fix{flex:none;width:0;height:20px;margin-right:0;overflow:hidden;color:var(--faint);opacity:0;transition:opacity .12s}
+.row:hover .ib.fix,.row .ib.fix:focus-visible,.row .ib.fix.on{width:16px;margin-right:3px;opacity:1}
+.row .ib.fix.on{color:var(--accent)}
+.row.fixed input{color:var(--faint)}
+/* A number keeps its digits when buttons crowd its row: the label gives way first. */
+.grid .row input[data-p]{min-width:4.5ch}
+.row.fixed .kf{opacity:.35;pointer-events:none}
+@media (hover:none){.row .ib.fix{width:16px;margin-right:3px;opacity:1}}
 
 /* multi-select: box selection on the canvas, align bar, selected list */
 .marquee{position:fixed;z-index:50;pointer-events:none;border:1px solid #4c8dff;background:#4c8dff1f}

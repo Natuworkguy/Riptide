@@ -113,12 +113,18 @@ async def add_layer(type: Literal["rect", "ellipse", "polygon", "star", "arc", "
 @mcp.tool()
 async def update_layer(layer: str, props: dict | None = None, at_time: float | None = None, keyframe: bool = False,
                  ease: str | None = None, name: str | None = None, start: float | None = None, end: float | None = None,
-                 hidden: bool | None = None, locked: bool | None = None, blend: str | None = None) -> dict:
+                 hidden: bool | None = None, locked: bool | None = None, blend: str | None = None,
+                 lock_position: bool | None = None, lock_width: bool | None = None,
+                 lock_height: bool | None = None) -> dict:
     """Change a layer. Properties that already have keyframes get a keyframe at `at_time` (default playhead);
     others change everywhere unless `keyframe` is true. `ease` sets the easing of new keyframes.
-    Also renames, retimes (start/end seconds), hides, locks, or sets a blend mode ("normal", "multiply", "screen", ...)."""
+    Also renames, retimes (start/end seconds), hides, locks, or sets a blend mode ("normal", "multiply", "screen", ...).
+    lock_position, lock_width and lock_height lock or unlock x/y, w and h: while locked, nothing changes them, and
+    trying is an error. Respect the user's locks; unlock only when they ask."""
     return await acall("update_layer", {"id": layer, "props": props or {}, "time": at_time, "keyframe": keyframe, "ease": ease,
-                                 "name": name, "in": start, "out": end, "hidden": hidden, "locked": locked, "blend": blend})
+                                 "name": name, "in": start, "out": end, "hidden": hidden, "locked": locked, "blend": blend,
+                                 "lock_position": lock_position, "lock_width": lock_width,
+                                 "lock_height": lock_height})
 
 
 @mcp.tool()

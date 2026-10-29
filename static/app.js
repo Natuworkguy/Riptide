@@ -105,6 +105,7 @@ function val(L, prop, t) {
 }
 const near = (a, b) => Math.abs(a - b) < 0.005;
 function setKey(L, prop, t, v, ease) {
+  if (fixed(L, prop)) return;
   t = Math.max(0, Math.min(S.dur, Math.round(t * 1000) / 1000)); v = keyValue(prop, v);
   const ks = (L.keys[prop] ||= []);
   const k = ks.find(k => near(k.t, t));
@@ -113,7 +114,17 @@ function setKey(L, prop, t, v, ease) {
 }
 // width and height stay in proportion when a layer's aspect ratio is locked (images and videos start locked)
 const aspectLocked = L => L.lockAspect ?? (L.type === 'image' || L.type === 'video');
-function setProp(L, prop, v) { if (L.keys[prop]?.length) setKey(L, prop, time, v); else L.p[prop] = v; }
+// Locks on a layer's position, width or height (L.fix = { pos, w, h }): nothing changes a locked one, not dragging,
+// typing, nudging, aligning, presets or an agent, until it is unlocked.
+const FIX_OF = { x: 'pos', y: 'pos', w: 'w', h: 'h' };
+const FIX_NAME = { pos: 'Position', w: 'Width', h: 'Height' };
+const fixed = (L, prop) => !!L.fix?.[FIX_OF[prop]];
+function toggleFix(L, which) {
+  L.fix = { ...L.fix, [which]: !L.fix?.[which] };
+  if (!Object.values(L.fix).some(Boolean)) delete L.fix;
+  refresh(); status(`${FIX_NAME[which]} ${L.fix?.[which] ? 'locked' : 'unlocked'}`);
+}
+function setProp(L, prop, v) { if (fixed(L, prop)) return; if (L.keys[prop]?.length) setKey(L, prop, time, v); else L.p[prop] = v; }
 function toggleKey(L, prop) {
   const ks = L.keys[prop] ||= [];
   const i = ks.findIndex(k => near(k.t, time));
@@ -234,7 +245,7 @@ function render(showUI = true) {
     ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(o.rotation * PI / 180);
     const bw = w * Math.abs(sx), bh = h * Math.abs(sy);
     ctx.strokeStyle = '#4c8dff'; ctx.lineWidth = 1 * k; ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
-    if (L.type !== 'text') { const s = 7 * k; ctx.fillStyle = '#fff'; ctx.lineWidth = 1 * k;
+    if (L.type !== 'text' && !(L.fix?.w && L.fix?.h)) { const s = 7 * k; ctx.fillStyle = '#fff'; ctx.lineWidth = 1 * k;
       for (const [hx, hy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { ctx.fillRect(hx * bw / 2 - s / 2, hy * bh / 2 - s / 2, s, s); ctx.strokeRect(hx * bw / 2 - s / 2, hy * bh / 2 - s / 2, s, s); } }
     ctx.restore();
   }
@@ -298,7 +309,7 @@ cv.addEventListener('pointerdown', e => {
   UI.close();
   const [px, py] = toCanvas(e), L0 = cur(), group = selLayers(), k = S.w / cv.getBoundingClientRect().width;
   const additive = e.shiftKey || e.metaKey || e.ctrlKey;
-  if (!additive && group.length === 1 && L0 && L0.type !== 'text' && visibleAt(L0, time)) {
+  if (!additive && group.length === 1 && L0 && L0.type !== 'text' && !(L0.fix?.w && L0.fix?.h) && visibleAt(L0, time)) {
     const { w, h, o } = bounds(L0, time), [lx, ly] = local(L0, px, py), s = 12 * k / (o.scale || 1);
     for (const [hx, hy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]])
       if (Math.abs(lx - hx * w / 2) < s && Math.abs(ly - hy * h / 2) < s) { drag = { mode: 'resize', L: L0, hx, hy, o, w0: w, h0: h }; cv.setPointerCapture(e.pointerId); return; }
@@ -312,7 +323,8 @@ cv.addEventListener('pointerdown', e => {
   if (hit) {
     const inGroup = group.length > 1 && group.includes(hit);
     if (inGroup) sel = hit.id; else setSelection([hit.id]);
-    const members = (inGroup ? group : [hit]).filter(m => !m.locked);
+    const members = (inGroup ? group : [hit]).filter(m => !m.locked && !m.fix?.pos);
+    if (!members.length) { drag = { mode: 'still', L: hit, x0: e.clientX, y0: e.clientY }; cv.setPointerCapture(e.pointerId); refresh(true, false); return; }
     drag = { mode: 'move', L: hit, members: members.map(m => { const o = state(m, time); return { L: m, x: o.x, y: o.y }; }),
       ub: unionBox(members), px0: px, py0: py, was: !inGroup && L0 === hit, x0: e.clientX, y0: e.clientY };
   } else {
@@ -325,6 +337,7 @@ cv.addEventListener('pointerdown', e => {
 cv.addEventListener('pointermove', e => {
   if (!drag) return; const [px, py] = toCanvas(e), L = drag.L;
   if (!drag.moved && drag.mode !== 'resize' && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 4) return;
+  if (drag.mode === 'still') { if (!drag.moved) status(`${L.name}: its position is locked`); drag.moved = true; return; }
   drag.moved = true;
   if (drag.mode === 'marquee') {
     const x1 = Math.min(drag.px0, px), x2 = Math.max(drag.px0, px), y1 = Math.min(drag.py0, py), y2 = Math.max(drag.py0, py);
@@ -357,7 +370,7 @@ cv.addEventListener('pointermove', e => {
     }
     for (const m of drag.members) { setProp(m.L, 'x', Math.round(m.x + dx)); setProp(m.L, 'y', Math.round(m.y + dy)); }
   } else { const [lx, ly] = local(L, px, py);
-    if (aspectLocked(L) !== e.shiftKey && drag.w0 > 0 && drag.h0 > 0) {     // proportional: follow whichever edge is further out
+    if (aspectLocked(L) !== e.shiftKey && !L.fix?.w && !L.fix?.h && drag.w0 > 0 && drag.h0 > 0) {     // proportional: follow whichever edge is further out
       const f = Math.max(Math.abs(lx) * 2 / drag.w0, Math.abs(ly) * 2 / drag.h0);
       setProp(L, 'w', Math.max(4, Math.round(drag.w0 * f))); setProp(L, 'h', Math.max(4, Math.round(drag.h0 * f)));
     } else { setProp(L, 'w', Math.max(4, Math.round(Math.abs(lx) * 2))); setProp(L, 'h', Math.max(4, Math.round(Math.abs(ly) * 2))); } }
@@ -585,15 +598,18 @@ function renderProps() {
       if (g === 'Adjust') h += `<div class="row wide"><label>Look</label><button class="selectbtn" data-menu="look"><span>Apply a look…</span>${ICON.chev}</button></div>`;
       for (const k of ks) {
         const anim = ANIM.includes(k), here = L.keys[k]?.some(x => near(x.t, time)), keyed = L.keys[k]?.length, v = o[k];
-        const kb = anim ? `<button class="kf ${keyed ? 'has' : ''} ${here ? 'here' : ''}" data-key="${k}" title="${here ? 'Remove keyframe' : 'Add keyframe at playhead'}">${here ? ICON.key : ICON.keyOff}</button>` : '<span class="kf"></span>';
+        const fx = FIX_OF[k], isFixed = fixed(L, k);
+        const kb = anim ? `<button class="kf ${keyed ? 'has' : ''} ${here ? 'here' : ''}" data-key="${k}" title="${here ? 'Remove keyframe' : 'Add keyframe at playhead'}"${isFixed ? ' disabled' : ''}>${here ? ICON.key : ICON.keyOff}</button>` : '<span class="kf"></span>';
         let field;
         if (k === 'fill' || k === 'stroke') field = `<button class="swatch" data-color="${k}"><i style="background:${v}"></i><span>${v.toUpperCase()}</span></button>`;
         else if (k === 'text') field = `<textarea data-p="text" rows="2" spellcheck="false">${esc(v)}</textarea>`;
         else if (k === 'weight') field = `<button class="selectbtn" data-menu="weight"><span>${WEIGHTS.find(w => w[0] == v)?.[1] || v}</span>${ICON.chev}</button>`;
-        else field = `<input data-p="${k}" value="${fmt(v)}" inputmode="decimal" spellcheck="false">`;
+        else field = `<input data-p="${k}" value="${fmt(v)}" inputmode="decimal" spellcheck="false"${isFixed ? ' disabled' : ''}>`;
         const wide = ['fill', 'stroke', 'text', 'weight'].includes(k) ? ' wide' : '';
-        const lock = k === 'w' && list.includes('h') ? `<button class="ib aspect ${aspectLocked(L) ? 'on' : ''}" data-cmd="aspect" title="${aspectLocked(L) ? 'Aspect ratio locked: click to unlock' : 'Lock aspect ratio'}">${aspectLocked(L) ? ICON.link : ICON.unlink}</button>` : '';
-        h += `<div class="row${wide}" data-row="${k}">${kb}<label ${field.startsWith('<input') ? `data-scrub="${STEP[k] || 1}"` : ''}>${LABEL[k]}</label>${field}${lock}</div>`;
+        // Keeping the proportions means nothing once either side is locked.
+        const lock = k === 'w' && list.includes('h') && !L.fix?.w && !L.fix?.h ? `<button class="ib aspect ${aspectLocked(L) ? 'on' : ''}" data-cmd="aspect" title="${aspectLocked(L) ? 'Aspect ratio locked: click to unlock' : 'Lock aspect ratio'}">${aspectLocked(L) ? ICON.link : ICON.unlink}</button>` : '';
+        const pin = fx ? `<button class="ib fix ${isFixed ? 'on' : ''}" data-fix="${fx}" title="${isFixed ? `${FIX_NAME[fx]} locked: click to unlock` : `Lock ${FIX_NAME[fx].toLowerCase()}`}">${isFixed ? ICON.lock : ICON.unlock}</button>` : '';
+        h += `<div class="row${wide}${isFixed ? ' fixed' : ''}" data-row="${k}">${kb}<label ${field.startsWith('<input') && !isFixed ? `data-scrub="${STEP[k] || 1}"` : ''}>${LABEL[k]}</label>${field}${pin}${lock}</div>`;
       }
       h += '</div></div>';
     }
@@ -649,6 +665,7 @@ Pn.addEventListener('click', e => {
   else if (t.dataset.cmd === 'del') removeLayer();
   else if (t.dataset.cmd === 'flipx' || t.dataset.cmd === 'flipy') { const k = t.dataset.cmd === 'flipx' ? 'sx' : 'sy'; setProp(L, k, -state(L, time)[k]); refresh(); }
   else if (t.dataset.cmd === 'fitcanvas') fitCanvasToImage(L);
+  else if (t.dataset.fix) toggleFix(L, t.dataset.fix);
   else if (t.dataset.cmd === 'aspect') { L.lockAspect = !aspectLocked(L); refresh(); status(L.lockAspect ? 'Aspect ratio locked' : 'Aspect ratio unlocked'); }
   else if (t.dataset.menu === 'look')
     UI.menu(t, Object.keys(LOOKS).map(n => ({ value: n, label: n })), null, n => { for (const [k, v] of Object.entries({ ...LOOK0, ...LOOKS[n] })) setProp(L, k, v); refresh(); status(`Look: ${n}`); });
@@ -1550,7 +1567,7 @@ function nudge(dx, dy) { for (const L of selLayers()) { if (L.locked) continue; 
 // when `toCanvas`. Centre moves the selection as a whole, keeping the layers' spacing. Distribute evens out the gaps.
 const ALIGN_NAMES = { left: 'left', right: 'right', top: 'top', bottom: 'bottom', hcenter: 'centre horizontally', vcenter: 'centre vertically' };
 function alignLayer(how, toCanvas = false) {
-  const ls = selLayers().filter(L => !L.locked); if (!ls.length) return status('Select a layer first');
+  const ls = selLayers().filter(L => !L.locked && !L.fix?.pos); if (!ls.length) return status(selLayers().length ? 'Its position is locked' : 'Select a layer first');
   const u = ls.length > 1 && !toCanvas ? unionBox(ls) : { x: S.w / 2, y: S.h / 2, ex: S.w / 2, ey: S.h / 2 };
   for (const L of ls) {
     const b = box(L, time), o = state(L, time);
@@ -1560,13 +1577,13 @@ function alignLayer(how, toCanvas = false) {
   refresh(); status(`${ls.length > 1 ? ls.length + ' layers' : ls[0].name}: ${ALIGN_NAMES[how]}${ls.length > 1 && !toCanvas ? '' : ' on the canvas'}`);
 }
 function centerOnCanvas(axes = 'xy') {
-  const ls = selLayers().filter(L => !L.locked); if (!ls.length) return status('Select a layer first');
+  const ls = selLayers().filter(L => !L.locked && !L.fix?.pos); if (!ls.length) return status(selLayers().length ? 'Its position is locked' : 'Select a layer first');
   const u = unionBox(ls), dx = axes.includes('x') ? S.w / 2 - u.x : 0, dy = axes.includes('y') ? S.h / 2 - u.y : 0;
   for (const L of ls) { const o = state(L, time); if (dx) setProp(L, 'x', Math.round(o.x + dx)); if (dy) setProp(L, 'y', Math.round(o.y + dy)); }
   refresh(); status(`Centred ${ls.length > 1 ? ls.length + ' layers' : ls[0].name} ${axes === 'xy' ? 'on the canvas' : axes === 'x' ? 'horizontally' : 'vertically'}`);
 }
 function distribute(axis) {
-  const ls = selLayers().filter(L => !L.locked); if (ls.length < 3) return status('Select three or more layers to distribute');
+  const ls = selLayers().filter(L => !L.locked && !L.fix?.pos); if (ls.length < 3) return status('Select three or more layers whose position is not locked');
   const e = axis === 'x' ? 'ex' : 'ey', items = ls.map(L => ({ L, b: box(L, time) })).sort((p, q) => p.b[axis] - q.b[axis]);
   const first = items[0].b, last = items.at(-1).b, span = (last[axis] + last[e]) - (first[axis] - first[e]);
   const gap = (span - items.reduce((s, i) => s + 2 * i.b[e], 0)) / (items.length - 1);
@@ -2183,6 +2200,7 @@ function layerItems(L) {
     '-',
     { label: L.hidden ? 'Show' : 'Hide', icon: L.hidden ? ICON.eye : ICON.eyeOff, act: () => { L.hidden = !L.hidden; refresh(); } },
     { label: L.locked ? 'Unlock' : 'Lock', icon: L.locked ? ICON.unlock : ICON.lock, act: () => { L.locked = !L.locked; refresh(); } },
+    ...['pos', 'w', 'h'].map(which => ({ label: `${L.fix?.[which] ? 'Unlock' : 'Lock'} ${FIX_NAME[which].toLowerCase()}`, icon: L.fix?.[which] ? ICON.unlock : ICON.lock, act: () => toggleFix(L, which) })),
     { label: 'Delete', icon: ICON.trash, kbd: '⌫', danger: true, act: removeLayer },
   ];
 }
@@ -2268,6 +2286,7 @@ const LIVE = (() => {
     if (L.p.asset) props.asset = S.assets[L.p.asset]?.name;
     const keyframes = {}; for (const [p, ks] of Object.entries(L.keys)) if (ks.length) keyframes[p] = full ? ks.map(k => ({ t: round(k.t), v: round(k.v), ease: k.ease || 'easeInOut' })) : ks.length;
     return { id: L.id, name: L.name, type: L.type, in: round(lin(L)), out: round(lout(L)), hidden: !!L.hidden, locked: !!L.locked,
+      locked_position: !!L.fix?.pos, locked_width: !!L.fix?.w, locked_height: !!L.fix?.h,
       blend: L.blend || 'normal', [full ? 'props' : 'props_at_playhead']: props, keyframes };
   };
   const summary = () => ({
@@ -2317,6 +2336,7 @@ const LIVE = (() => {
       const L = findL(a), t = a.time != null ? +a.time : time, props = a.props || {};
       for (const [p, v] of Object.entries(props)) {
         checkProp(L, p);
+        if (fixed(L, p)) throw new Error(`"${L.name}" has its ${FIX_NAME[FIX_OF[p]].toLowerCase()} locked: unlock it first (lock_${FIX_OF[p] === 'pos' ? 'position' : FIX_OF[p] === 'w' ? 'width' : 'height'}: false)`);
         if (p === 'name') { L.name = String(v); continue; }
         if (a.keyframe || L.keys[p]?.length) setKey(L, p, t, v, easeOK(a.ease) || 'easeInOut'); else L.p[p] = keyValue(p, v);
       }
@@ -2324,11 +2344,14 @@ const LIVE = (() => {
       if (a.in !== undefined) L.in = a.in == null ? undefined : +a.in;
       if (a.out !== undefined) L.out = a.out == null ? undefined : +a.out;
       if (a.hidden != null) L.hidden = !!a.hidden; if (a.locked != null) L.locked = !!a.locked;
+      for (const [arg, which] of [['lock_position', 'pos'], ['lock_width', 'w'], ['lock_height', 'h']])
+        if (a[arg] != null && !!a[arg] !== !!L.fix?.[which]) { L.fix = { ...L.fix, [which]: !!a[arg] }; if (!Object.values(L.fix).some(Boolean)) delete L.fix; }
       if (a.blend) { const b = a.blend === 'normal' ? 'source-over' : a.blend; if (!BLENDS.some(x => x[0] === b)) throw new Error('unknown blend mode'); L.blend = b === 'source-over' ? undefined : b; }
       return done(`updated "${L.name}"`);
     },
     set_keyframes: a => {
       const L = findL(a); checkProp(L, a.prop); if (!ANIM.includes(a.prop)) throw new Error(`"${a.prop}" cannot be animated`);
+      if (fixed(L, a.prop)) throw new Error(`"${L.name}" has its ${FIX_NAME[FIX_OF[a.prop]].toLowerCase()} locked: unlock it first`);
       if (a.replace) delete L.keys[a.prop];
       for (const k of a.keys || []) setKey(L, a.prop, Math.max(0, +k.t), k.v, easeOK(k.ease) || 'easeInOut');
       return done(`set ${(a.keys || []).length} keyframes on ${L.name}.${a.prop}`);

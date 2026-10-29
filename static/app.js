@@ -1365,7 +1365,8 @@ function clipEl(T, c) {
 }
 
 // ---------- fullscreen preview ----------
-// the composition alone on black, scaled to fit the screen. Space plays, arrows step, click the bar to scrub, Esc leaves.
+// the composition alone on black, scaled to fit the screen. Space plays, arrows step (Shift: a second), Home and End
+// jump, click the bar to scrub, Esc or F leaves.
 function fullscreenView() {
   if ($('#fsview')) return;
   const wrap = document.createElement('div'); wrap.id = 'fsview';
@@ -1399,8 +1400,20 @@ function fullscreenView() {
     const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); };
     mv(e); addEventListener('pointermove', mv); addEventListener('pointerup', up);
   });
+  // Its own keys, and none of the editor's: F would hide the panels behind it, and arrows would nudge a layer.
   const key = e => { if (!open) return removeEventListener('keydown', key, true);
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } };
+    if (e.metaKey || e.ctrlKey) return;                       // the browser's own shortcuts
+    e.stopImmediatePropagation();
+    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key, step = e.shiftKey ? 1 : 1 / FPS;
+    const go = t => { if (playing) togglePlay(); time = frame(Math.max(0, Math.min(S.dur, t))); syncAudio(); };
+    if (k === 'Escape' || k === 'f') close();
+    else if (k === ' ') togglePlay();
+    else if (k === 'ArrowLeft') go(time - step);
+    else if (k === 'ArrowRight') go(time + step);
+    else if (k === 'Home') go(0);
+    else if (k === 'End') go(S.dur);
+    else return;
+    e.preventDefault(); wake(); };
   addEventListener('keydown', key, true);
   document.addEventListener('fullscreenchange', function fc() { if (!document.fullscreenElement) { document.removeEventListener('fullscreenchange', fc); close(); } });
   wrap.requestFullscreen?.().catch(() => {});          // if the browser refuses, it still fills the window

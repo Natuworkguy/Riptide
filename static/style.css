@@ -489,6 +489,8 @@ kbd{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 
 .pempty{padding:14px;color:var(--faint);font-size:12px}
 body.focus #app{grid-template-columns:0 minmax(0,1fr) 0}
 body.focus #layers,body.focus #props,body.focus .colresize{display:none}
+/* The stage keeps the middle column: with the panels gone it would otherwise fall into the empty first one. */
+body.focus #stage{grid-column:2}
 
 /* fullscreen preview */
 #fsview{position:fixed;inset:0;z-index:200;background:#000;display:grid;place-items:center;cursor:default}

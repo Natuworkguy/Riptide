@@ -2627,6 +2627,14 @@ const LIVE = (() => {
       for (const [p, v] of Object.entries(props)) L.p[p] = keyValue(p, v);
       return done(`added the model "${L.name}"`, { id: L.id });
     },
+    add_image: async a => {
+      const blob = await (await fetch(a.src)).blob();
+      if (!blob.type.startsWith('image/')) throw new Error('that is not an image');
+      const ids = await addAssets([new File([blob], a.file || 'image', { type: blob.type })]);
+      if (!ids.length) throw new Error(`could not add ${a.file || 'the image'}`);
+      addImageLayer(ids[0], a.x ?? undefined, a.y ?? undefined); const L = cur(); if (a.name) L.name = String(a.name);
+      return done(`added the image "${L.name}"`, { id: L.id });
+    },
     update_layer: a => {
       const L = findL(a), t = a.time != null ? +a.time : time, props = a.props || {};
       for (const [p, v] of Object.entries(props)) {

@@ -244,6 +244,27 @@ async def add_audio(path: str, start: float = 0, track: str | None = None,
                                      "fade_in": fade_in, "fade_out": fade_out}, timeout=120)
 
 
+IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
+               ".gif": "image/gif", ".svg": "image/svg+xml"}
+
+
+@mcp.tool()
+async def add_image(path: str, name: str | None = None, x: float | None = None, y: float | None = None) -> dict:
+    """Add a picture from this computer (png, jpg, webp, gif or svg; up to 15 MB) as an image layer, sized to fit the
+    canvas, centred unless x and y place its centre. Returns the new layer id."""
+    p = os.path.abspath(os.path.expanduser(path))
+    ext = os.path.splitext(p)[1].lower()
+    if ext not in IMAGE_TYPES:
+        raise RiptideError(f"Not an image I can use: {ext or 'no extension'}. Use one of {', '.join(IMAGE_TYPES)}")
+    if not os.path.isfile(p):
+        raise RiptideError(f"No such file: {p}")
+    if os.path.getsize(p) > 15e6:
+        raise RiptideError("That file is over 15 MB")
+    with open(p, "rb") as f:
+        src = f"data:{IMAGE_TYPES[ext]};base64," + base64.b64encode(f.read()).decode()
+    return await acall("add_image", {"src": src, "file": os.path.basename(p), "name": name, "x": x, "y": y}, timeout=120)
+
+
 MODEL_TYPES = {".glb": "model/gltf-binary", ".gltf": "model/gltf+json", ".obj": "model/obj"}
 
 

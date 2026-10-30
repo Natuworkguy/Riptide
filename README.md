@@ -54,6 +54,20 @@ and `--uninstall` (`-Uninstall`) takes Riptide back out. ffmpeg is still yours t
 
 Projects save as `.rip` files (images and audio embedded; older `.wob` files still open) with the browser's own Save/Open dialogs.
 
+## Flash extension
+
+This repository is also a Flash extension: it lets Flash send the pictures and 3D models it makes to Riptide, as
+layers in the project open there, to animate or put in a video.
+
+    flash install github@Natuworkguy/Riptide
+
+It adds a `send_to_riptide` tool (just ask: *put that chair in Riptide*), a `/riptide [path]` command (the newest
+picture or model Flash showed, when no path is given), and a **Send to Riptide** button under replies and by the
+chat's title in Flash's web UI. Pictures (.png, .jpg, .webp, .gif, .svg) become image layers and models (.glb, .gltf,
+.obj) 3D layers. When Riptide is not open, it starts it (with the installed `riptide` command) and waits for the
+editor. Its address, and whether to open it, are in the extension's settings. Agents can do the same through MCP with
+`add_image` and `add_model`.
+
 ## Tutorial
 Help in the header (or **F1**) opens a tutorial in 14 sections, from the first layer to 3D, the camera, exporting and working with an agent, with buttons that try each thing on the spot. It is offered once on a first visit.
 

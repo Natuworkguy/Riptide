@@ -1,0 +1,1 @@
+Riptide, the user's motion graphics editor, can take your pictures and 3D models: send_to_riptide adds a .png, .jpg, .webp, .gif or .svg as an image layer, or a .glb, .gltf or .obj as a 3D layer, to the project open in Riptide (opening it first if it is not). Use it when the user wants to animate, edit or put something you made into a video in Riptide.

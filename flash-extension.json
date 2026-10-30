@@ -1,0 +1,44 @@
+{
+  "name": "riptide",
+  "description": "Send Flash's pictures and 3D models to Riptide, as layers in the project open there, to animate and put in a video",
+  "version": "0.1.0",
+  "prompt": "flash/prompt.md",
+  "tools": [
+    {
+      "name": "send_to_riptide",
+      "description": "Add a picture (.png, .jpg, .webp, .gif, .svg) or a 3D model (.glb, .gltf, .obj) to the project open in Riptide, the user's motion graphics editor, as a layer they can animate. Opens Riptide first when it is not open.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {"type": "string", "description": "The picture or model file."},
+          "name": {"type": "string", "description": "Optional name for the layer."},
+          "x": {"type": "number", "description": "Optional: where a picture's centre goes, in canvas pixels."},
+          "y": {"type": "number", "description": "Optional, with x."}
+        },
+        "required": ["path"]
+      },
+      "run": ["python", "./flash/send.py"],
+      "timeout": 90
+    }
+  ],
+  "commands": [
+    {
+      "name": "riptide",
+      "description": "send a picture or 3D model to Riptide (/riptide <path>, or the newest Flash showed)",
+      "run": ["python", "./flash/send.py", "--command"],
+      "timeout": 90
+    }
+  ],
+  "ui": {
+    "buttons": [
+      {"id": "send", "label": "Send to Riptide", "icon": "cube", "where": ["message", "header"],
+       "run": ["python", "./flash/send.py", "--button"]}
+    ]
+  },
+  "settings": [
+    {"id": "url", "label": "Riptide's address", "type": "text", "default": "http://127.0.0.1:5173",
+     "help": "Where Riptide runs. The installer's riptide command serves it here."},
+    {"id": "open", "label": "Open Riptide when it is not open", "type": "switch", "default": true,
+     "help": "Starts it, or opens its editor in your browser, before sending."}
+  ]
+}

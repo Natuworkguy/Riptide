@@ -540,3 +540,27 @@ body.recording .checker{box-shadow:0 0 0 2px #ff4d4f}
 .asset .modelthumb .ico{width:34px;height:34px}
 .assetghost:not(img):not(video){display:grid;place-items:center;color:#fff;background:#2a2a2a}
 .assetghost .ico{width:32px;height:32px}
+
+/* tutorial */
+.modal.tut{width:min(980px,calc(100vw - 32px));height:min(640px,calc(100vh - 48px));padding:0;display:grid;grid-template-columns:220px 1fr;overflow:hidden;position:relative}
+.tutnav{border-right:1px solid var(--line-2);padding:14px 8px;overflow:auto;display:flex;flex-direction:column;gap:1px}
+.tuthead{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);padding:2px 10px 10px}
+.tutnav button{display:flex;align-items:center;gap:10px;text-align:left;padding:7px 10px;border-radius:6px;color:var(--dim);font-size:12.5px}
+.tutnav button em{font-style:normal;font:11px 'JetBrains Mono',monospace;color:var(--faint);width:16px}
+.tutnav button:hover{background:#2c2c2c;color:var(--text)}
+.tutnav button.on{background:var(--accent-soft);color:var(--text)}.tutnav button.on em{color:var(--accent)}
+.tutbody{padding:26px 34px 22px;overflow:auto;font-size:13.5px;line-height:1.65;color:var(--text);display:flex;flex-direction:column}
+.tutbody h2{margin:0 0 12px;font-size:20px;font-weight:650}
+.tutbody p{margin:0 0 12px;color:#cfcfcf}.tutbody ul,.tutbody ol{margin:0 0 12px;padding-left:20px;color:#cfcfcf}.tutbody li{margin:0 0 6px}
+.tutbody b{color:var(--text)}.tutbody code{font:12px 'JetBrains Mono',monospace;background:#2c2c2c;padding:1px 5px;border-radius:4px}
+.tutbody kbd{font:11px 'JetBrains Mono',monospace;background:#2c2c2c;border:1px solid #3c3c3c;border-bottom-width:2px;border-radius:4px;padding:0 5px;margin:0 1px}
+.tuttry{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:6px 0 0;padding:12px;border:1px dashed var(--line-2);border-radius:8px}
+.tuttry span{color:var(--faint);font-size:12px}
+.tutsteps{margin-top:auto;padding-top:20px;display:flex;justify-content:space-between;gap:10px}
+.tutx{position:absolute;top:10px;right:10px;font-size:18px;color:var(--dim)}
+.tutoffer{position:fixed;right:18px;bottom:18px;z-index:150;width:280px;padding:14px 16px;background:#232323;border:1px solid #3a3a3a;border-radius:10px;
+  box-shadow:0 18px 40px rgba(0,0,0,.5);display:grid;gap:6px;font-size:12.5px;color:var(--dim);animation:tutin .25s ease-out}
+.tutoffer b{color:var(--text);font-size:13px}.tutoffer div{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}
+@keyframes tutin{from{opacity:0;transform:translateY(8px)}}
+@media (max-width:700px){.modal.tut{grid-template-columns:1fr;grid-template-rows:auto 1fr}.tutnav{flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line-2)}
+  .tuthead{display:none}.tutnav button{white-space:nowrap}.tutbody{padding:18px}}

@@ -38,6 +38,9 @@ Adjust colour, apply looks (Vivid, Warm, Cool, Faded, Vintage, Noir, Mono, Punch
 
 Projects save as `.rip` files (images and audio embedded; older `.wob` files still open) with the browser's own Save/Open dialogs.
 
+## Tutorial
+Help in the header (or **F1**) opens a tutorial in 14 sections, from the first layer to 3D, the camera, exporting and working with an agent, with buttons that try each thing on the spot. It is offered once on a first visit.
+
 ## Shortcuts
 Press **?** in the editor for the full list (80 commands), or **Cmd+P** for the command palette, which searches every
 command, layer, animation preset and canvas size, and jumps to a time if you type one (`2.5s`).

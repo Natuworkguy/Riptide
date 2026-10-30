@@ -1590,6 +1590,8 @@ $('#aresize').onclick = e => { const b = e.target.closest('[data-v]'); if (!b) r
   status(resizeMode === 'fit' ? 'Resizing scales the content to fit the new frame' : 'Resizing keeps content at its size and re-centres it'); };
 UI.scrub($('#board'), i => i.dispatchEvent(new Event('change')));
 document.querySelectorAll('[data-add]').forEach(b => b.onclick = () => newLayer(b.dataset.add));
+$('#help').onclick = e => UI.menu(e.currentTarget, [{ value: 'tutorial', label: 'Tutorial', hint: 'F1' }, { value: 'keys', label: 'Keyboard shortcuts', hint: '?' },
+  { value: 'palette', label: 'Search commands', hint: isMac ? '⌘P' : 'Ctrl P' }], null, v => v === 'tutorial' ? Tutorial.resume() : v === 'keys' ? cheatSheet() : palette());
 // 3D: the solid shapes, a model from a file, and the camera that films them
 $('#add3d').onclick = e => UI.menu(e.currentTarget, [...R3D.SHAPES.map(([value, label]) => ({ value, label, group: 'Shapes' })),
   { value: 'model', label: 'Import a model…', hint: '.glb .gltf .obj', group: 'Model' }, { value: 'camera', label: 'Camera', group: 'Camera' }], null,
@@ -1955,6 +1957,7 @@ const COMMANDS = [
   // View
   ['View', 'Command palette', 'mod+p|mod+shift+p', () => palette()],
   ['View', 'Keyboard shortcuts', '?', () => cheatSheet()],
+  ['View', 'Tutorial', 'f1', () => Tutorial.resume()],
   ['View', 'Focus mode (hide panels)', 'f', () => focusMode()],
   ['Layer', 'Lock / unlock aspect ratio', 'shift+l', withL(L => { L.lockAspect = !aspectLocked(L); refresh(); status(L.lockAspect ? 'Aspect ratio locked' : 'Aspect ratio unlocked'); })],
   ['View', 'Safe areas', "'", () => $('#guides').click()],
@@ -2368,7 +2371,7 @@ const panels = (() => {
 // ---------- intro ----------
 // The splash logo draws its wave while a short loader fills, then flies into the header's logo spot.
 (() => {
-  const sp = $('#splash'), done = () => { document.body.classList.remove('booting'); sp?.remove(); };
+  const sp = $('#splash'), done = () => { document.body.classList.remove('booting'); sp?.remove(); setTimeout(() => Tutorial.offer(), 600); };
   if (!sp || matchMedia('(prefers-reduced-motion: reduce)').matches) return done();
   setTimeout(() => {
     const from = sp.querySelector('.slogo'), to = $('.brand .mark');

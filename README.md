@@ -30,6 +30,22 @@ A browser motion-graphics and image editor with a small Flask backend for video 
 Switch with Video / Image in the header. The timeline is hidden; importing an image into an empty canvas opens it at full resolution.
 Adjust colour, apply looks (Vivid, Warm, Cool, Faded, Vintage, Noir, Mono, Punch, Negative), flip, blend layers, add shapes and text, then export PNG, JPEG or WebP.
 
+## Install
+
+Linux:
+
+    curl -fsSL https://raw.githubusercontent.com/Natuworkguy/Riptide/main/install.sh | bash
+
+Windows (PowerShell):
+
+    irm https://raw.githubusercontent.com/Natuworkguy/Riptide/main/install.ps1 | iex
+
+The installer puts Riptide in its own Python environment, adds a `riptide` command, an applications menu (or Start
+menu) entry, and registers `riptide://open` links, which open the editor in your browser and start its server if it is
+not running. `riptide --stop` stops that server. Run the installer again to update. `--dev` installs the dev branch,
+where changes land first (on Windows: `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Natuworkguy/Riptide/main/install.ps1))) -Dev`),
+and `--uninstall` (`-Uninstall`) takes Riptide back out. ffmpeg is still yours to install, for video export.
+
 ## Run
 
     brew install ffmpeg          # only needed for MP4/WebM/GIF export

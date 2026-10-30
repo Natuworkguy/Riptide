@@ -103,10 +103,19 @@ async def see_frames(count: int = 8, times: list[float] | None = None, width: in
 
 # ---------- changing ----------
 @mcp.tool()
-async def add_layer(type: Literal["rect", "ellipse", "polygon", "star", "arc", "text", "wave"], name: str | None = None,
+async def add_layer(type: Literal["rect", "ellipse", "polygon", "star", "arc", "text", "wave", "shape3d", "camera"], name: str | None = None,
               props: dict | None = None, start: float | None = None, end: float | None = None) -> dict:
     """Add a layer on top. `props` are initial values, e.g. {"x": 540, "y": 300, "w": 400, "h": 120, "fill": "#ff5a36", "radius": 20}
-    or for text {"text": "Hello", "size": 96, "weight": 800, "fill": "#111111"}. `start`/`end` limit when it is visible (seconds)."""
+    or for text {"text": "Hello", "size": 96, "weight": 800, "fill": "#111111"}. `start`/`end` limit when it is visible (seconds).
+
+    3D: "shape3d" is a lit solid, {"shape": "cube" | "sphere" | "cylinder" | "cone" | "torus" | "text", "w": 300, "h": 300,
+    "d": 300 (thickness), "rotX": -20, "rotY": 30, "material": "matte" | "glossy" | "metal", "fill": "#4c8dff",
+    "lightAngle": -45 (where the light comes from, degrees round from the top), "text": "Hi" (for shape "text")}.
+    Any flat layer becomes 3D with {"three": true}, then turns with rotX and rotY (degrees) and moves back with z
+    (pixels; positive is further away). A "camera" films every 3D layer: x and y are the point it looks at,
+    orbit and tilt swing it round that point (degrees), dolly moves it closer (pixels), zoom narrows the lens
+    (1 is normal) and rotation rolls it. The top visible camera is the one that films; with none, depth 0 is the
+    canvas exactly. All of these animate."""
     return await acall("add_layer", {"type": type, "name": name, "props": props or {}, "in": start, "out": end})
 
 
@@ -233,6 +242,27 @@ async def add_audio(path: str, start: float = 0, track: str | None = None,
     src, name = _audio_src(path)
     return await acall("add_audio", {"src": src, "name": name, "start": start, "track": track,
                                      "fade_in": fade_in, "fade_out": fade_out}, timeout=120)
+
+
+MODEL_TYPES = {".glb": "model/gltf-binary", ".gltf": "model/gltf+json", ".obj": "model/obj"}
+
+
+@mcp.tool()
+async def add_model(path: str, name: str | None = None, props: dict | None = None) -> dict:
+    """Add a 3D model from this computer (.glb, .gltf with its data inside it, or .obj; up to 50 MB) as a layer. It
+    fills its w × h box without being stretched, and turns and moves like any 3D layer (rotX, rotY, rotation, z),
+    lit from lightAngle. Returns the new layer id."""
+    p = os.path.abspath(os.path.expanduser(path))
+    ext = os.path.splitext(p)[1].lower()
+    if ext not in MODEL_TYPES:
+        raise RiptideError(f"Not a 3D model I can use: {ext or 'no extension'}. Use one of {', '.join(MODEL_TYPES)}")
+    if not os.path.isfile(p):
+        raise RiptideError(f"No such file: {p}")
+    if os.path.getsize(p) > 50e6:
+        raise RiptideError("That file is over 50 MB")
+    with open(p, "rb") as f:
+        src = f"data:{MODEL_TYPES[ext]};base64," + base64.b64encode(f.read()).decode()
+    return await acall("add_model", {"src": src, "file": os.path.basename(p), "name": name, "props": props or {}}, timeout=120)
 
 
 @mcp.tool()

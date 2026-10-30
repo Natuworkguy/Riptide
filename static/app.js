@@ -45,32 +45,45 @@ function curveSVG(name, w = 34, h = 22) {
 
 // ---------- model ----------
 const ANIM = ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'radius', 'fill', 'fill2', 'gradAngle', 'stroke', 'strokeWidth',
-  'blur', 'shadow', 'size', 'reveal', 'sweep', 'spacing', 'bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert'];
+  'blur', 'shadow', 'size', 'reveal', 'sweep', 'spacing', 'bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert',
+  'rotX', 'rotY', 'z', 'd', 'lightAngle', 'orbit', 'tilt', 'dolly', 'zoom'];
 const ADJUST = ['bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert'];
 const COMMON = ['x', 'y', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'blur', 'shadow', ...ADJUST];
+// turned on X and Y and pushed back in depth: any layer with 3D on, and the 3D layers themselves
+const DEPTH = ['rotX', 'rotY', 'z'];
+const FLAT = [...COMMON, 'three', ...DEPTH];
 const PROPS = {
-  rect:    [...COMMON, 'w', 'h', 'radius', 'fill', 'grad', 'fill2', 'gradAngle', 'stroke', 'strokeWidth'],
-  ellipse: [...COMMON, 'w', 'h', 'fill', 'grad', 'fill2', 'gradAngle', 'stroke', 'strokeWidth'],
-  star:    [...COMMON, 'w', 'h', 'points', 'fill', 'grad', 'fill2', 'gradAngle', 'stroke', 'strokeWidth'],
-  polygon: [...COMMON, 'w', 'h', 'points', 'radius', 'fill', 'grad', 'fill2', 'gradAngle', 'stroke', 'strokeWidth'],
-  arc:     [...COMMON, 'w', 'h', 'sweep', 'stroke', 'strokeWidth'],
-  wave:    [...COMMON, 'w', 'h', 'reveal', 'stroke', 'strokeWidth'],
-  text:    [...COMMON, 'text', 'size', 'weight', 'spacing', 'reveal', 'fill', 'grad', 'fill2', 'gradAngle', 'stroke', 'strokeWidth'],
-  image:   [...COMMON, 'w', 'h', 'radius', 'stroke', 'strokeWidth'],
-  video:   [...COMMON, 'w', 'h', 'radius', 'stroke', 'strokeWidth'],
+  rect:    [...FLAT, 'w', 'h', 'radius', 'fill', 'grad', 'fill2', 'gradAngle', 'stroke', 'strokeWidth'],
+  ellipse: [...FLAT, 'w', 'h', 'fill', 'grad', 'fill2', 'gradAngle', 'stroke', 'strokeWidth'],
+  star:    [...FLAT, 'w', 'h', 'points', 'fill', 'grad', 'fill2', 'gradAngle', 'stroke', 'strokeWidth'],
+  polygon: [...FLAT, 'w', 'h', 'points', 'radius', 'fill', 'grad', 'fill2', 'gradAngle', 'stroke', 'strokeWidth'],
+  arc:     [...FLAT, 'w', 'h', 'sweep', 'stroke', 'strokeWidth'],
+  wave:    [...FLAT, 'w', 'h', 'reveal', 'stroke', 'strokeWidth'],
+  text:    [...FLAT, 'text', 'size', 'weight', 'spacing', 'reveal', 'fill', 'grad', 'fill2', 'gradAngle', 'stroke', 'strokeWidth'],
+  image:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth'],
+  video:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth'],
+  shape3d: [...COMMON, ...DEPTH, 'w', 'h', 'd', 'shape', 'text', 'radius', 'fill', 'material', 'lightAngle'],
+  model:   [...COMMON, ...DEPTH, 'w', 'h', 'lightAngle'],
+  camera:  ['x', 'y', 'orbit', 'tilt', 'dolly', 'zoom', 'rotation'],
 };
-const GROUPS = [['Transform', ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy']],
+const GROUPS = [['Transform', ['x', 'y', 'w', 'h', 'd', 'rotation', 'scale', 'sx', 'sy']],
+  ['3D', ['three', 'shape', 'rotX', 'rotY', 'z', 'material', 'lightAngle']], ['Camera', ['orbit', 'tilt', 'dolly', 'zoom']],
   ['Style', ['fill', 'grad', 'fill2', 'gradAngle', 'stroke', 'strokeWidth', 'radius', 'points', 'sweep', 'opacity']],
   ['Text', ['text', 'size', 'weight', 'spacing', 'reveal']], ['Effects', ['blur', 'shadow']], ['Adjust', ADJUST]];
 const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', scale: 'Scale', sx: 'Stretch X', sy: 'Stretch Y',
   opacity: 'Opacity', radius: 'Corners', fill: 'Fill', grad: 'Gradient', fill2: 'Fill 2', gradAngle: 'Angle°', stroke: 'Stroke', strokeWidth: 'Stroke W', blur: 'Blur', shadow: 'Shadow',
   size: 'Font size', text: 'Text', points: 'Points', weight: 'Weight', reveal: 'Reveal', sweep: 'Sweep°', spacing: 'Tracking',
-  bright: 'Brightness', contrast: 'Contrast', sat: 'Saturation', hue: 'Hue°', gray: 'Grayscale', sepia: 'Sepia', invert: 'Invert' };
-const STEP = { opacity: .05, scale: .05, sx: .05, sy: .05, reveal: .05 };
+  bright: 'Brightness', contrast: 'Contrast', sat: 'Saturation', hue: 'Hue°', gray: 'Grayscale', sepia: 'Sepia', invert: 'Invert',
+  three: '3D layer', shape: 'Shape', rotX: 'Rotate X', rotY: 'Rotate Y', z: 'Depth', d: 'Thickness', material: 'Material', lightAngle: 'Light°',
+  orbit: 'Orbit°', tilt: 'Tilt°', dolly: 'Dolly', zoom: 'Zoom' };
+// a camera's position is the point it looks at, and its rotation turns the whole view
+const CAMERA_LABEL = { x: 'Look at X', y: 'Look at Y', rotation: 'Roll°' };
+const STEP = { opacity: .05, scale: .05, sx: .05, sy: .05, reveal: .05, zoom: .05 };
 const PALETTE = ['#7c5cff', '#ff5c8a', '#20c997', '#ffb020', '#3fa9ff', '#ff7a45'];
 const DEFAULTS = { rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0,
   size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, sweep: 270, points: 5, w: 300, h: 300,
-  bright: 100, contrast: 100, sat: 100, hue: 0, gray: 0, sepia: 0, invert: 0, grad: 'none', gradAngle: 90 };
+  bright: 100, contrast: 100, sat: 100, hue: 0, gray: 0, sepia: 0, invert: 0, grad: 'none', gradAngle: 90,
+  three: false, rotX: 0, rotY: 0, z: 0, d: 300, shape: 'cube', material: 'glossy', lightAngle: -45, orbit: 0, tilt: 0, dolly: 0, zoom: 1 };
 // A fill can be a gradient from Fill to Fill 2: linear at an angle (0° runs left to right, 90° top to bottom), or
 // radial from the middle out. It spans the layer's own box, so it moves, scales and turns with the layer.
 const GRADS = [['none', 'None'], ['linear', 'Linear'], ['radial', 'Radial']];
@@ -193,12 +206,15 @@ function shapePath(c, L, o) {
 function textOf(o) { const s = String(o.text); return s.slice(0, Math.round(s.length * Math.max(0, Math.min(1, o.reveal)))); }
 function setFont(c, o) { c.font = `${o.weight} ${o.size}px ${FONT}`; if ('letterSpacing' in c) c.letterSpacing = o.spacing + 'px'; }
 function drawLayer(c, L, t) {
+  if (L.type === 'camera') return;
   const o = state(L, t);
   if (L.id === editingId) o.reveal = 1;
   if (o.opacity <= 0) return;
   c.save();
   c.globalAlpha = Math.min(1, o.opacity);
-  c.translate(o.x, o.y); c.rotate(o.rotation * PI / 180); c.scale(o.scale * o.sx, o.scale * o.sy);
+  // a 3D layer is placed by the 3D view, which is laid over the whole canvas; effects apply to what it drew
+  const deep = R3D.wants(L);
+  if (!deep) { c.translate(o.x, o.y); c.rotate(o.rotation * PI / 180); c.scale(o.scale * o.sx, o.scale * o.sy); }
   { const f = [];
     if (o.blur > 0.05) f.push(`blur(${o.blur}px)`);
     if (o.bright !== 100) f.push(`brightness(${o.bright}%)`); if (o.contrast !== 100) f.push(`contrast(${o.contrast}%)`);
@@ -206,6 +222,12 @@ function drawLayer(c, L, t) {
     if (o.gray) f.push(`grayscale(${o.gray}%)`); if (o.sepia) f.push(`sepia(${o.sepia}%)`); if (o.invert) f.push(`invert(${o.invert}%)`);
     if (f.length) c.filter = f.join(' '); }
   if (o.shadow > 0) { c.shadowColor = 'rgba(0,0,0,.45)'; c.shadowBlur = o.shadow; c.shadowOffsetY = o.shadow / 3; }
+  if (deep) R3D.draw(c, L, o, t, drawContent); else drawContent(c, L, o, t);
+  c.restore();
+}
+// what a layer draws, centred on 0,0 at its own size: the layer, before it is moved, turned or scaled
+function drawContent(c, L, o, t) {
+  if (L.type === 'shape3d' || L.type === 'model') return placeholder3d(c, L, o);
   c.fillStyle = o.fill; c.strokeStyle = o.stroke; c.lineWidth = o.strokeWidth; c.lineJoin = 'round'; c.lineCap = 'round';
   if (L.type === 'text') {
     setFont(c, o); c.textAlign = 'left'; c.textBaseline = 'middle';
@@ -231,10 +253,18 @@ function drawLayer(c, L, t) {
       if (r < 1) c.setLineDash([len * r, len]); }
     if (o.strokeWidth > 0 && !(L.type === 'wave' && o.reveal <= 0)) { c.shadowColor = 'transparent'; c.stroke(); }
   }
+}
+// a solid with nothing to show yet (its model or font still loading, or no WebGL): its box, faintly
+function placeholder3d(c, L, o) {
+  c.save();
+  if (R3D.wants(L)) { c.translate(o.x, o.y); c.rotate(o.rotation * PI / 180); c.scale(o.scale * o.sx, o.scale * o.sy); }
+  c.fillStyle = L.type === 'model' ? 'rgba(128,128,128,.25)' : o.fill; c.globalAlpha *= L.type === 'model' ? 1 : .6;
+  c.beginPath(); c.roundRect(-o.w / 2, -o.h / 2, o.w, o.h, Math.min(24, Math.abs(o.w) / 4, Math.abs(o.h) / 4)); c.fill();
   c.restore();
 }
 function bounds(L, t) {
   const o = state(L, t);
+  if (L.type === 'camera') return { o, w: 0, h: 0 };
   if (L.type === 'text') { setFont(ctx, o); const ls = String(o.text).split('\n');
     return { o, w: Math.max(10, ...ls.map(s => ctx.measureText(s).width)), h: o.size * 1.1 * ls.length }; }
   return { o, w: Math.abs(o.w) + (L.type === 'arc' || L.type === 'wave' ? o.strokeWidth : 0), h: Math.abs(o.h) + (L.type === 'arc' || L.type === 'wave' ? o.strokeWidth : 0) };
@@ -245,9 +275,28 @@ function renderScene(c, t, scale = 1) {
   for (const L of S.layers) if (visibleAt(L, t)) { c.save(); c.globalCompositeOperation = L.blend || 'source-over'; drawLayer(c, L, t); c.restore(); }
   c.setTransform(1, 0, 0, 1, 0, 0);
 }
+// where a 3D layer that is turned, pushed back or seen by a moved camera lands on the canvas, as an outline; null
+// for any other layer, which is a box turned in the plane like before
+function hull3d(L, t) {
+  if (!R3D.is3d(L) || !R3D.available) return null;
+  const o = state(L, t); if (R3D.isFlat(L, o, t)) return null;
+  const h = R3D.hull(L, t); return h.length >= 3 ? h : null;
+}
+function outline3d(c, hull) { c.beginPath(); hull.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); c.stroke(); }
+// a camera, where it looks: a target
+function cameraMark(c, L, k) {
+  const o = state(L, time), r = 14 * k;
+  c.save(); c.strokeStyle = '#4c8dff'; c.lineWidth = 1.5 * k; c.beginPath(); c.arc(o.x, o.y, r, 0, PI * 2);
+  c.moveTo(o.x - r * 1.8, o.y); c.lineTo(o.x + r * 1.8, o.y); c.moveTo(o.x, o.y - r * 1.8); c.lineTo(o.x, o.y + r * 1.8); c.stroke(); c.restore();
+}
+R3D.changed = () => { if (!exporting) render(); };
+R3D.placeholder = placeholder3d;
 let guidesOn = false, snapGuides = null;
 // axis-aligned box of a layer as drawn (scale, stretch and rotation included): centre and half extents
 function box(L, t) {
+  const hull = hull3d(L, t);
+  if (hull) { const xs = hull.map(p => p[0]), ys = hull.map(p => p[1]), l = Math.min(...xs), r = Math.max(...xs), tp = Math.min(...ys), b = Math.max(...ys);
+    return { x: (l + r) / 2, y: (tp + b) / 2, ex: (r - l) / 2, ey: (b - tp) / 2 }; }
   const { o, w, h } = bounds(L, t), bw = w * Math.abs(o.scale * o.sx) / 2, bh = h * Math.abs(o.scale * o.sy) / 2, r = o.rotation * PI / 180;
   return { x: o.x, y: o.y, ex: Math.abs(Math.cos(r)) * bw + Math.abs(Math.sin(r)) * bh, ey: Math.abs(Math.sin(r)) * bw + Math.abs(Math.cos(r)) * bh };
 }
@@ -264,14 +313,18 @@ function render(showUI = true) {
   const SL = selLayers();
   if (showUI && SL.length > 1) {
     ctx.save(); ctx.strokeStyle = '#4c8dff'; ctx.lineWidth = k;
-    for (const M of SL) { if (!visibleAt(M, time)) continue; const { o, w, h } = bounds(M, time);
+    for (const M of SL) { if (!visibleAt(M, time)) continue; const hm = hull3d(M, time); if (hm) { outline3d(ctx, hm); continue; }
+      if (M.type === 'camera') { cameraMark(ctx, M, k); continue; } const { o, w, h } = bounds(M, time);
       ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(o.rotation * PI / 180);
       const bw = w * Math.abs(o.scale * o.sx), bh = h * Math.abs(o.scale * o.sy); ctx.strokeRect(-bw / 2, -bh / 2, bw, bh); ctx.restore(); }
     const vis = SL.filter(M => visibleAt(M, time));
     if (vis.length) { const u = unionBox(vis); ctx.setLineDash([5 * k, 4 * k]); ctx.strokeRect(u.x - u.ex - 4 * k, u.y - u.ey - 4 * k, u.ex * 2 + 8 * k, u.ey * 2 + 8 * k); }
     ctx.restore();
   }
-  if (showUI && SL.length === 1 && L && visibleAt(L, time)) {
+  const hl = showUI && SL.length === 1 && L && visibleAt(L, time) ? hull3d(L, time) : null;
+  if (hl) { ctx.save(); ctx.strokeStyle = '#4c8dff'; ctx.lineWidth = k; outline3d(ctx, hl); ctx.restore(); }
+  else if (showUI && SL.length === 1 && L && L.type === 'camera' && visibleAt(L, time)) cameraMark(ctx, L, k);
+  else if (showUI && SL.length === 1 && L && visibleAt(L, time)) {
     const { o, w, h } = bounds(L, time);
     const sx = o.scale * o.sx, sy = o.scale * o.sy;
     ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(o.rotation * PI / 180);
@@ -329,7 +382,8 @@ let drag = null;
 const marqueeEl = Object.assign(document.createElement('div'), { className: 'marquee' });
 function hitLayer(px, py) {
   for (let i = S.layers.length - 1; i >= 0; i--) {
-    const L = S.layers[i]; if (!visibleAt(L, time) || L.locked) continue;
+    const L = S.layers[i]; if (!visibleAt(L, time) || L.locked || L.type === 'camera') continue;
+    const hull = hull3d(L, time); if (hull) { if (R3D.inside(hull, px, py)) return L; continue; }
     const { w, h } = bounds(L, time), [lx, ly] = local(L, px, py);
     if (Math.abs(lx) <= w / 2 && Math.abs(ly) <= h / 2) return L;
   }
@@ -339,7 +393,7 @@ function hitLayer(px, py) {
 // first, then anywhere along an edge.
 const HANDLES = [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, -1], [0, 1], [-1, 0], [1, 0]];
 function handleAt(L, px, py, k) {
-  if (L.type === 'text' || (L.fix?.w && L.fix?.h) || !visibleAt(L, time)) return null;
+  if (L.type === 'text' || L.type === 'camera' || (L.fix?.w && L.fix?.h) || !visibleAt(L, time) || hull3d(L, time)) return null;
   const { w, h, o } = bounds(L, time), [lx, ly] = local(L, px, py), s = 12 * k / (o.scale || 1);
   for (const [hx, hy] of HANDLES.slice(0, 4))
     if (Math.abs(lx - hx * w / 2) < s && Math.abs(ly - hy * h / 2) < s) return [hx, hy];
@@ -567,7 +621,11 @@ const ICON = {
   play2: '<svg class="ico" viewBox="0 0 16 16"><path d="M5.5 4v8l6.5-4z" fill="currentColor"/></svg>',
   image: ic('<rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="6" cy="6.5" r="1.2"/><path d="M2.5 12l3.5-3.5 2.5 2.5 2-2 3 3"/>'),
   upload: ic('<path d="M8 11V2.5M5 5.5l3-3 3 3M2.5 10v3.5h11V10"/>'),
+  cube: ic('<path d="M8 1.8 13.5 5v6L8 14.2 2.5 11V5z"/><path d="M2.5 5 8 8.2 13.5 5M8 8.2v6"/>'),
+  model: ic('<path d="M8 1.8 13.5 5v6L8 14.2 2.5 11V5z"/><path d="M2.5 5 8 8.2 13.5 5M8 8.2v6"/><circle cx="8" cy="8.2" r="1.3" fill="currentColor"/>'),
+  camera: ic('<rect x="1.5" y="4.5" width="9" height="7" rx="1.5"/><path d="M10.5 7.2l4-2v5.6l-4-2"/>'),
 };
+ICON.shape3d = ICON.cube;
 
 // ---------- history ----------
 let hist = [], hi = -1, dirty = false;
@@ -693,6 +751,9 @@ function renderProps() {
       for (const k of ks) {
         if ((k === 'fill2' || k === 'gradAngle') && (o.grad || 'none') === 'none') continue;
         if (k === 'gradAngle' && o.grad !== 'linear') continue;
+        // turning and depth only once a flat layer is made 3D; letters only for 3D text, corners only for a cube
+        if (DEPTH.includes(k) && !R3D.is3d(L)) continue;
+        if (L.type === 'shape3d' && ((k === 'text' && o.shape !== 'text') || (k === 'radius' && o.shape !== 'cube'))) continue;
         const anim = ANIM.includes(k), here = L.keys[k]?.some(x => near(x.t, time)), keyed = L.keys[k]?.length, v = o[k];
         const fx = FIX_OF[k], isFixed = fixed(L, k);
         const kb = anim ? `<button class="kf ${keyed ? 'has' : ''} ${here ? 'here' : ''}" data-key="${k}" title="${here ? 'Remove keyframe' : 'Add keyframe at playhead'}"${isFixed ? ' disabled' : ''}>${here ? ICON.key : ICON.keyOff}</button>` : '<span class="kf"></span>';
@@ -701,12 +762,15 @@ function renderProps() {
         else if (COLORS.includes(k)) field = `<button class="swatch" data-color="${k}"><i style="background:${v}"></i><span>${v.toUpperCase()}</span></button>`;
         else if (k === 'text') field = `<textarea data-p="text" rows="2" spellcheck="false">${esc(v)}</textarea>`;
         else if (k === 'weight') field = `<button class="selectbtn" data-menu="weight"><span>${WEIGHTS.find(w => w[0] == v)?.[1] || v}</span>${ICON.chev}</button>`;
+        else if (k === 'three') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="three" title="${v ? 'Make it flat again' : 'Turn it in 3D, push it back, and let a camera move around it'}"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
+        else if (k === 'shape') field = `<button class="selectbtn" data-menu="shape"><span>${R3D.SHAPES.find(x => x[0] === v)?.[1] || v}</span>${ICON.chev}</button>`;
+        else if (k === 'material') field = `<button class="selectbtn" data-menu="material"><span>${R3D.MATERIALS.find(x => x[0] === v)?.[1] || v}</span>${ICON.chev}</button>`;
         else field = `<input data-p="${k}" value="${fmt(v)}" inputmode="decimal" spellcheck="false"${isFixed ? ' disabled' : ''}>`;
-        const wide = ['fill', 'fill2', 'grad', 'stroke', 'text', 'weight'].includes(k) ? ' wide' : '';
+        const wide = ['fill', 'fill2', 'grad', 'stroke', 'text', 'weight', 'three', 'shape', 'material'].includes(k) ? ' wide' : '';
         // Keeping the proportions means nothing once either side is locked.
         const lock = k === 'w' && list.includes('h') && !L.fix?.w && !L.fix?.h ? `<button class="ib aspect ${aspectLocked(L) ? 'on' : ''}" data-cmd="aspect" title="${aspectLocked(L) ? 'Aspect ratio locked: click to unlock' : 'Lock aspect ratio'}">${aspectLocked(L) ? ICON.link : ICON.unlink}</button>` : '';
         const pin = fx ? `<button class="ib fix ${isFixed ? 'on' : ''}" data-fix="${fx}" title="${isFixed ? `${FIX_NAME[fx]} locked: click to unlock` : `Lock ${FIX_NAME[fx].toLowerCase()}`}">${isFixed ? ICON.lock : ICON.unlock}</button>` : '';
-        h += `<div class="row${wide}${isFixed ? ' fixed' : ''}" data-row="${k}">${kb}<label ${field.startsWith('<input') && !isFixed ? `data-scrub="${STEP[k] || 1}"` : ''}>${LABEL[k]}</label>${field}${pin}${lock}</div>`;
+        h += `<div class="row${wide}${isFixed ? ' fixed' : ''}" data-row="${k}">${kb}<label ${field.startsWith('<input') && !isFixed ? `data-scrub="${STEP[k] || 1}"` : ''}>${(L.type === 'camera' && CAMERA_LABEL[k]) || LABEL[k]}</label>${field}${pin}${lock}</div>`;
       }
       h += '</div></div>';
     }
@@ -762,6 +826,11 @@ Pn.addEventListener('click', e => {
   else if (t.dataset.cmd === 'del') removeLayer();
   else if (t.dataset.cmd === 'flipx' || t.dataset.cmd === 'flipy') { const k = t.dataset.cmd === 'flipx' ? 'sx' : 'sy'; setProp(L, k, -state(L, time)[k]); refresh(); }
   else if (t.dataset.cmd === 'fitcanvas') fitCanvasToImage(L);
+  else if (t.dataset.cmd === 'three') { L.p.three = !L.p.three; refresh(); status(L.p.three ? `${L.name} is 3D: turn it with Rotate X and Y, push it back with Depth` : `${L.name} is flat again`); }
+  else if (t.dataset.menu === 'shape')
+    UI.menu(t, R3D.SHAPES.map(([value, label]) => ({ value, label })), L.p.shape, v => { L.p.shape = v; if (v === 'text') R3D.loadFont(); refresh(); });
+  else if (t.dataset.menu === 'material')
+    UI.menu(t, R3D.MATERIALS.map(([value, label]) => ({ value, label })), L.p.material, v => { L.p.material = v; refresh(); });
   else if (t.dataset.fix) toggleFix(L, t.dataset.fix);
   else if (t.dataset.cmd === 'aspect') { L.lockAspect = !aspectLocked(L); refresh(); status(L.lockAspect ? 'Aspect ratio locked' : 'Aspect ratio unlocked'); }
   else if (t.dataset.menu === 'look')
@@ -833,6 +902,20 @@ const PRESETS = {
     'Erase': (a, o, L) => { if (L.type === 'text') { a('reveal', 0, 1, 'linear'); a('reveal', .6, 0); }
       else if (L.type === 'arc') { a('sweep', 0, o.sweep, 'expoInOut'); a('sweep', .8, 0); } else return 'Text and arc layers only'; },
   },
+  '3D': {
+    'Flip': (a, o, L) => { if (L.type === 'camera') return 'Not for a camera'; a('rotY', 0, o.rotY, 'expoInOut'); a('rotY', .9, o.rotY + 180); },
+    'Swing in': (a, o, L) => { if (L.type === 'camera') return 'Not for a camera'; a('rotX', 0, o.rotX + 90, 'backOut'); a('rotX', .8, o.rotX); a('opacity', 0, 0, 'sineOut'); a('opacity', .3, o.opacity); },
+    'Turn in': (a, o, L) => { if (L.type === 'camera') return 'Not for a camera'; a('rotY', 0, o.rotY - 90, 'expoOut'); a('rotY', .8, o.rotY); a('opacity', 0, 0, 'sineOut'); a('opacity', .3, o.opacity); },
+    'Fly in': (a, o, L) => { if (L.type === 'camera') return 'Not for a camera'; a('z', 0, o.z + 2400, 'expoOut'); a('z', 1, o.z); a('opacity', 0, 0, 'sineOut'); a('opacity', .4, o.opacity); },
+    'Fly out': (a, o, L) => { if (L.type === 'camera') return 'Not for a camera'; a('z', 0, o.z, 'expoIn'); a('z', .8, o.z - 900); a('opacity', .4, o.opacity, 'sineIn'); a('opacity', .8, 0); },
+    'Turntable': (a, o, L) => { if (L.type === 'camera') return 'Not for a camera'; a('rotY', -1, o.rotY, 'linear'); a('rotY', 1e3, o.rotY + 360 * Math.max(1, Math.round(S.dur / 4))); },
+    'Tumble': (a, o, L) => { if (L.type === 'camera') return 'Not for a camera'; const n = Math.max(1, Math.round(S.dur / 4));
+      a('rotY', -1, o.rotY, 'linear'); a('rotY', 1e3, o.rotY + 360 * n); a('rotX', -1, o.rotX, 'linear'); a('rotX', 1e3, o.rotX + 180 * n); },
+    'Orbit around': (a, o, L) => { if (L.type !== 'camera') return 'Camera layers only'; a('orbit', -1, o.orbit, 'linear'); a('orbit', 1e3, o.orbit + 360); },
+    'Push in': (a, o, L) => { if (L.type !== 'camera') return 'Camera layers only'; a('dolly', 0, o.dolly, 'sineInOut'); a('dolly', 2, o.dolly + S.h * .6); },
+    'Pull back': (a, o, L) => { if (L.type !== 'camera') return 'Camera layers only'; a('dolly', 0, o.dolly, 'sineInOut'); a('dolly', 2, o.dolly - S.h * .8); },
+    'Crane up': (a, o, L) => { if (L.type !== 'camera') return 'Camera layers only'; a('tilt', 0, o.tilt, 'sineInOut'); a('tilt', 2, o.tilt + 35); },
+  },
   'Loop (whole clip)': {
     'Float': (a, o) => loopKeys(a, 'y', 1.6, [o.y, o.y - 24]),
     'Breathe': (a, o) => loopKeys(a, 'scale', 2, [o.scale, o.scale * 1.08]),
@@ -853,6 +936,8 @@ function loopKeys(a, prop, period, [v0, v1]) {
 function applyPreset(L, name) {
   const [, fn] = Object.values(PRESETS).flatMap(g => Object.entries(g)).find(([n]) => n === name);
   const t0 = time, o = state(L, t0), cleared = new Set(); let end = t0;
+  // turning a flat layer in depth makes it a 3D layer
+  if (!R3D.is3d(L) && PROPS[L.type].includes('three') && /rotX|rotY|'z'/.test(String(fn))) L.p.three = true;
   const add = (p, dt, v, ease, abs) => {
     // loops replace whatever keys were already on the property they drive
     if ((abs || dt === -1) && !cleared.has(p)) { cleared.add(p); delete L.keys[p]; }
@@ -865,6 +950,7 @@ function applyPreset(L, name) {
 }
 function presetMeta(fn, L) {
   const D = L || { type: 'rect', p: { ...DEFAULTS, fill: PALETTE[0] }, keys: {} }; let m = 0, loopy = false;
+  if (!L && /Camera layers only/.test(String(fn))) return 'camera';
   const msg = fn((p, dt, v, e, abs) => { if (abs || dt === -1 || dt >= 1e3) loopy = true; else m = Math.max(m, dt); }, { ...D.p, x: 0, y: 0 }, D);
   return msg ? msg.replace(' layers only', ' only') : loopy ? 'loop' : m.toFixed(1) + 's';
 }
@@ -1475,6 +1561,11 @@ $('#aresize').onclick = e => { const b = e.target.closest('[data-v]'); if (!b) r
   status(resizeMode === 'fit' ? 'Resizing scales the content to fit the new frame' : 'Resizing keeps content at its size and re-centres it'); };
 UI.scrub($('#board'), i => i.dispatchEvent(new Event('change')));
 document.querySelectorAll('[data-add]').forEach(b => b.onclick = () => newLayer(b.dataset.add));
+// 3D: the solid shapes, a model from a file, and the camera that films them
+$('#add3d').onclick = e => UI.menu(e.currentTarget, [...R3D.SHAPES.map(([value, label]) => ({ value, label, group: 'Shapes' })),
+  { value: 'model', label: 'Import a model…', hint: '.glb .gltf .obj', group: 'Model' }, { value: 'camera', label: 'Camera', group: 'Camera' }], null,
+  v => v === 'model' ? modelInput.click() : v === 'camera' ? addCamera() : add3d(v),
+  it => it.value === 'camera' ? ICON.camera : it.value === 'model' ? ICON.model : ICON.cube);
 
 function refresh(full = true, record = true) {
   render(); placeHead();
@@ -1545,7 +1636,7 @@ $('#new').onclick = newFile; $('#open').onclick = openFile; $('#save').onclick =
 addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
 // drop files anywhere: images, video and audio are imported (placed where you drop them on the viewer), a .rip (or old .wob) opens.
 // Images dragged straight from another web page arrive as a URL and are fetched.
-const isMedia = f => /^(image|audio|video)\//.test(f.type);
+const isMedia = f => /^(image|audio|video)\//.test(f.type) || !!R3D.modelFormat(f.name);
 const dragKinds = e => [...e.dataTransfer.types];
 addEventListener('dragover', e => { const t = dragKinds(e); if (t.includes('Files') || t.includes('text/uri-list')) { e.preventDefault(); document.body.classList.add('dropping'); } });
 addEventListener('dragleave', e => { if (!e.relatedTarget) document.body.classList.remove('dropping'); });
@@ -1773,6 +1864,9 @@ const COMMANDS = [
   ['Add', 'Arc', 'a', () => newLayer('arc')],
   ['Add', 'Wave', 'w', () => newLayer('wave')],
   ['Add', 'Text', 't', () => newLayer('text')],
+  ...R3D.SHAPES.map(([shape, label]) => ['Add', label === '3D text' ? label : `3D ${label.toLowerCase()}`, '', () => add3d(shape)]),
+  ['Add', 'Camera', '', () => addCamera()],
+  ['Add', 'Import a 3D model…', '', () => modelInput.click()],
   // Layer
   ['Layer', 'Select layer above', 'tab|alt+arrowup', () => selectNeighbour(-1)],
   ['Layer', 'Select layer below', 'shift+tab|alt+arrowdown', () => selectNeighbour(1)],
@@ -1840,7 +1934,7 @@ const COMMANDS = [
   ['View', 'Image mode', 'alt+2', () => setMode('image')],
   ['View', 'Design tab', 'alt+3', () => { tab = 'props'; renderProps(); }],
   ['View', 'Animate tab', 'alt+4', () => { tab = 'anim'; renderProps(); }],
-].map(([group, label, keys, run]) => ({ group, label, keys: keys.split('|'), run }));
+].map(([group, label, keys, run]) => ({ group, label, keys: keys ? keys.split('|') : [], run }));
 
 // normalise an event to the same form as the table: mod+alt+shift+key, lower case
 function comboOf(e) {
@@ -2040,6 +2134,7 @@ function syncVideos() {
 let exporting = false;
 async function seekVideos(t) {
   exporting = true;
+  await R3D.ready();
   await Promise.all(S.layers.filter(L => L.type === 'video' && visibleAt(L, t)).map(L => new Promise(res => {
     const v = videoEl(L); if (!v) return res(); v.pause();
     const ct = clipT(L, t); if (Math.abs(v.currentTime - ct) < .001 && v.readyState >= 2) return res();
@@ -2053,6 +2148,7 @@ async function addAssets(files) {
   for (const f of files) {
     if (f.type.startsWith('audio/')) { if (f.size > 40e6) status(`${f.name} is over 40 MB`); else await addSound(f.name, await readURL(f)); continue; }
     if (f.type.startsWith('video/')) { const id = await addVideoAsset(f); if (id) ids.push(id); continue; }
+    if (R3D.modelFormat(f.name)) { const id = await addModelAsset(f); if (id) ids.push(id); continue; }
     if (!f.type.startsWith('image/')) { status(`${f.name} is not an image, video or audio file`); continue; }
     if (f.size > 15e6) { status(`${f.name} is over 15 MB`); continue; }
     const src = await readURL(f), im = new Image(); im.src = src;
@@ -2064,7 +2160,40 @@ async function addAssets(files) {
   if (ids.length) { refresh(); status(ids.length === 1 ? `Imported ${S.assets[ids[0]].name}` : `Imported ${ids.length} files`); }
   return ids;
 }
+// a 3D model: the file, kept in the project like an image, read by the 3D view when a layer needs it
+async function addModelAsset(f) {
+  const format = R3D.modelFormat(f.name);
+  if (f.size > 50e6) { status(`${f.name} is over 50 MB`); return null; }
+  if (format === 'gltf') {
+    const text = await f.text();
+    if (/"uri"\s*:\s*"(?!data:)/.test(text)) { status(`${f.name} keeps its data in other files: export it as one .glb and import that`); return null; }
+  }
+  const id = 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  S.assets[id] = { kind: 'model', format, name: f.name, src: await readURL(new File([f], f.name, { type: R3D.MODEL_TYPES[format] })), w: 512, h: 512 };
+  R3D.model(id);
+  return id;
+}
+function addModelLayer(id, x = S.w / 2, y = S.h / 2) {
+  const a = S.assets[id], side = Math.round(Math.min(S.w, S.h) * .55);
+  const L = makeLayer('model', { asset: id, x: Math.round(x), y: Math.round(y), w: side, h: side, rotY: 25, rotX: -10 }, a.name.replace(/\.[^.]+$/, ''));
+  sel = L.id; freshLayer = L.id; refresh();
+}
+// a solid shape, turned a little so it reads as 3D from the start
+function add3d(shape = 'cube', x = S.w / 2, y = S.h / 2) {
+  const side = Math.round(Math.min(S.w, S.h) * .32), text = shape === 'text';
+  const L = makeLayer('shape3d', { shape, x: Math.round(x), y: Math.round(y), w: text ? side * 2.4 : side, h: side, d: text ? Math.round(side * .3) : side,
+    rotX: text ? -12 : -22, rotY: text ? 18 : 32, text: text ? 'Riptide' : 'Hello' }, R3D.SHAPES.find(s => s[0] === shape)[1] + ' ' + uid);
+  if (text) R3D.loadFont();
+  sel = L.id; freshLayer = L.id; refresh(); status(`Added ${L.name}: turn it with Rotate X and Y, or add a camera to move around it`);
+}
+function addCamera() {
+  if (S.layers.some(L => L.type === 'camera')) status('There is a camera already: the top one is the one that films');
+  const L = makeLayer('camera', {}, 'Camera'); L.p.x = S.w / 2; L.p.y = S.h / 2;
+  if (!S.layers.some(M => R3D.is3d(M))) status('Camera added. It films 3D layers: turn a layer to 3D, or add a 3D shape');
+  sel = L.id; freshLayer = L.id; refresh();
+}
 function addImageLayer(id, x = S.w / 2, y = S.h / 2) {
+  if (S.assets[id]?.kind === 'model') return addModelLayer(id, x, y);
   const a = S.assets[id], vid = a.kind === 'video', k = Math.min(1, (Math.min(S.w, S.h) * (vid ? 1 : .6)) / Math.max(a.w, a.h));
   if (vid && a.dur > S.dur + .05) { S.dur = Math.min(600, Math.ceil(a.dur * FPS) / FPS); status(`Timeline extended to ${fmtTime(S.dur)} to fit ${a.name}`); }
   const L = makeLayer(vid ? 'video' : 'image', { asset: id, x: Math.round(x), y: Math.round(y), w: Math.round(a.w * k), h: Math.round(a.h * k), radius: 0, strokeWidth: 0 },
@@ -2081,12 +2210,14 @@ function renderAssets() {
   const au = sids.map(k => { const s = S.sounds[k]; return `<div class="asset audio" data-sound="${k}" title="${esc(s.name)} · ${s.dur.toFixed(1)}s audio\nClick to add it at the playhead on a new track">${ICON.audio}<span>${esc(s.name)}</span>${usedS.has(k) ? '<i class="used"></i>' : ''}
       <button class="ib" data-rm-sound="${k}" title="Remove this audio and its clips">${ICON.trash}</button></div>`; }).join('');
   $('#assetGrid').innerHTML = (ids.length || sids.length) ? au + ids.map(id => { const a = S.assets[id], used = S.layers.some(l => l.p.asset === id);
-    return `<div class="asset ${a.kind === 'video' ? 'video' : ''}" data-asset="${id}" title="${esc(a.name)} · ${a.w}×${a.h}${a.dur ? ' · ' + fmtTime(a.dur) : ''}\nClick to add, or drag into the viewer">
-      ${a.kind === 'video' ? `<video src="${VURL[id] || ''}#t=0.1" muted preload="metadata" playsinline></video><em class="dur">${fmtTime(a.dur)}</em>` : `<img src="${a.src}" alt="" draggable="false">`}<span>${esc(a.name)}</span>${used ? '<i class="used"></i>' : ''}
+    return `<div class="asset ${a.kind === 'video' ? 'video' : ''}" data-asset="${id}" title="${esc(a.name)} · ${a.kind === 'model' ? '3D model' : `${a.w}×${a.h}`}${a.dur ? ' · ' + fmtTime(a.dur) : ''}\nClick to add, or drag into the viewer">
+      ${a.kind === 'video' ? `<video src="${VURL[id] || ''}#t=0.1" muted preload="metadata" playsinline></video><em class="dur">${fmtTime(a.dur)}</em>` : a.kind === 'model' ? `<span class="modelthumb">${ICON.model}</span>` : `<img src="${a.src}" alt="" draggable="false">`}<span>${esc(a.name)}</span>${used ? '<i class="used"></i>' : ''}
       <button class="ib" data-rm="${id}" title="Remove asset">${ICON.trash}</button></div>`; }).join('')
     : `<button class="assetdrop" id="assetEmpty">${ICON.upload}<b>Import media</b><span>Images, video or audio. You can also drop or paste files.</span></button>`;
 }
-const assetInput = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*,video/*,audio/*', multiple: true });
+const assetInput = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*,video/*,audio/*,.glb,.gltf,.obj', multiple: true });
+const modelInput = Object.assign(document.createElement('input'), { type: 'file', accept: '.glb,.gltf,.obj' });
+modelInput.onchange = async () => { const fs = [...modelInput.files]; modelInput.value = ''; const ids = await addAssets(fs); ids.forEach(id => addImageLayer(id)); };
 assetInput.onchange = async () => { const fs = [...assetInput.files]; assetInput.value = ''; await addAssets(fs); };
 $('#assetUpload').onclick = () => assetInput.click();
 $('#assetGrid').addEventListener('click', async e => {
@@ -2110,7 +2241,8 @@ $('#assetGrid').addEventListener('pointerdown', e => {
   const mv = ev => {
     if (!ghost) { if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 5) return;
       const A = S.assets[id];
-      ghost = document.createElement(A.kind === 'video' ? 'video' : 'img'); ghost.className = 'assetghost'; ghost.src = A.kind === 'video' ? VURL[id] + '#t=0.1' : A.src; ghost.muted = true; document.body.appendChild(ghost);
+      ghost = document.createElement(A.kind === 'video' ? 'video' : A.kind === 'model' ? 'div' : 'img'); ghost.className = 'assetghost';
+      if (A.kind === 'model') ghost.innerHTML = ICON.model; else ghost.src = A.kind === 'video' ? VURL[id] + '#t=0.1' : A.src; ghost.muted = true; document.body.appendChild(ghost);
       document.body.classList.add('dragging-anim'); }
     ghost.style.transform = `translate(${ev.clientX - 36}px,${ev.clientY - 36}px)`;
     ghost.classList.toggle('ok', document.elementFromPoint(ev.clientX, ev.clientY) === cv);
@@ -2429,7 +2561,8 @@ const LIVE = (() => {
     get_project: () => summary(),
     get_layer: a => layerInfo(findL(a), true),
     list_capabilities: () => ({
-      layer_types: Object.fromEntries(Object.entries(PROPS).filter(([t]) => t !== 'image' && t !== 'video').map(([t, ps]) => [t, ps])),
+      layer_types: Object.fromEntries(Object.entries(PROPS).filter(([t]) => !['image', 'video', 'model'].includes(t)).map(([t, ps]) => [t, ps])),
+      shapes_3d: R3D.SHAPES.map(s => s[0]), materials_3d: R3D.MATERIALS.map(m => m[0]),
       easings: EASE_ITEMS.map(i => i.value), presets: Object.fromEntries(Object.entries(PRESETS).map(([g, it]) => [g, Object.keys(it)])),
       blend_modes: BLENDS.map(b => b[0] === 'source-over' ? 'normal' : b[0]), looks: Object.keys(LOOKS),
     }),
@@ -2447,11 +2580,20 @@ const LIVE = (() => {
       return { ok: true, times: ts.map(round), png: sh.toDataURL('image/png') };
     },
     add_layer: a => {
-      if (!PROPS[a.type] || a.type === 'image' || a.type === 'video') throw new Error(`type must be one of ${Object.keys(PROPS).filter(t => t !== 'image' && t !== 'video').join(', ')}`);
+      if (!PROPS[a.type] || ['image', 'video', 'model'].includes(a.type)) throw new Error(`type must be one of ${Object.keys(PROPS).filter(t => !['image', 'video', 'model'].includes(t)).join(', ')}`);
       const props = a.props || {}; for (const p in props) if (!PROPS[a.type].includes(p)) throw new Error(`${a.type} layers have no "${p}"`);
       const L = makeLayer(a.type, props, a.name);
       if (a.in != null) L.in = +a.in; if (a.out != null) L.out = +a.out;
       sel = L.id; return done(`added ${L.type} "${L.name}"`, { id: L.id });
+    },
+    add_model: async a => {
+      const format = R3D.modelFormat(a.file || ''); if (!format) throw new Error('the file must be .glb, .gltf or .obj');
+      const props = a.props || {}; for (const p in props) if (!PROPS.model.includes(p)) throw new Error(`model layers have no "${p}"`);
+      const blob = await (await fetch(a.src)).blob(), ids = await addAssets([new File([blob], a.file, { type: R3D.MODEL_TYPES[format] })]);
+      if (!ids.length) throw new Error(`could not add ${a.file}`);
+      addModelLayer(ids[0]); const L = cur(); if (a.name) L.name = String(a.name);
+      for (const [p, v] of Object.entries(props)) L.p[p] = keyValue(p, v);
+      return done(`added the model "${L.name}"`, { id: L.id });
     },
     update_layer: a => {
       const L = findL(a), t = a.time != null ? +a.time : time, props = a.props || {};

@@ -414,9 +414,33 @@ cv.addEventListener('pointermove', e => {
 });
 // click selects; Shift/⌘-click adds or removes; dragging empty canvas draws a selection box (Shift/⌘ adds to it);
 // dragging any selected layer moves the whole selection; corner handles resize a single layer
+// Dragging with the middle button drags a copy: the layers, timeline bars and keyframes it grabs stay where they
+// were, and what moves is a duplicate. The copy is made on the first move, so a middle click alone changes nothing.
+// The layer that moves is the one picked up, renamed as the copy; the one left behind keeps its name.
+function leaveCopies(ls) {
+  for (const L of ls) {
+    const c = JSON.parse(JSON.stringify(L)); c.id = uid++;
+    S.layers.splice(S.layers.indexOf(L), 0, c);
+    L.name = L.name.endsWith(' copy') ? L.name : L.name + ' copy';
+  }
+  status(ls.length > 1 ? `Duplicated ${ls.length} layers` : `Duplicated ${ls[0].name.replace(/ copy$/, '')}`);
+}
+addEventListener('mousedown', e => { if (e.button === 1 && (e.target === cv || e.target.closest?.('#tlc'))) e.preventDefault(); }, true);
 cv.addEventListener('pointerdown', e => {
   UI.close();
   const [px, py] = toCanvas(e), L0 = cur(), group = selLayers(), k = S.w / cv.getBoundingClientRect().width;
+  if (e.button === 1) {                                      // middle button: drag a copy of what is under it
+    e.preventDefault();
+    const hit = hitLayer(px, py); if (!hit) return;
+    const inGroup = group.length > 1 && group.includes(hit);
+    if (inGroup) sel = hit.id; else setSelection([hit.id]);
+    const members = (inGroup ? group : [hit]).filter(m => !m.locked && !m.fix?.pos);
+    if (!members.length) { status(`${hit.name}: its position is locked`); return; }
+    drag = { mode: 'move', copy: true, L: hit, members: members.map(m => { const o = state(m, time); return { L: m, x: o.x, y: o.y }; }),
+      ub: unionBox(members), px0: px, py0: py, was: false, x0: e.clientX, y0: e.clientY };
+    cv.setPointerCapture(e.pointerId); refresh(true, false); return;
+  }
+  if (e.button > 1) return;
   const additive = e.shiftKey || e.metaKey || e.ctrlKey;
   if (!additive && group.length === 1 && L0) {
     const at = handleAt(L0, px, py, k);
@@ -447,6 +471,7 @@ cv.addEventListener('pointermove', e => {
   if (!drag) return; const [px, py] = toCanvas(e), L = drag.L;
   if (!drag.moved && drag.mode !== 'resize' && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 4) return;
   if (drag.mode === 'still') { if (!drag.moved) status(`${L.name}: its position is locked`); drag.moved = true; return; }
+  if (drag.copy && !drag.moved) { leaveCopies(drag.members.map(m => m.L)); renderLayers(); }
   drag.moved = true;
   if (drag.mode === 'marquee') {
     const x1 = Math.min(drag.px0, px), x2 = Math.max(drag.px0, px), y1 = Math.min(drag.py0, py), y2 = Math.max(drag.py0, py);
@@ -995,11 +1020,13 @@ function showSnap(t) {
   if (!s) { s = document.createElement('div'); s.className = 'snapline'; $('#tlc').appendChild(s); }
   s.style.left = nmW() + t2x(t) + 'px';
 }
-function dragOn(el, onMove, onUp) {
+// ONCOPY, when given, lets the middle button drag a copy: it runs once, on the first move, to leave one behind
+function dragOn(el, onMove, onUp, onCopy) {
   el.addEventListener('pointerdown', e => {
-    if (e.button) return; e.stopPropagation(); if (playing) togglePlay();
+    const copy = e.button === 1 && !!onCopy;
+    if (e.button && !copy) return; e.stopPropagation(); if (copy) e.preventDefault(); if (playing) togglePlay();
     const x0 = e.clientX; let moved = false;
-    const mv = ev => { if (!moved && Math.abs(ev.clientX - x0) < 3) return; moved = true; onMove(ev, ev.clientX - x0); };
+    const mv = ev => { if (!moved && Math.abs(ev.clientX - x0) < 3) return; if (!moved && copy) onCopy(); moved = true; onMove(ev, ev.clientX - x0); };
     const up = ev => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); showSnap(null); onUp(moved, ev); };
     addEventListener('pointermove', mv); addEventListener('pointerup', up);
   });
@@ -1015,7 +1042,9 @@ function diamond(ln, L, t, prop) {
   let grabbed = null, t0 = t;
   d.addEventListener('pointerdown', () => { sel = L.id; selKey = { id: L.id, t, prop }; grabbed = ks(); t0 = t; updateEaseButton(); renderSelKeys(); });
   dragOn(d, (ev, dx) => { const nt = snapT(x2t(t2x(t0) + dx), ev, null); grabbed.forEach(k => k.t = nt); selKey.t = nt; d.style.left = t2x(nt) + 'px'; time = nt; render(); placeHead(); },
-    moved => { Object.values(L.keys).forEach(a => a.sort((p, q) => p.t - q.t)); if (moved) refresh(); else seek(t); });
+    moved => { Object.values(L.keys).forEach(a => a.sort((p, q) => p.t - q.t)); if (moved) refresh(); else seek(t); },
+    // the keys grabbed move on; copies of them stay where they were
+    () => { for (const k of grabbed) for (const [p, a] of Object.entries(L.keys)) if (a.includes(k)) a.push({ ...k }); status('Duplicated the keyframe'); });
   ln.appendChild(d);
 }
 function renderSelKeys() { document.querySelectorAll('#tlc .dia.sel').forEach(d => d.classList.remove('sel')); }
@@ -1082,7 +1111,7 @@ function renderTracks() {
       d = Math.max(-st.i, Math.min(S.dur - st.o, d));
       L.in = st.i + d; L.out = st.o + d; st.keys.forEach(([k, t0]) => k.t = Math.max(0, Math.min(S.dur, t0 + d)));
       place(); ln.querySelectorAll('.dia').forEach(x => x.remove()); keyTimes(L).forEach(t => diamond(ln, L, t)); render();
-    }, m => { if (m) refresh(); else { sel = L.id; selKey = null; refresh(); } });
+    }, m => { if (m) refresh(); else { sel = L.id; selKey = null; refresh(); } }, () => { leaveCopies([L]); renderLayers(); });
     ln.appendChild(bar);
     keyTimes(L).forEach(t => diamond(ln, L, t));
     ln.addEventListener('pointerdown', e => { if (e.target === ln) { selKey = null; scrubFrom(e, ln); } });

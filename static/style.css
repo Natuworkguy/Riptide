@@ -577,3 +577,6 @@ body.recording .checker{box-shadow:0 0 0 2px #ff4d4f}
 @keyframes tutin{from{opacity:0;transform:translateY(8px)}}
 @media (max-width:700px){.modal.tut{grid-template-columns:1fr;grid-template-rows:auto 1fr}.tutnav{flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line-2)}
   .tuthead{display:none}.tutnav button{white-space:nowrap}.tutbody{padding:18px}}
+
+/* shift-drag on the timeline: a box that picks every keyframe in it */
+.marquee{position:absolute;z-index:6;border:1px solid #4c8dff;background:#4c8dff1f;border-radius:2px;pointer-events:none}

@@ -110,6 +110,8 @@ function fillOf(c, o, w, h) {
 
 let S = { w: 1080, h: 1080, bg: '#0b1026', dur: 5, layers: [] };
 let time = 0, playing = false, loop = true, sel = null, selKey = null, uid = 1, freshLayer = null;
+// keyframes picked together (shift-click, or shift-drag a box over the timeline): moved, eased and deleted as one
+let selKeys = [];
 
 function makeLayer(type, p = {}, name) {
   const fill = PALETTE[S.layers.length % PALETTE.length];
@@ -117,7 +119,7 @@ function makeLayer(type, p = {}, name) {
     p: { ...DEFAULTS, x: S.w / 2, y: S.h / 2, fill, ...(type === 'arc' ? { strokeWidth: 24, stroke: fill } : {}), ...p }, keys: {} };
   S.layers.push(L); return L;
 }
-function newLayer(type) { const L = makeLayer(type); sel = L.id; selKey = null; freshLayer = L.id; refresh(); }
+function newLayer(type) { const L = makeLayer(type); sel = L.id; selKey = null; selKeys = []; freshLayer = L.id; refresh(); }
 
 // ---------- keyframes ----------
 const hex = c => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16));
@@ -380,7 +382,7 @@ const selIds = () => new Set(selLayers().map(l => l.id));
 function setSelection(ids, primary) {
   ids = [...new Set(ids)].filter(id => S.layers.some(l => l.id === id));
   multi = new Set(ids.length > 1 ? ids : []);
-  sel = ids.length ? (ids.includes(primary) ? primary : ids.at(-1)) : null; selKey = null;
+  sel = ids.length ? (ids.includes(primary) ? primary : ids.at(-1)) : null; selKey = null; selKeys = [];
 }
 // the axis-aligned box around several layers: centre and half extents, like box()
 function unionBox(ls) {
@@ -680,7 +682,7 @@ function commit() {
 }
 function undoRedo(d) {
   const n = hi + d; if (n < 0 || n >= hist.length) return;
-  hi = n; S = JSON.parse(hist[hi]); if (!cur()) sel = null; selKey = null; setDirty(true);
+  hi = n; S = JSON.parse(hist[hi]); if (!cur()) sel = null; selKey = null; selKeys = []; setDirty(true);
   refresh(true, false); updateHistoryButtons();
 }
 function updateHistoryButtons() { $('#undo').disabled = hi <= 0; $('#redo').disabled = hi >= hist.length - 1; }
@@ -1057,21 +1059,72 @@ function dragOn(el, onMove, onUp, onCopy) {
 }
 const rowEl = (cls, name, id) => { const r = document.createElement('div'); r.className = 'trow ' + cls; if (id != null) r.dataset.id = id;
   r.innerHTML = `<div class="tnm">${name}</div><div class="tln" style="width:${laneW()}px"></div>`; return r; };
+const sameKey = (a, b) => a.id === b.id && near(a.t, b.t) && (a.prop ?? null) === (b.prop ?? null);
+const isPicked = me => selKeys.length ? selKeys.some(s => sameKey(s, me)) : !!selKey && sameKey(selKey, me);
+// the keys a picked entry stands for: one property's, or every property's at that moment on the layer row
+const keysOf = s => { const L = S.layers.find(l => l.id === s.id); if (!L) return [null, []];
+  return [L, s.prop ? (L.keys[s.prop] || []).filter(k => near(k.t, s.t)) : keysAt(L, s.t)]; };
 function diamond(ln, L, t, prop) {
-  const d = document.createElement('div'), isSel = selKey && selKey.id === L.id && near(selKey.t, t) && (selKey.prop ?? null) === (prop ?? null);
-  d.className = 'dia' + (isSel ? ' sel' : ''); d.style.left = t2x(t) + 'px'; d.dataset.t = t; d.dataset.prop = prop || '';
+  const d = document.createElement('div'), me = { id: L.id, t, prop };
+  d.className = 'dia' + (isPicked(me) ? ' sel' : ''); d.style.left = t2x(t) + 'px'; d.dataset.t = t; d.dataset.prop = prop || ''; d.dataset.id = L.id;
   const props = prop ? [prop] : Object.keys(L.keys).filter(p => L.keys[p].some(k => near(k.t, t)));
-  d.title = `${t.toFixed(2)}s  ${props.map(p => LABEL[p]).join(', ')}`;
+  d.title = `${t.toFixed(2)}s  ${props.map(p => LABEL[p]).join(', ')}` + '  ·  shift-click to pick several';
   const ks = () => prop ? L.keys[prop].filter(k => near(k.t, t)) : keysAt(L, t);
-  let grabbed = null, t0 = t;
-  d.addEventListener('pointerdown', () => { sel = L.id; selKey = { id: L.id, t, prop }; grabbed = ks(); t0 = t; updateEaseButton(); renderSelKeys(); });
-  dragOn(d, (ev, dx) => { const nt = snapT(x2t(t2x(t0) + dx), ev, null); grabbed.forEach(k => k.t = nt); selKey.t = nt; d.style.left = t2x(nt) + 'px'; time = nt; render(); placeHead(); },
-    moved => { Object.values(L.keys).forEach(a => a.sort((p, q) => p.t - q.t)); if (moved) refresh(); else seek(t); },
+  let grabbed = null, t0 = t, many = false;
+  d.addEventListener('pointerdown', e => {
+    if (e.shiftKey) {
+      // add it to the picked keys, or take it away
+      if (!selKeys.length && selKey) selKeys = [{ ...selKey }];
+      const i = selKeys.findIndex(s => sameKey(s, me));
+      if (i >= 0) selKeys.splice(i, 1); else selKeys.push({ ...me });
+      selKey = selKeys.at(-1) ? { ...selKeys.at(-1) } : null; sel = L.id; grabbed = []; markPicked(); updateEaseButton(); return;
+    }
+    if (!selKeys.some(s => sameKey(s, me))) selKeys = [];
+    sel = L.id; selKey = { ...me }; t0 = t; many = selKeys.length > 1;
+    // each key with where it started, so a drag moves them all by the same amount
+    grabbed = many ? selKeys.flatMap(s => { s._t0 = s.t; return keysOf(s)[1].map(k => ({ k, t0: k.t })); }) : ks().map(k => ({ k, t0: k.t }));
+    updateEaseButton(); markPicked();
+  });
+  dragOn(d, (ev, dx) => {
+    if (!grabbed?.length) return;
+    let dt = snapT(x2t(t2x(t0) + dx), ev, null) - t0;
+    const lo = Math.min(...grabbed.map(g => g.t0)), hi = Math.max(...grabbed.map(g => g.t0));
+    dt = Math.max(-lo, Math.min(S.dur - hi, dt));
+    grabbed.forEach(g => g.k.t = Math.round((g.t0 + dt) * 1000) / 1000);
+    selKey.t = t0 + dt; time = t0 + dt;
+    if (many) { selKeys.forEach(s => s.t = s._t0 + dt); renderTracks(); } else d.style.left = t2x(t0 + dt) + 'px';
+    render(); placeHead();
+  },
+    moved => { Object.values(L.keys).forEach(a => a.sort((p, q) => p.t - q.t)); S.layers.forEach(l => Object.values(l.keys).forEach(a => a.sort((p, q) => p.t - q.t)));
+      if (moved) refresh(); else if (grabbed?.length) seek(t); },
     // the keys grabbed move on; copies of them stay where they were
-    () => { for (const k of grabbed) for (const [p, a] of Object.entries(L.keys)) if (a.includes(k)) a.push({ ...k }); status('Duplicated the keyframe'); });
+    () => { for (const { k } of grabbed) for (const [p, a] of Object.entries(L.keys)) if (a.includes(k)) a.push({ ...k }); status('Duplicated the keyframe'); });
   ln.appendChild(d);
 }
-function renderSelKeys() { document.querySelectorAll('#tlc .dia.sel').forEach(d => d.classList.remove('sel')); }
+function markPicked() { document.querySelectorAll('#tlc .dia').forEach(d => d.classList.toggle('sel', isPicked({ id: +d.dataset.id, t: +d.dataset.t, prop: d.dataset.prop || undefined }))); }
+function renderSelKeys() { markPicked(); }
+// Shift-drag on the timeline draws a box: every keyframe in it is picked (added to those picked already).
+function boxSelect(e) {
+  const C = $('#tlc'), r0 = C.getBoundingClientRect(), x0 = e.clientX - r0.left, y0 = e.clientY - r0.top;
+  const box = document.createElement('div'); box.className = 'marquee'; C.appendChild(box);
+  if (!selKeys.length && selKey) selKeys = [{ ...selKey }];
+  const was = selKeys.slice();
+  const pick = ev => {
+    const r = C.getBoundingClientRect(), x1 = ev.clientX - r.left, y1 = ev.clientY - r.top;
+    const L = Math.min(x0, x1), T = Math.min(y0, y1), W = Math.abs(x1 - x0), H = Math.abs(y1 - y0);
+    Object.assign(box.style, { left: L + 'px', top: T + 'px', width: W + 'px', height: H + 'px' });
+    const area = { left: r.left + L, top: r.top + T, right: r.left + L + W, bottom: r.top + T + H };
+    selKeys = was.slice();
+    C.querySelectorAll('.dia').forEach(d => { const b = d.getBoundingClientRect();
+      if (b.right < area.left || b.left > area.right || b.bottom < area.top || b.top > area.bottom) return;
+      const me = { id: +d.dataset.id, t: +d.dataset.t, prop: d.dataset.prop || undefined };
+      if (!selKeys.some(s => sameKey(s, me))) selKeys.push(me); });
+    selKey = selKeys.at(-1) ? { ...selKeys.at(-1) } : null; markPicked(); updateEaseButton();
+  };
+  const up = () => { removeEventListener('pointermove', pick); removeEventListener('pointerup', up); box.remove();
+    if (selKeys.length) status(`${selKeys.length} keyframe${selKeys.length > 1 ? 's' : ''} picked: drag one to move them all, ⌫ deletes them`); };
+  addEventListener('pointermove', pick); addEventListener('pointerup', up);
+}
 function renderTracks() {
   const C = $('#tlc'), head = $('#head'), W = laneW();
   C.style.width = nmW() + W + 'px'; C.innerHTML = ''; C.appendChild(head);
@@ -1117,7 +1170,7 @@ function renderTracks() {
       `<button class="twirl ${keyed.length ? '' : 'none'} ${open ? 'open' : ''}" title="Show keyframed properties"></button><span class="lt" style="color:${iconColor(L)}">${ICON[L.type]}</span><span class="ln">${esc(L.name)}</span>`, L.id);
     row.querySelector('.tnm').addEventListener('click', e => {
       if (e.target.closest('.twirl')) { openRows.has(L.id) ? openRows.delete(L.id) : openRows.add(L.id); return renderTracks(); }
-      sel = L.id; selKey = null; refresh(); });
+      sel = L.id; selKey = null; selKeys = []; refresh(); });
     const ln = row.querySelector('.tln');
     // trim bar: drag the body to slide the layer in time (with its keyframes), the ends to trim in/out
     const bar = document.createElement('div'); bar.className = 'trim ' + L.type;
@@ -1135,10 +1188,10 @@ function renderTracks() {
       d = Math.max(-st.i, Math.min(S.dur - st.o, d));
       L.in = st.i + d; L.out = st.o + d; st.keys.forEach(([k, t0]) => k.t = Math.max(0, Math.min(S.dur, t0 + d)));
       place(); ln.querySelectorAll('.dia').forEach(x => x.remove()); keyTimes(L).forEach(t => diamond(ln, L, t)); render();
-    }, m => { if (m) refresh(); else { sel = L.id; selKey = null; refresh(); } }, () => { leaveCopies([L]); renderLayers(); });
+    }, m => { if (m) refresh(); else { sel = L.id; selKey = null; selKeys = []; refresh(); } }, () => { leaveCopies([L]); renderLayers(); });
     ln.appendChild(bar);
     keyTimes(L).forEach(t => diamond(ln, L, t));
-    ln.addEventListener('pointerdown', e => { if (e.target === ln) { selKey = null; scrubFrom(e, ln); } });
+    ln.addEventListener('pointerdown', e => { if (e.target === ln) { if (e.shiftKey) return boxSelect(e); selKey = null; selKeys = []; scrubFrom(e, ln); } });
     C.appendChild(row);
     if (open) for (const p of keyed) {
       const pr = rowEl('prop-row', `<span class="ln">${LABEL[p]}</span><span class="kfnav"><button data-nav="-1" title="Previous keyframe">${ICON.prev}</button><button data-nav="0" title="Add or remove keyframe">${ICON.key}</button><button data-nav="1" title="Next keyframe">${ICON.next}</button></span>`, L.id);
@@ -1148,7 +1201,7 @@ function renderTracks() {
         if (nt != null) { selKey = { id: L.id, t: nt, prop: p }; seek(nt); } });
       const pl = pr.querySelector('.tln');
       L.keys[p].forEach(k => diamond(pl, L, k.t, p));
-      pl.addEventListener('pointerdown', e => { if (e.target === pl) { selKey = null; scrubFrom(e, pl); } });
+      pl.addEventListener('pointerdown', e => { if (e.target === pl) { if (e.shiftKey) return boxSelect(e); selKey = null; selKeys = []; scrubFrom(e, pl); } });
       C.appendChild(pr);
     }
   }
@@ -1233,21 +1286,28 @@ $('#split').onclick = splitLayer;
 // keyframe easing
 const keySel = () => { const L = S.layers.find(l => l.id === selKey?.id); if (!L) return [L, []];
   return [L, selKey.prop ? (L.keys[selKey.prop] || []).filter(k => near(k.t, selKey.t)) : keysAt(L, selKey.t)]; };
+// every picked key, by layer: [[L, keys, entry]]; one entry when only one is picked
+const keyGroups = () => selKeys.length > 1 ? selKeys.map(s => [...keysOf(s), s]).filter(g => g[0] && g[1].length)
+  : (() => { const [L, ks] = keySel(); return L && ks.length ? [[L, ks, selKey]] : []; })();
 function updateEaseButton() {
-  const [L, ks] = keySel(), b = $('#ease'), has = L && ks.length;
+  const groups = keyGroups(), b = $('#ease'), has = groups.length > 0, all = groups.flatMap(g => g[1]);
   b.disabled = !has; $('#delKey').disabled = !has;
-  const e = has ? ks[0].ease || 'easeInOut' : null;
-  $('#keyinfo').textContent = has ? `${L.name} · ${selKey.prop ? LABEL[selKey.prop] : ks.length + ' keys'} · ${fmtTime(selKey.t)}` : '';
-  b.innerHTML = has ? `${curveSVG(e, 20, 13)}<span>${easeName(e)}</span>${ICON.chev}` : `<span>No keyframe selected</span>${ICON.chev}`;
+  const e = has ? all[0].ease || 'easeInOut' : null, mixed = has && all.some(k => (k.ease || 'easeInOut') !== e);
+  const [L, ks] = has ? groups[0] : [];
+  $('#keyinfo').textContent = !has ? '' : groups.length > 1 ? `${groups.length} keyframes on ${new Set(groups.map(g => g[0].id)).size} layer${new Set(groups.map(g => g[0].id)).size > 1 ? 's' : ''}`
+    : `${L.name} · ${selKey.prop ? LABEL[selKey.prop] : ks.length + ' keys'} · ${fmtTime(selKey.t)}`;
+  b.innerHTML = has ? `${curveSVG(e, 20, 13)}<span>${mixed ? 'Mixed' : easeName(e)}</span>${ICON.chev}` : `<span>No keyframe selected</span>${ICON.chev}`;
 }
-$('#ease').onclick = e => { const [L, ks] = keySel(); if (!ks.length) return;
-  UI.menu(e.currentTarget, EASE_ITEMS, ks[0].ease, v => { keySel()[1].forEach(k => k.ease = v); refresh(); status('Easing set to ' + easeName(v)); }, it => curveSVG(it.value)); };
+$('#ease').onclick = e => { const groups = keyGroups(); if (!groups.length) return;
+  UI.menu(e.currentTarget, EASE_ITEMS, groups[0][1][0].ease, v => { keyGroups().forEach(g => g[1].forEach(k => k.ease = v)); refresh(); status('Easing set to ' + easeName(v)); }, it => curveSVG(it.value)); };
 $('#delKey').onclick = () => {
-  const [L, ks] = keySel(); if (!ks.length) return;
-  for (const p in L.keys) { const before = L.keys[p].length; L.keys[p] = L.keys[p].filter(k => !ks.includes(k));
-    if (before && !L.keys[p].length) { L.p[p] = val(L, p, selKey.t); delete L.keys[p]; } }
-  selKey = null; refresh();
+  const groups = keyGroups(); if (!groups.length) return; let n = 0;
+  for (const [L, ks, at] of groups) for (const p in L.keys) { const before = L.keys[p].length; L.keys[p] = L.keys[p].filter(k => !ks.includes(k));
+    n += before - L.keys[p].length; if (before && !L.keys[p].length) { L.p[p] = val(L, p, at.t); delete L.keys[p]; } }
+  selKey = null; selKeys = []; refresh(); if (n > 1) status(`Deleted ${n} keyframes`);
 };
+// Escape lets go of picked keyframes
+addEventListener('keydown', e => { if (e.key === 'Escape' && (selKeys.length || selKey) && !document.querySelector('.pop')) { selKey = null; selKeys = []; markPicked(); updateEaseButton(); } });
 
 // ---------- playback ----------
 let last = 0;
@@ -1314,7 +1374,7 @@ function addClip(sid, at = time, trackId = null) {
   S.audioTracks ||= [];
   let T = trackId && S.audioTracks.find(x => x.id === trackId);
   if (!T) { T = { id: newId('t'), name: snd.name.replace(/\.[^.]+$/, ''), muted: false, volume: 1, clips: [] }; S.audioTracks.push(T); }
-  T.clips.push(c); selClip = c.id; sel = null; selKey = null;
+  T.clips.push(c); selClip = c.id; sel = null; selKey = null; selKeys = [];
   syncAudio(true); refresh();
   status(`Added ${snd.name} at ${fmtTime(start)}` + (len < snd.dur - .01 ? ' · trimmed to the timeline, drag its right edge to lengthen' : ''));
   return c;
@@ -1457,7 +1517,7 @@ function clipEl(T, c) {
   };
   layout();
   if (SND[c.sound]) peaksFor(SND[c.sound]).then(p => { pk = p; draw(); }).catch(() => {});
-  const pick = () => { selClip = c.id; sel = null; selKey = null; document.querySelectorAll('#tlc .clip.sel').forEach(x => x.classList.remove('sel')); el.classList.add('sel'); };
+  const pick = () => { selClip = c.id; sel = null; selKey = null; selKeys = []; document.querySelectorAll('#tlc .clip.sel').forEach(x => x.classList.remove('sel')); el.classList.add('sel'); };
   let st = null;
   const begin = () => { st = { start: c.start, in: c.in, len: c.len, fi: c.fadeIn, fo: c.fadeOut }; pick(); };
   for (const h of el.querySelectorAll('.th, .fdot')) h.addEventListener('pointerdown', begin);
@@ -1705,7 +1765,7 @@ function loadText(text, name, handle = null) {
   }
   adoptAudio(p); selClip = null;
   S = { dur: 5, bg: '#0b1026', ...p }; projectName = name.replace(/\.(rip|wob)$/i, ''); fileHandle = handle;
-  uid = Math.max(0, ...S.layers.map(l => l.id)) + 1; sel = null; selKey = null; time = 0;
+  uid = Math.max(0, ...S.layers.map(l => l.id)) + 1; sel = null; selKey = null; selKeys = []; time = 0;
   refresh(true, false); resetHistory(); setDirty(false); setMode(S.mode || 'video'); status('Opened ' + name);
 }
 async function confirmDiscard() { return !dirty || await UI.dialog({ title: 'Discard unsaved changes?', body: `${projectName}.rip has changes that are not saved.`, ok: 'Discard' }); }
@@ -1721,7 +1781,7 @@ async function openFile() {
 async function newFile() {
   if (!await confirmDiscard()) return;
   S = { w: 1080, h: 1080, bg: '#ffffff', dur: 5, layers: [], assets: {}, sounds: {}, audioTracks: [] }; selClip = null; projectName = 'Untitled'; fileHandle = null;
-  sel = null; selKey = null; time = 0; refresh(true, false); resetHistory(); setDirty(false);
+  sel = null; selKey = null; selKeys = []; time = 0; refresh(true, false); resetHistory(); setDirty(false);
 }
 $('#new').onclick = newFile; $('#open').onclick = openFile; $('#save').onclick = () => save(false);
 addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
@@ -1897,7 +1957,7 @@ const selectAll = () => { setSelection(S.layers.filter(L => visibleAt(L, time) &
   const n = selLayers().length; status(n ? `${n} layer${n > 1 ? 's' : ''} selected` : 'Nothing to select'); };
 function selectNeighbour(d) {
   if (!S.layers.length) return; const order = [...S.layers].reverse(), i = order.findIndex(l => l.id === sel);
-  sel = order[(i + d + order.length) % order.length].id; selKey = null; refresh(true, false);
+  sel = order[(i + d + order.length) % order.length].id; selKey = null; selKeys = []; refresh(true, false);
 }
 function jumpKey(d) {
   const L = cur(), ts = L ? keyTimes(L) : [...new Set(S.layers.flatMap(keyTimes))].sort((a, b) => a - b);
@@ -2089,7 +2149,7 @@ function palette() {
   const inp = w.querySelector('input'), list = w.querySelector('.plist'); let items = [], i = 0;
   const all = () => [
     ...COMMANDS.filter(c => c.run).map(c => ({ label: c.label, group: c.group, keys: c.keys[0], run: c.run })),
-    ...[...S.layers].reverse().map(L => ({ label: `Select ${L.name}`, group: 'Layer', run: () => { sel = L.id; selKey = null; refresh(); } })),
+    ...[...S.layers].reverse().map(L => ({ label: `Select ${L.name}`, group: 'Layer', run: () => { sel = L.id; selKey = null; selKeys = []; refresh(); } })),
     ...Object.entries(PRESETS).flatMap(([g, ps]) => Object.keys(ps).map(n => ({ label: `Animate: ${n}`, group: g, run: withL(L => applyPreset(L, n)) }))),
     ...SIZES.map(([g, l, sw, shh]) => ({ label: `Canvas: ${l}`, group: `${sw}×${shh}`, run: () => resizeComp(sw, shh) })),
   ];
@@ -2126,7 +2186,7 @@ $('#scrim').onclick = () => document.body.classList.remove('show-layers', 'show-
 document.querySelectorAll('[data-icon]').forEach(b => b.insertAdjacentHTML('afterbegin', ICON[b.dataset.icon]));
 
 // ---------- start-up project: a blank white canvas ----------
-function blank() { S = { w: 1080, h: 1080, bg: '#ffffff', dur: 5, layers: [], assets: {}, markers: [], sounds: {}, audioTracks: [] }; sel = null; selKey = null; time = 0; }
+function blank() { S = { w: 1080, h: 1080, bg: '#ffffff', dur: 5, layers: [], assets: {}, markers: [], sounds: {}, audioTracks: [] }; sel = null; selKey = null; selKeys = []; time = 0; }
 
 // ---------- drag animations onto layers ----------
 // Pick up an animation from the library and drop it on a layer in the viewer (applies at the playhead)
@@ -2811,7 +2871,7 @@ const LIVE = (() => {
     redo: () => { undoRedo(1); return { ok: true }; },
     get_project_json: () => JSON.parse(JSON.stringify({ ...S, assets: Object.fromEntries(Object.entries(S.assets || {}).map(([id, a]) => [id, { ...a, src: undefined }])) })),
     new_project: a => { S = { w: +a.width || 1080, h: +a.height || 1080, bg: a.background || '#ffffff', dur: +a.duration || 5, layers: [], assets: {}, markers: [] };
-      projectName = a.name || 'Untitled'; fileHandle = null; sel = null; selKey = null; time = 0; return done('started a new project'); },
+      projectName = a.name || 'Untitled'; fileHandle = null; sel = null; selKey = null; selKeys = []; time = 0; return done('started a new project'); },
   };
 
   let es = null, retry = 0;

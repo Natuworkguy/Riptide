@@ -44,7 +44,7 @@ function curveSVG(name, w = 34, h = 22) {
 }
 
 // ---------- model ----------
-const ANIM = ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'radius', 'fill', 'fill2', 'gradAngle', 'stroke', 'strokeWidth',
+const ANIM = ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'radius', 'fill', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth',
   'blur', 'shadow', 'size', 'reveal', 'sweep', 'spacing', 'bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert',
   'rotX', 'rotY', 'z', 'd', 'lightAngle', 'orbit', 'tilt', 'dolly', 'zoom'];
 const ADJUST = ['bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert'];
@@ -53,13 +53,13 @@ const COMMON = ['x', 'y', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'blur', 's
 const DEPTH = ['rotX', 'rotY', 'z'];
 const FLAT = [...COMMON, 'three', ...DEPTH];
 const PROPS = {
-  rect:    [...FLAT, 'w', 'h', 'radius', 'fill', 'grad', 'fill2', 'gradAngle', 'stroke', 'strokeWidth'],
-  ellipse: [...FLAT, 'w', 'h', 'fill', 'grad', 'fill2', 'gradAngle', 'stroke', 'strokeWidth'],
-  star:    [...FLAT, 'w', 'h', 'points', 'fill', 'grad', 'fill2', 'gradAngle', 'stroke', 'strokeWidth'],
-  polygon: [...FLAT, 'w', 'h', 'points', 'radius', 'fill', 'grad', 'fill2', 'gradAngle', 'stroke', 'strokeWidth'],
+  rect:    [...FLAT, 'w', 'h', 'radius', 'fill', 'grad', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth'],
+  ellipse: [...FLAT, 'w', 'h', 'fill', 'grad', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth'],
+  star:    [...FLAT, 'w', 'h', 'points', 'fill', 'grad', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth'],
+  polygon: [...FLAT, 'w', 'h', 'points', 'radius', 'fill', 'grad', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth'],
   arc:     [...FLAT, 'w', 'h', 'sweep', 'stroke', 'strokeWidth'],
   wave:    [...FLAT, 'w', 'h', 'reveal', 'stroke', 'strokeWidth'],
-  text:    [...FLAT, 'text', 'size', 'weight', 'spacing', 'reveal', 'fill', 'grad', 'fill2', 'gradAngle', 'stroke', 'strokeWidth'],
+  text:    [...FLAT, 'text', 'size', 'weight', 'spacing', 'reveal', 'fill', 'grad', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth'],
   image:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth'],
   video:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth'],
   shape3d: [...COMMON, ...DEPTH, 'w', 'h', 'd', 'shape', 'text', 'radius', 'fill', 'material', 'lightAngle'],
@@ -68,33 +68,42 @@ const PROPS = {
 };
 const GROUPS = [['Transform', ['x', 'y', 'w', 'h', 'd', 'rotation', 'scale', 'sx', 'sy']],
   ['3D', ['three', 'shape', 'rotX', 'rotY', 'z', 'material', 'lightAngle']], ['Camera', ['orbit', 'tilt', 'dolly', 'zoom']],
-  ['Style', ['fill', 'grad', 'fill2', 'gradAngle', 'stroke', 'strokeWidth', 'radius', 'points', 'sweep', 'opacity']],
+  ['Style', ['fill', 'grad', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', 'radius', 'points', 'sweep', 'opacity']],
   ['Text', ['text', 'size', 'weight', 'spacing', 'reveal']], ['Effects', ['blur', 'shadow']], ['Adjust', ADJUST]];
 const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', scale: 'Scale', sx: 'Stretch X', sy: 'Stretch Y',
-  opacity: 'Opacity', radius: 'Corners', fill: 'Fill', grad: 'Gradient', fill2: 'Fill 2', gradAngle: 'Angle°', stroke: 'Stroke', strokeWidth: 'Stroke W', blur: 'Blur', shadow: 'Shadow',
+  opacity: 'Opacity', radius: 'Corners', fill: 'Fill', grad: 'Gradient', fill2: 'Fill 2', gradAngle: 'Angle°', gradMorph: 'To radial %', stroke: 'Stroke', strokeWidth: 'Stroke W', blur: 'Blur', shadow: 'Shadow',
   size: 'Font size', text: 'Text', points: 'Points', weight: 'Weight', reveal: 'Reveal', sweep: 'Sweep°', spacing: 'Tracking',
   bright: 'Brightness', contrast: 'Contrast', sat: 'Saturation', hue: 'Hue°', gray: 'Grayscale', sepia: 'Sepia', invert: 'Invert',
   three: '3D layer', shape: 'Shape', rotX: 'Rotate X', rotY: 'Rotate Y', z: 'Depth', d: 'Thickness', material: 'Material', lightAngle: 'Light°',
   orbit: 'Orbit°', tilt: 'Tilt°', dolly: 'Dolly', zoom: 'Zoom' };
 // a camera's position is the point it looks at, and its rotation turns the whole view
 const CAMERA_LABEL = { x: 'Look at X', y: 'Look at Y', rotation: 'Roll°' };
-const STEP = { opacity: .05, scale: .05, sx: .05, sy: .05, reveal: .05, zoom: .05 };
+const STEP = { gradMorph: 1, opacity: .05, scale: .05, sx: .05, sy: .05, reveal: .05, zoom: .05 };
 const PALETTE = ['#7c5cff', '#ff5c8a', '#20c997', '#ffb020', '#3fa9ff', '#ff7a45'];
 const DEFAULTS = { rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0,
   size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, sweep: 270, points: 5, w: 300, h: 300,
-  bright: 100, contrast: 100, sat: 100, hue: 0, gray: 0, sepia: 0, invert: 0, grad: 'none', gradAngle: 90,
+  bright: 100, contrast: 100, sat: 100, hue: 0, gray: 0, sepia: 0, invert: 0, grad: 'none', gradAngle: 90, gradMorph: 0,
   three: false, rotX: 0, rotY: 0, z: 0, d: 300, shape: 'cube', material: 'glossy', lightAngle: -45, orbit: 0, tilt: 0, dolly: 0, zoom: 1 };
 // A fill can be a gradient from Fill to Fill 2: linear at an angle (0° runs left to right, 90° top to bottom), or
 // radial from the middle out. It spans the layer's own box, so it moves, scales and turns with the layer.
+// Morph (0 to 100, animatable) turns it into the other kind: a linear one rounds into a radial one, and back. In
+// between it is a radial gradient whose circles have grown huge and been drawn back along the angle, so its rings
+// straighten into a linear gradient's bands as the morph goes the other way; the colours never jump.
 const GRADS = [['none', 'None'], ['linear', 'Linear'], ['radial', 'Radial']];
 const COLORS = ['fill', 'fill2', 'stroke'];
 function fillOf(c, o, w, h) {
   if ((o.grad !== 'linear' && o.grad !== 'radial') || !isColor(o.fill2)) return o.fill;
+  const m = Math.max(0, Math.min(1, (+o.gradMorph || 0) / 100)), round = o.grad === 'radial' ? 1 - m : m;
+  const a = (o.gradAngle || 0) * PI / 180, dx = Math.cos(a), dy = Math.sin(a);
+  const half = Math.max(1, Math.abs(dx) * w / 2 + Math.abs(dy) * h / 2), R = Math.max(1, Math.hypot(w, h) / 2);
   let g;
-  if (o.grad === 'radial') g = c.createRadialGradient(0, 0, 0, 0, 0, Math.max(1, Math.hypot(w, h) / 2));
-  else { const a = (o.gradAngle || 0) * PI / 180, dx = Math.cos(a), dy = Math.sin(a);
-    const half = Math.max(1, Math.abs(dx) * w / 2 + Math.abs(dy) * h / 2);
-    g = c.createLinearGradient(-dx * half, -dy * half, dx * half, dy * half); }
+  if (round >= .995) g = c.createRadialGradient(0, 0, 0, 0, 0, R);
+  else if (round <= .015) g = c.createLinearGradient(-dx * half, -dy * half, dx * half, dy * half);
+  else {
+    const K = half * 3 * ((1 - round) / round) ** 2, back = (half + K) * (1 - round);
+    const r0 = Math.max(0, back - half), r1 = back + half * (1 - round) + R * round;
+    g = c.createRadialGradient(-dx * back, -dy * back, r0, -dx * back, -dy * back, Math.max(r0 + 1, r1));
+  }
   g.addColorStop(0, o.fill); g.addColorStop(1, o.fill2);
   return g;
 }
@@ -775,7 +784,8 @@ function renderProps() {
       if (g === 'Adjust') h += `<div class="row wide"><label>Look</label><button class="selectbtn" data-menu="look"><span>Apply a look…</span>${ICON.chev}</button></div>`;
       for (const k of ks) {
         if ((k === 'fill2' || k === 'gradAngle') && (o.grad || 'none') === 'none') continue;
-        if (k === 'gradAngle' && o.grad !== 'linear') continue;
+        if (k === 'gradAngle' && o.grad !== 'linear' && !(o.grad === 'radial' && o.gradMorph > 0)) continue;
+        if (k === 'gradMorph' && (o.grad || 'none') === 'none') continue;
         // turning and depth only once a flat layer is made 3D; letters only for 3D text, corners only for a cube
         if (DEPTH.includes(k) && !R3D.is3d(L)) continue;
         if (L.type === 'shape3d' && ((k === 'text' && o.shape !== 'text') || (k === 'radius' && o.shape !== 'cube'))) continue;
@@ -795,7 +805,7 @@ function renderProps() {
         // Keeping the proportions means nothing once either side is locked.
         const lock = k === 'w' && list.includes('h') && !L.fix?.w && !L.fix?.h ? `<button class="ib aspect ${aspectLocked(L) ? 'on' : ''}" data-cmd="aspect" title="${aspectLocked(L) ? 'Aspect ratio locked: click to unlock' : 'Lock aspect ratio'}">${aspectLocked(L) ? ICON.link : ICON.unlink}</button>` : '';
         const pin = fx ? `<button class="ib fix ${isFixed ? 'on' : ''}" data-fix="${fx}" title="${isFixed ? `${FIX_NAME[fx]} locked: click to unlock` : `Lock ${FIX_NAME[fx].toLowerCase()}`}">${isFixed ? ICON.lock : ICON.unlock}</button>` : '';
-        h += `<div class="row${wide}${isFixed ? ' fixed' : ''}" data-row="${k}">${kb}<label ${field.startsWith('<input') && !isFixed ? `data-scrub="${STEP[k] || 1}"` : ''}>${(L.type === 'camera' && CAMERA_LABEL[k]) || LABEL[k]}</label>${field}${pin}${lock}</div>`;
+        h += `<div class="row${wide}${isFixed ? ' fixed' : ''}" data-row="${k}">${kb}<label ${field.startsWith('<input') && !isFixed ? `data-scrub="${STEP[k] || 1}"` : ''}>${(L.type === 'camera' && CAMERA_LABEL[k]) || (k === 'gradMorph' && o.grad === 'radial' ? 'To linear %' : LABEL[k])}</label>${field}${pin}${lock}</div>`;
       }
       h += '</div></div>';
     }
@@ -912,6 +922,8 @@ const PRESETS = {
     'Bounce': (a, o) => { a('y', 0, o.y, 'expoOut'); a('y', .25, o.y - 90, 'bounce'); a('y', .9, o.y); },
     'Flash': (a, o) => { [1, 0, 1, 0, 1].forEach((v, i) => a('opacity', i * .12, v * o.opacity, 'step')); },
     'Glow': (a, o) => { a('shadow', 0, o.shadow, 'sineInOut'); a('shadow', .4, 60, 'sineInOut'); a('shadow', .8, o.shadow); },
+    'Gradient morph': (a, o) => { if (!['linear', 'radial'].includes(o.grad)) return 'Gradient fills only';
+      a('gradMorph', 0, 0, 'easeInOut'); a('gradMorph', 1.2, 100); },
     'Color shift': (a, o) => { const nxt = PALETTE[(PALETTE.indexOf(o.fill) + 1) % PALETTE.length]; a('fill', 0, o.fill, 'sineInOut'); a('fill', .5, nxt, 'sineInOut'); a('fill', 1, o.fill); },
     'Spin 360': (a, o) => { a('rotation', 0, o.rotation, 'expoInOut'); a('rotation', 1, o.rotation + 360); },
   },

@@ -44,7 +44,7 @@ function curveSVG(name, w = 34, h = 22) {
 }
 
 // ---------- model ----------
-const ANIM = ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'radius', 'fill', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth',
+const ANIM = ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'radius', 'fill', 'fill2', 'mid1', 'mid2', 'mid3', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth',
   'blur', 'shadow', 'size', 'reveal', 'sweep', 'spacing', 'bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert',
   'rotX', 'rotY', 'z', 'd', 'lightAngle', 'orbit', 'tilt', 'dolly', 'zoom'];
 const ADJUST = ['bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert'];
@@ -53,13 +53,13 @@ const COMMON = ['x', 'y', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'blur', 's
 const DEPTH = ['rotX', 'rotY', 'z'];
 const FLAT = [...COMMON, 'three', ...DEPTH];
 const PROPS = {
-  rect:    [...FLAT, 'w', 'h', 'radius', 'fill', 'grad', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth'],
-  ellipse: [...FLAT, 'w', 'h', 'fill', 'grad', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth'],
-  star:    [...FLAT, 'w', 'h', 'points', 'fill', 'grad', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth'],
-  polygon: [...FLAT, 'w', 'h', 'points', 'radius', 'fill', 'grad', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth'],
+  rect:    [...FLAT, 'w', 'h', 'radius', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth'],
+  ellipse: [...FLAT, 'w', 'h', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth'],
+  star:    [...FLAT, 'w', 'h', 'points', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth'],
+  polygon: [...FLAT, 'w', 'h', 'points', 'radius', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth'],
   arc:     [...FLAT, 'w', 'h', 'sweep', 'stroke', 'strokeWidth'],
   wave:    [...FLAT, 'w', 'h', 'reveal', 'stroke', 'strokeWidth'],
-  text:    [...FLAT, 'text', 'size', 'weight', 'spacing', 'reveal', 'fill', 'grad', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth'],
+  text:    [...FLAT, 'text', 'size', 'weight', 'spacing', 'reveal', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth'],
   image:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth'],
   video:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth'],
   shape3d: [...COMMON, ...DEPTH, 'w', 'h', 'd', 'shape', 'text', 'radius', 'fill', 'material', 'lightAngle'],
@@ -68,10 +68,10 @@ const PROPS = {
 };
 const GROUPS = [['Transform', ['x', 'y', 'w', 'h', 'd', 'rotation', 'scale', 'sx', 'sy']],
   ['3D', ['three', 'shape', 'rotX', 'rotY', 'z', 'material', 'lightAngle']], ['Camera', ['orbit', 'tilt', 'dolly', 'zoom']],
-  ['Style', ['fill', 'grad', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', 'radius', 'points', 'sweep', 'opacity']],
+  ['Style', ['fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', 'radius', 'points', 'sweep', 'opacity']],
   ['Text', ['text', 'size', 'weight', 'spacing', 'reveal']], ['Effects', ['blur', 'shadow']], ['Adjust', ADJUST]];
 const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', scale: 'Scale', sx: 'Stretch X', sy: 'Stretch Y',
-  opacity: 'Opacity', radius: 'Corners', fill: 'Fill', grad: 'Gradient', fill2: 'Fill 2', gradAngle: 'Angle°', gradMorph: 'To radial %', stroke: 'Stroke', strokeWidth: 'Stroke W', blur: 'Blur', shadow: 'Shadow',
+  opacity: 'Opacity', radius: 'Corners', fill: 'Fill', grad: 'Gradient', fill2: 'Fill 2', mid1: 'Via', mid2: 'Via 2', mid3: 'Via 3', gradAngle: 'Angle°', gradMorph: 'To radial %', stroke: 'Stroke', strokeWidth: 'Stroke W', blur: 'Blur', shadow: 'Shadow',
   size: 'Font size', text: 'Text', points: 'Points', weight: 'Weight', reveal: 'Reveal', sweep: 'Sweep°', spacing: 'Tracking',
   bright: 'Brightness', contrast: 'Contrast', sat: 'Saturation', hue: 'Hue°', gray: 'Grayscale', sepia: 'Sepia', invert: 'Invert',
   three: '3D layer', shape: 'Shape', rotX: 'Rotate X', rotY: 'Rotate Y', z: 'Depth', d: 'Thickness', material: 'Material', lightAngle: 'Light°',
@@ -82,7 +82,7 @@ const STEP = { gradMorph: 1, opacity: .05, scale: .05, sx: .05, sy: .05, reveal:
 const PALETTE = ['#7c5cff', '#ff5c8a', '#20c997', '#ffb020', '#3fa9ff', '#ff7a45'];
 const DEFAULTS = { rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0,
   size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, sweep: 270, points: 5, w: 300, h: 300,
-  bright: 100, contrast: 100, sat: 100, hue: 0, gray: 0, sepia: 0, invert: 0, grad: 'none', gradAngle: 90, gradMorph: 0,
+  bright: 100, contrast: 100, sat: 100, hue: 0, gray: 0, sepia: 0, invert: 0, grad: 'none', gradAngle: 90, gradMorph: 0, mid1: '', mid2: '', mid3: '',
   three: false, rotX: 0, rotY: 0, z: 0, d: 300, shape: 'cube', material: 'glossy', lightAngle: -45, orbit: 0, tilt: 0, dolly: 0, zoom: 1 };
 // A fill can be a gradient from Fill to Fill 2: linear at an angle (0° runs left to right, 90° top to bottom), or
 // radial from the middle out. It spans the layer's own box, so it moves, scales and turns with the layer.
@@ -90,7 +90,10 @@ const DEFAULTS = { rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, 
 // between it is a radial gradient whose circles have grown huge and been drawn back along the angle, so its rings
 // straighten into a linear gradient's bands as the morph goes the other way; the colours never jump.
 const GRADS = [['none', 'None'], ['linear', 'Linear'], ['radial', 'Radial']];
-const COLORS = ['fill', 'fill2', 'stroke'];
+// Between Fill and Fill 2 a gradient can run through up to three more colours (Via), evenly spaced:
+// #fff -> #abc -> #fff is a Fill, one Via and a Fill 2. An empty Via is not a stop.
+const MIDS = ['mid1', 'mid2', 'mid3'];
+const COLORS = ['fill', 'fill2', ...MIDS, 'stroke'];
 function fillOf(c, o, w, h) {
   if ((o.grad !== 'linear' && o.grad !== 'radial') || !isColor(o.fill2)) return o.fill;
   const m = Math.max(0, Math.min(1, (+o.gradMorph || 0) / 100)), round = o.grad === 'radial' ? 1 - m : m;
@@ -104,7 +107,8 @@ function fillOf(c, o, w, h) {
     const r0 = Math.max(0, back - half), r1 = back + half * (1 - round) + R * round;
     g = c.createRadialGradient(-dx * back, -dy * back, r0, -dx * back, -dy * back, Math.max(r0 + 1, r1));
   }
-  g.addColorStop(0, o.fill); g.addColorStop(1, o.fill2);
+  const stops = [o.fill, ...MIDS.map(k => o[k]).filter(isColor), o.fill2];
+  stops.forEach((c, i) => g.addColorStop(i / (stops.length - 1), c));
   return g;
 }
 
@@ -137,7 +141,7 @@ function lerp(a, b, k) {
   return +a + (+b - +a) * k;
 }
 // Every animatable property but the colours is a number: "0.5", as an agent may send it, is kept as 0.5.
-const keyValue = (prop, v) => ANIM.includes(prop) && !['fill', 'fill2', 'stroke'].includes(prop) && typeof v === 'string' && v.trim() !== '' && isFinite(+v) ? +v : v;
+const keyValue = (prop, v) => ANIM.includes(prop) && !COLORS.includes(prop) && typeof v === 'string' && v.trim() !== '' && isFinite(+v) ? +v : v;
 function val(L, prop, t) {
   const ks = L.keys[prop];
   if (!ks || !ks.length) return L.p[prop];
@@ -793,7 +797,10 @@ function renderProps() {
       h += `<div class="sec"><div class="sech">${g}</div><div class="grid">`;
       if (g === 'Adjust') h += `<div class="row wide"><label>Look</label><button class="selectbtn" data-menu="look"><span>Apply a look…</span>${ICON.chev}</button></div>`;
       for (const k of ks) {
-        if ((k === 'fill2' || k === 'gradAngle') && (o.grad || 'none') === 'none') continue;
+        if ((k === 'fill2' || k === 'gradAngle' || MIDS.includes(k)) && (o.grad || 'none') === 'none') continue;
+        if (MIDS.includes(k) && !isColor(o[k]) && !L.keys[k]?.length) continue;
+        if (k === 'fill2' && MIDS.some(m => !isColor(o[m]) && !L.keys[m]?.length))
+          h += `<div class="btnrow wide"><button class="tb small" data-cmd="addstop" title="Run the gradient through another colour on its way to Fill 2">+ Add a colour stop</button></div>`;
         if (k === 'gradAngle' && o.grad !== 'linear' && !(o.grad === 'radial' && o.gradMorph > 0)) continue;
         if (k === 'gradMorph' && (o.grad || 'none') === 'none') continue;
         // turning and depth only once a flat layer is made 3D; letters only for 3D text, corners only for a cube
@@ -812,11 +819,12 @@ function renderProps() {
         else if (k === 'shape') field = `<button class="selectbtn" data-menu="shape"><span>${R3D.SHAPES.find(x => x[0] === v)?.[1] || v}</span>${ICON.chev}</button>`;
         else if (k === 'material') field = `<button class="selectbtn" data-menu="material"><span>${R3D.MATERIALS.find(x => x[0] === v)?.[1] || v}</span>${ICON.chev}</button>`;
         else field = `<input data-p="${k}" value="${fmt(v)}" inputmode="decimal" spellcheck="false"${isFixed ? ' disabled' : ''}>`;
-        const wide = ['fill', 'fill2', 'grad', 'stroke', 'text', 'weight', 'three', 'shape', 'material'].includes(k) ? ' wide' : '';
+        const wide = ['fill', 'fill2', ...MIDS, 'grad', 'stroke', 'text', 'weight', 'three', 'shape', 'material'].includes(k) ? ' wide' : '';
         // Keeping the proportions means nothing once either side is locked.
         const lock = k === 'w' && list.includes('h') && !L.fix?.w && !L.fix?.h ? `<button class="ib aspect ${aspectLocked(L) ? 'on' : ''}" data-cmd="aspect" title="${aspectLocked(L) ? 'Aspect ratio locked: click to unlock' : 'Lock aspect ratio'}">${aspectLocked(L) ? ICON.link : ICON.unlink}</button>` : '';
+        const drop = MIDS.includes(k) ? `<button class="ib" data-cmd="delstop" data-k="${k}" title="Take this colour out of the gradient">${ICON.trash}</button>` : '';
         const pin = fx ? `<button class="ib fix ${isFixed ? 'on' : ''}" data-fix="${fx}" title="${isFixed ? `${FIX_NAME[fx]} locked: click to unlock` : `Lock ${FIX_NAME[fx].toLowerCase()}`}">${isFixed ? ICON.lock : ICON.unlock}</button>` : '';
-        h += `<div class="row${wide}${isFixed ? ' fixed' : ''}" data-row="${k}">${kb}<label ${field.startsWith('<input') && !isFixed ? `data-scrub="${STEP[k] || 1}"` : ''}>${(L.type === 'camera' && CAMERA_LABEL[k]) || (k === 'gradMorph' && o.grad === 'radial' ? 'To linear %' : LABEL[k])}</label>${field}${pin}${lock}</div>`;
+        h += `<div class="row${wide}${isFixed ? ' fixed' : ''}" data-row="${k}">${kb}<label ${field.startsWith('<input') && !isFixed ? `data-scrub="${STEP[k] || 1}"` : ''}>${(L.type === 'camera' && CAMERA_LABEL[k]) || (k === 'gradMorph' && o.grad === 'radial' ? 'To linear %' : LABEL[k])}</label>${field}${drop}${pin}${lock}</div>`;
       }
       h += '</div></div>';
     }
@@ -879,6 +887,16 @@ Pn.addEventListener('click', e => {
   else if (t.dataset.menu === 'material')
     UI.menu(t, R3D.MATERIALS.map(([value, label]) => ({ value, label })), L.p.material, v => { L.p.material = v; refresh(); });
   else if (t.dataset.fix) toggleFix(L, t.dataset.fix);
+  else if (t.dataset.cmd === 'addstop') {
+    // the new stop starts as the colour half way between its neighbours, so the gradient does not change until it is set
+    const o = state(L, time), free = MIDS.find(m => !isColor(o[m]) && !L.keys[m]?.length); if (!free) return;
+    const used = MIDS.filter(m => isColor(o[m])), before = used.length ? o[used.at(-1)] : o.fill;
+    L.p[free] = lerp(before, o.fill2, .5); refresh(); status('Added a colour stop: pick its colour'); }
+  else if (t.dataset.cmd === 'delstop') { const k = t.dataset.k; delete L.keys[k]; L.p[k] = '';
+    // the stops after it close up, so they stay Via, Via 2 in order
+    const left = MIDS.map(m => [L.p[m], L.keys[m]]).filter(([v, ks]) => isColor(v) || ks?.length);
+    MIDS.forEach((m, i) => { L.p[m] = left[i]?.[0] ?? ''; if (left[i]?.[1]?.length) L.keys[m] = left[i][1]; else delete L.keys[m]; });
+    refresh(); status('Took the colour out of the gradient'); }
   else if (t.dataset.cmd === 'aspect') { L.lockAspect = !aspectLocked(L); refresh(); status(L.lockAspect ? 'Aspect ratio locked' : 'Aspect ratio unlocked'); }
   else if (t.dataset.menu === 'look')
     UI.menu(t, Object.keys(LOOKS).map(n => ({ value: n, label: n })), null, n => { for (const [k, v] of Object.entries({ ...LOOK0, ...LOOKS[n] })) setProp(L, k, v); refresh(); status(`Look: ${n}`); });

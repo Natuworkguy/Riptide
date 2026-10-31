@@ -31,11 +31,14 @@ const UI = (() => {
     return [f(5) * 255, f(3) * 255, f(1) * 255]; }
   const SWATCHES = ['#ffffff', '#f4f1ea', '#111111', '#0b1026', '#7c5cff', '#ff5c8a', '#ff7a45', '#ffcc33', '#20c997', '#3fa9ff', '#2b2d42', '#9aa0b4'];
   let recent = [];
-  function color(anchor, value, onInput) {
+  // OPTS.vars: the project's colour constants, [[name, hex]]; OPTS.linked, the one this colour is linked to now. Picking
+  // one sends var(--name) to onInput, so the colour follows the constant; any other colour unlinks it. OPTS.onNew(hex)
+  // makes a constant of the colour now picked and returns its name.
+  function color(anchor, value, onInput, opts = {}) {
     let [h, s, v] = rgb2hsv(hex2rgb(/^#[0-9a-f]{6}$/i.test(value) ? value : '#000000'));
     const n = el('div', 'cp', `<div class="sv"><div class="svk"></div></div><div class="hue"><div class="hk"></div></div>
       <div class="cprow"><div class="cpprev"></div><input class="cphex" spellcheck="false" maxlength="7"></div>
-      <div class="sws"></div>`);
+      <div class="sws"></div>${opts.vars ? '<div class="cpvars"><div class="cpvh">Constants</div><div class="cpvl"></div></div>' : ''}`);
     const sv = n.querySelector('.sv'), hue = n.querySelector('.hue'), hexIn = n.querySelector('.cphex');
     const paint = (emit = true) => {
       const c = rgb2hex(hsv2rgb(h, s, v));
@@ -59,6 +62,24 @@ const UI = (() => {
       const b = el('button', 'sw'); b.style.background = c; b.title = c;
       b.onclick = () => { [h, s, v] = rgb2hsv(hex2rgb(c)); paint(); }; sws.appendChild(b);
     });
+    if (opts.vars) {
+      const list = n.querySelector('.cpvl');
+      const mark = name => list.querySelectorAll('.cpv').forEach(b => b.classList.toggle('on', b.dataset.name === name));
+      opts.vars.forEach(([name, c]) => {
+        const b = el('button', 'cpv', `<i style="background:${c}"></i><span>--${name}</span>`); b.dataset.name = name; b.title = `${c} · link to --${name}`;
+        b.onclick = () => { [h, s, v] = rgb2hsv(hex2rgb(c)); paint(false); onInput(`var(--${name})`); mark(name); };
+        list.appendChild(b);
+      });
+      if (opts.onNew) {
+        const add = el('button', 'cpv add', '<span>+ Make a constant</span>');
+        add.onclick = async () => { const name = await opts.onNew(rgb2hex(hsv2rgb(h, s, v))); if (name) close(); };
+        list.appendChild(add);
+      }
+      mark(opts.linked);
+      const unlink = () => mark(null);
+      sv.addEventListener('pointerdown', unlink); hue.addEventListener('pointerdown', unlink); hexIn.addEventListener('input', unlink);
+      sws.addEventListener('click', unlink);
+    }
     paint(false);
     popover(anchor, n, () => { const c = rgb2hex(hsv2rgb(h, s, v)); recent = [c, ...recent.filter(x => x !== c)].slice(0, 6); });
   }

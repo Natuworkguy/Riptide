@@ -123,7 +123,14 @@ function newLayer(type) { const L = makeLayer(type); sel = L.id; selKey = null; 
 const hex = c => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16));
 const toHex = a => '#' + a.map(v => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
 const isColor = v => typeof v === 'string' && v[0] === '#';
+// Colour constants, as CSS's: S.vars holds {accent: '#ff5c8a'}, and any colour (a fill, a stroke, a keyframe, the
+// background) can be var(--accent) instead of a hex, to follow it. Changing the constant changes every colour linked.
+const VAR_RE = /^var\(--([\w-]+)\)$/;
+const isVar = v => typeof v === 'string' && VAR_RE.test(v);
+const varName = v => isVar(v) ? v.match(VAR_RE)[1] : null;
+const resolveColor = v => isVar(v) ? (S.vars?.[varName(v)] || '#808080') : v;
 function lerp(a, b, k) {
+  a = resolveColor(a); b = resolveColor(b);
   if (isColor(a) && isColor(b)) { const A = hex(a), B = hex(b); return toHex(A.map((v, i) => v + (B[i] - v) * k)); }
   return +a + (+b - +a) * k;
 }
@@ -189,7 +196,8 @@ const keysAt = (L, t) => Object.values(L.keys).flat().filter(k => near(k.t, t));
 
 // ---------- rendering ----------
 const FONT = '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-function state(L, t) { const o = { ...L.p }; for (const k of ANIM) if (L.keys[k]?.length) o[k] = val(L, k, t); return o; }
+function state(L, t) { const o = { ...L.p }; for (const k of ANIM) if (L.keys[k]?.length) o[k] = val(L, k, t);
+  for (const k of COLORS) if (isVar(o[k])) o[k] = resolveColor(o[k]); return o; }
 function shapePath(c, L, o) {
   const w = o.w, h = o.h;
   c.beginPath();
@@ -280,7 +288,7 @@ function bounds(L, t) {
 }
 function renderScene(c, t, scale = 1) {
   c.setTransform(scale, 0, 0, scale, 0, 0);
-  c.fillStyle = S.bg; c.fillRect(0, 0, S.w, S.h);
+  c.fillStyle = resolveColor(S.bg); c.fillRect(0, 0, S.w, S.h);
   for (const L of S.layers) if (visibleAt(L, t)) { c.save(); c.globalCompositeOperation = L.blend || 'source-over'; drawLayer(c, L, t); c.restore(); }
   c.setTransform(1, 0, 0, 1, 0, 0);
 }
@@ -681,7 +689,7 @@ function resetHistory() { hist = [JSON.stringify(S)]; hi = 0; updateHistoryButto
 // ---------- layers panel ----------
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 // layer icons take the layer's colour, unless it is too dark to see on the panel
-function iconColor(L) { const c = L.type === 'arc' || L.type === 'wave' ? L.p.stroke : L.p.fill, [r, g, b] = hex(c);
+function iconColor(L) { const c = resolveColor(L.type === 'arc' || L.type === 'wave' ? L.p.stroke : L.p.fill), [r, g, b] = hex(c);
   return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 < .25 ? '#8b8b98' : c; }
 function renderLayers() {
   const list = $('#layerList');
@@ -794,7 +802,8 @@ function renderProps() {
         const kb = anim ? `<button class="kf ${keyed ? 'has' : ''} ${here ? 'here' : ''}" data-key="${k}" title="${here ? 'Remove keyframe' : 'Add keyframe at playhead'}"${isFixed ? ' disabled' : ''}>${here ? ICON.key : ICON.keyOff}</button>` : '<span class="kf"></span>';
         let field;
         if (k === 'grad') field = `<button class="selectbtn" data-menu="grad"><span>${(GRADS.find(g => g[0] === (v || 'none')) || GRADS[0])[1]}</span>${ICON.chev}</button>`;
-        else if (COLORS.includes(k)) field = `<button class="swatch" data-color="${k}"><i style="background:${v}"></i><span>${v.toUpperCase()}</span></button>`;
+        else if (COLORS.includes(k)) { const linked = !L.keys[k]?.length && varName(L.p[k]);
+          field = `<button class="swatch${linked ? ' linked' : ''}" data-color="${k}"><i style="background:${v}"></i><span>${linked ? '--' + linked : v.toUpperCase()}</span></button>`; }
         else if (k === 'text') field = `<textarea data-p="text" rows="2" spellcheck="false">${esc(v)}</textarea>`;
         else if (k === 'weight') field = `<button class="selectbtn" data-menu="weight"><span>${WEIGHTS.find(w => w[0] == v)?.[1] || v}</span>${ICON.chev}</button>`;
         else if (k === 'three') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="three" title="${v ? 'Make it flat again' : 'Turn it in 3D, push it back, and let a camera move around it'}"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
@@ -816,7 +825,8 @@ let tab = 'props';
 function renderPropsValues() {
   const L = cur(); if (!L || tab !== 'props') return; const o = state(L, time);
   document.querySelectorAll('#props [data-p]').forEach(i => { if (i !== document.activeElement && i.dataset.p !== 'text') i.value = fmt(o[i.dataset.p]); });
-  document.querySelectorAll('#props [data-color]').forEach(b => { const v = o[b.dataset.color]; b.querySelector('i').style.background = v; b.querySelector('span').textContent = v.toUpperCase(); });
+  document.querySelectorAll('#props [data-color]').forEach(b => { const k = b.dataset.color, v = o[k], linked = !L.keys[k]?.length && varName(L.p[k]);
+    b.classList.toggle('linked', !!linked); b.querySelector('i').style.background = v; b.querySelector('span').textContent = linked ? '--' + linked : v.toUpperCase(); });
   document.querySelectorAll('#props [data-key]').forEach(b => { const k = b.dataset.key, here = L.keys[k]?.some(x => near(x.t, time));
     b.classList.toggle('here', !!here); b.innerHTML = here ? ICON.key : ICON.keyOff; });
 }
@@ -871,7 +881,9 @@ Pn.addEventListener('click', e => {
   else if (t.dataset.menu === 'look')
     UI.menu(t, Object.keys(LOOKS).map(n => ({ value: n, label: n })), null, n => { for (const [k, v] of Object.entries({ ...LOOK0, ...LOOKS[n] })) setProp(L, k, v); refresh(); status(`Look: ${n}`); });
   else if (t.dataset.color) { const k = t.dataset.color;
-    UI.color(t, state(L, time)[k], c => { setProp(L, k, c); render(); renderPropsValues(); renderLayers(); }); }
+    UI.color(t, state(L, time)[k], c => { setProp(L, k, c); render(); renderPropsValues(); renderLayers(); },
+      { vars: Object.entries(S.vars || {}), linked: varName(L.keys[k]?.length ? null : L.p[k]),
+        onNew: async hex => { const name = await newColorVar(hex); if (name) { setProp(L, k, `var(--${name})`); refresh(); } return name; } }); }
   else if (t.dataset.menu === 'blend')
     UI.menu(t, BLENDS.map(([v, l]) => ({ value: v, label: l })), L.blend || 'source-over', v => { L.blend = v === 'source-over' ? undefined : v; refresh(); });
   else if (t.dataset.menu === 'grad')
@@ -1576,7 +1588,10 @@ function resizeComp(w, h, mode = resizeMode) {
 }
 function renderBoard() {
   $('#aw').value = S.w; $('#ah').value = S.h; $('#adur').value = +S.dur.toFixed(2); $('#outtc').textContent = fmtTime(S.dur);
-  $('#abg').innerHTML = `<i style="background:${S.bg}"></i><span>${S.bg.toUpperCase()}</span>`;
+  const bgVar = varName(S.bg);
+  $('#abg').classList.toggle('linked', !!bgVar);
+  $('#abg').innerHTML = `<i style="background:${resolveColor(S.bg)}"></i><span>${bgVar ? '--' + bgVar : S.bg.toUpperCase()}</span>`;
+  renderVars();
   const m = SIZES.find(s => s[2] == S.w && s[3] == S.h);
   $('#asize').innerHTML = `<span>${m ? m[1] : `Custom ${ratio(S.w, S.h)}`}</span>${ICON.chev}`;
   $('#aresize').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === resizeMode));
@@ -1586,7 +1601,40 @@ const board = (k, v) => { S[k] = v; time = Math.min(time, S.dur); refresh(); };
 $('#aw').onchange = e => resizeComp(+e.target.value || S.w, S.h, 'keep');
 $('#ah').onchange = e => resizeComp(S.w, +e.target.value || S.h, 'keep');
 $('#adur').onchange = e => setDuration(+e.target.value || S.dur);
-$('#abg').onclick = e => UI.color(e.currentTarget, S.bg, c => { S.bg = c; render(); renderBoard(); });
+$('#abg').onclick = e => UI.color(e.currentTarget, resolveColor(S.bg), c => { S.bg = c; render(); renderBoard(); },
+  { vars: Object.entries(S.vars || {}), linked: varName(S.bg), onNew: async hex => { const name = await newColorVar(hex); if (name) { S.bg = `var(--${name})`; refresh(); } return name; } });
+
+// ---------- colour constants ----------
+const varOk = n => /^[a-z][\w-]{0,23}$/i.test(n);
+async function newColorVar(hex, suggested = '') {
+  const taken = new Set(Object.keys(S.vars || {}));
+  let guess = suggested || (taken.has('accent') ? '' : 'accent');
+  for (let i = 2; !guess; i++) if (!taken.has('color-' + i)) guess = 'color-' + i;
+  const raw = await UI.prompt('Name the colour (used as --name)', guess, 'Make constant'); if (!raw) return null;
+  const name = raw.trim().replace(/^--/, '').replace(/\s+/g, '-').toLowerCase();
+  if (!varOk(name)) { status('A name is letters, digits and dashes, starting with a letter'); return null; }
+  if (taken.has(name)) { status(`--${name} already exists`); return null; }
+  (S.vars ||= {})[name] = hex; status(`Made --${name}`); return name;
+}
+// every colour linked to --NAME, set to HEX: for deleting a constant without changing how anything looks
+function unlinkVar(name, hex) {
+  const ref = `var(--${name})`, swap = v => v === ref ? hex : v;
+  for (const L of S.layers) { for (const k of COLORS) L.p[k] = swap(L.p[k]); for (const k of COLORS) (L.keys[k] || []).forEach(kf => kf.v = swap(kf.v)); }
+  S.bg = swap(S.bg);
+}
+function renderVars() {
+  const box = $('#avars'); if (!box) return;
+  const vars = Object.entries(S.vars || {});
+  box.innerHTML = vars.map(([n, c]) => `<div class="varrow"><button class="swatch" data-var="${n}" title="Change --${n}: every colour linked to it follows"><i style="background:${c}"></i><span>--${n}</span></button><button class="ib" data-delvar="${n}" title="Delete --${n} (colours linked to it keep its colour)">${ICON.trash}</button></div>`).join('')
+    + `<button class="tb small" data-addvar>+ Add colour</button>`;
+}
+$('#avars')?.addEventListener('click', async e => {
+  const t = e.target.closest('button'); if (!t) return;
+  if (t.dataset.addvar !== undefined) { if (await newColorVar(PALETTE[Object.keys(S.vars || {}).length % PALETTE.length])) refresh(); }
+  else if (t.dataset.delvar) { const n = t.dataset.delvar; unlinkVar(n, S.vars[n]); delete S.vars[n]; refresh(); status(`Deleted --${n}`); }
+  else if (t.dataset.var) { const n = t.dataset.var;
+    UI.color(t, S.vars[n], c => { if (isColor(c)) { S.vars[n] = c; render(); renderVars(); renderPropsValues(); renderLayers(); } }); }
+});
 $('#asize').onclick = e => UI.menu(e.currentTarget,
   [...SIZES.map(([g, l, w, h]) => ({ group: g, value: l, label: l, hint: `${w}×${h}` })),
    { group: 'Custom', value: '__custom', label: 'Custom size…', hint: 'W × H' }],
@@ -1650,7 +1698,7 @@ async function save(as = false) {
 function loadText(text, name, handle = null) {
   const d = JSON.parse(text), p = d.format === 'riptide' || d.format === 'wobble' ? d.project : d;
   if (!p || !Array.isArray(p.layers) || !(p.w > 0) || !(p.h > 0)) throw new Error('This file is not a Riptide project.');
-  p.layers.forEach(L => { L.p = { ...DEFAULTS, ...L.p }; L.keys ||= {}; }); p.assets ||= {}; p.markers ||= [];
+  p.layers.forEach(L => { L.p = { ...DEFAULTS, ...L.p }; L.keys ||= {}; }); p.assets ||= {}; p.markers ||= []; p.vars ||= {};
   for (const [id, a] of Object.entries(p.assets)) if (a.kind === 'video' && a.src) {
     const src = a.src; delete a.src;
     fetch(src).then(r => r.blob()).then(b => { VBLOB[id] = b; VURL[id] = URL.createObjectURL(b); assetSig = ''; refresh(true, false); });

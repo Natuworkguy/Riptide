@@ -45,10 +45,10 @@ function curveSVG(name, w = 34, h = 22) {
 
 // ---------- model ----------
 const ANIM = ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'radius', 'fill', 'fill2', 'mid1', 'mid2', 'mid3', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth',
-  'blur', 'shadow', 'size', 'reveal', 'sweep', 'spacing', 'bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert',
+  'blur', 'shadow', 'rgb', 'size', 'reveal', 'sweep', 'spacing', 'bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert',
   'rotX', 'rotY', 'z', 'd', 'lightAngle', 'orbit', 'tilt', 'dolly', 'zoom'];
 const ADJUST = ['bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert'];
-const COMMON = ['x', 'y', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'blur', 'shadow', ...ADJUST];
+const COMMON = ['x', 'y', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'blur', 'shadow', 'rgb', ...ADJUST];
 // turned on X and Y and pushed back in depth: any layer with 3D on, and the 3D layers themselves
 const DEPTH = ['rotX', 'rotY', 'z'];
 const FLAT = [...COMMON, 'three', ...DEPTH];
@@ -69,9 +69,9 @@ const PROPS = {
 const GROUPS = [['Transform', ['x', 'y', 'w', 'h', 'd', 'rotation', 'scale', 'sx', 'sy']],
   ['3D', ['three', 'shape', 'rotX', 'rotY', 'z', 'material', 'lightAngle']], ['Camera', ['orbit', 'tilt', 'dolly', 'zoom']],
   ['Style', ['fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', 'radius', 'points', 'sweep', 'opacity']],
-  ['Text', ['text', 'size', 'weight', 'spacing', 'reveal']], ['Effects', ['blur', 'shadow']], ['Adjust', ADJUST]];
+  ['Text', ['text', 'size', 'weight', 'spacing', 'reveal']], ['Effects', ['blur', 'shadow', 'rgb']], ['Adjust', ADJUST]];
 const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', scale: 'Scale', sx: 'Stretch X', sy: 'Stretch Y',
-  opacity: 'Opacity', radius: 'Corners', fill: 'Fill', grad: 'Gradient', fill2: 'Fill 2', mid1: 'Via', mid2: 'Via 2', mid3: 'Via 3', gradAngle: 'Angle°', gradMorph: 'To radial %', stroke: 'Stroke', strokeWidth: 'Stroke W', blur: 'Blur', shadow: 'Shadow',
+  opacity: 'Opacity', radius: 'Corners', fill: 'Fill', grad: 'Gradient', fill2: 'Fill 2', mid1: 'Via', mid2: 'Via 2', mid3: 'Via 3', gradAngle: 'Angle°', gradMorph: 'To radial %', stroke: 'Stroke', strokeWidth: 'Stroke W', blur: 'Blur', shadow: 'Shadow', rgb: 'RGB split',
   size: 'Font size', text: 'Text', points: 'Points', weight: 'Weight', reveal: 'Reveal', sweep: 'Sweep°', spacing: 'Tracking',
   bright: 'Brightness', contrast: 'Contrast', sat: 'Saturation', hue: 'Hue°', gray: 'Grayscale', sepia: 'Sepia', invert: 'Invert',
   three: '3D layer', shape: 'Shape', rotX: 'Rotate X', rotY: 'Rotate Y', z: 'Depth', d: 'Thickness', material: 'Material', lightAngle: 'Light°',
@@ -80,7 +80,7 @@ const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', sca
 const CAMERA_LABEL = { x: 'Look at X', y: 'Look at Y', rotation: 'Roll°' };
 const STEP = { gradMorph: 1, opacity: .05, scale: .05, sx: .05, sy: .05, reveal: .05, zoom: .05 };
 const PALETTE = ['#7c5cff', '#ff5c8a', '#20c997', '#ffb020', '#3fa9ff', '#ff7a45'];
-const DEFAULTS = { rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0,
+const DEFAULTS = { rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0, rgb: 0,
   size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, sweep: 270, points: 5, w: 300, h: 300,
   bright: 100, contrast: 100, sat: 100, hue: 0, gray: 0, sepia: 0, invert: 0, grad: 'none', gradAngle: 90, gradMorph: 0, mid1: '', mid2: '', mid3: '',
   three: false, rotX: 0, rotY: 0, z: 0, d: 300, shape: 'cube', material: 'glossy', lightAngle: -45, orbit: 0, tilt: 0, dolly: 0, zoom: 1 };
@@ -240,6 +240,8 @@ function drawLayer(c, L, t) {
   if (!deep) { c.translate(o.x, o.y); c.rotate(o.rotation * PI / 180); c.scale(o.scale * o.sx, o.scale * o.sy); }
   { const f = [];
     if (o.blur > 0.05) f.push(`blur(${o.blur}px)`);
+    // RGB split: a red ghost of the layer to one side and a cyan one to the other, as a glitch or a hit leaves
+    if (o.rgb > 0.05) f.push(`drop-shadow(${-o.rgb}px 0 0 rgba(255,0,72,.8)) drop-shadow(${o.rgb}px 0 0 rgba(0,230,255,.8))`);
     if (o.bright !== 100) f.push(`brightness(${o.bright}%)`); if (o.contrast !== 100) f.push(`contrast(${o.contrast}%)`);
     if (o.sat !== 100) f.push(`saturate(${o.sat}%)`); if (o.hue) f.push(`hue-rotate(${o.hue}deg)`);
     if (o.gray) f.push(`grayscale(${o.gray}%)`); if (o.sepia) f.push(`sepia(${o.sepia}%)`); if (o.invert) f.push(`invert(${o.invert}%)`);
@@ -2432,6 +2434,7 @@ const LOOKS = {
   Original: {}, Vivid: { contrast: 112, sat: 140 }, Warm: { sepia: 22, sat: 115, bright: 104 }, Cool: { hue: 190, sat: 80, sepia: 12, contrast: 104 },
   Faded: { contrast: 82, sat: 75, bright: 108 }, Vintage: { sepia: 45, contrast: 90, sat: 85, bright: 103 },
   Noir: { gray: 100, contrast: 135, bright: 95 }, Mono: { gray: 100 }, Punch: { contrast: 130, sat: 125, bright: 98 }, Negative: { invert: 100 },
+  'Hard B&W': { gray: 100, contrast: 175, bright: 92 }, 'Night drive': { sat: 55, contrast: 145, bright: 88, sepia: 18, hue: -12 },
 };
 function fitCanvasToImage(L) {
   const a = S.assets[L.p.asset]; if (!a) return;
@@ -2828,6 +2831,10 @@ const LIVE = (() => {
       return done(`${how}: ${selLayers().map(l => l.name).join(', ')}`);
     },
     select_layer: a => { sel = a.id == null ? null : findL(a).id; refresh(true, false); return { ok: true }; },
+    // beats (beat.js): markers on the kicks of the music, and a hit on every beat marker
+    find_beats: async () => { await findBeats(); return { ok: true, beats: beatMarks().map(m => m.t) }; },
+    beat_hit: a => { if (!HITS[a.hit] && a.hit !== 'Flash') throw new Error(`unknown hit. Use one of: ${[...Object.keys(HITS), 'Flash'].join(', ')}`);
+      if (a.hit !== 'Flash') sel = findL(a).id; hitBeats(a.hit); return { ok: true }; },
     add_marker: a => { addMarker(+a.time); const m = S.markers.find(x => near(x.t, frame(+a.time))); if (m && a.label) m.label = String(a.label); refresh(); return { ok: true }; },
     // audio: tracks of clips. Clip and track ids come from get_project; a track can also be named or given as a 1-based number.
     add_audio: async a => {

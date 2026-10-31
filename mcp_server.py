@@ -217,6 +217,20 @@ async def add_marker(time: float, label: str = "") -> dict:
     return await acall("add_marker", {"time": time, "label": label})
 
 
+@mcp.tool()
+async def find_beats() -> dict:
+    """Listen to the music (the selected audio clip, else the longest) for its beat, and put a beat marker on each
+    kick. Returns the beat times in seconds. Use before beat_hit."""
+    return await acall("find_beats", {})
+
+
+@mcp.tool()
+async def beat_hit(hit: str, layer: str | None = None) -> dict:
+    """Put a hit on every beat marker (or every marker, when there are no beat markers): Zoom punch, Shake, Glitch,
+    Blur hit, Strobe, Slam or Spin hit on LAYER, or Flash, a white flash over the whole frame (no layer needed)."""
+    return await acall("beat_hit", {"hit": hit, "id": layer})
+
+
 AUDIO_TYPES = {".mp3": "audio/mpeg", ".wav": "audio/wav", ".m4a": "audio/mp4", ".aac": "audio/aac", ".ogg": "audio/ogg", ".flac": "audio/flac"}
 
 

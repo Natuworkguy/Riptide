@@ -103,7 +103,7 @@ async def see_frames(count: int = 8, times: list[float] | None = None, width: in
 
 # ---------- changing ----------
 @mcp.tool()
-async def add_layer(type: Literal["rect", "ellipse", "polygon", "star", "arc", "text", "wave", "shape3d", "camera"], name: str | None = None,
+async def add_layer(type: Literal["rect", "ellipse", "polygon", "star", "arc", "text", "wave", "shape3d", "camera", "figure"], name: str | None = None,
               props: dict | None = None, start: float | None = None, end: float | None = None) -> dict:
     """Add a layer on top. `props` are initial values, e.g. {"x": 540, "y": 300, "w": 400, "h": 120, "fill": "#ff5a36", "radius": 20}
     or for text {"text": "Hello", "size": 96, "weight": 800, "fill": "#111111"}. `start`/`end` limit when it is visible (seconds).
@@ -115,7 +115,18 @@ async def add_layer(type: Literal["rect", "ellipse", "polygon", "star", "arc", "
     (pixels; positive is further away). A "camera" films every 3D layer: x and y are the point it looks at,
     orbit and tilt swing it round that point (degrees), dolly moves it closer (pixels), zoom narrows the lens
     (1 is normal) and rotation rolls it. The top visible camera is the one that films; with none, depth 0 is the
-    canvas exactly. All of these animate."""
+    canvas exactly. All of these animate.
+
+    A "figure" is a person, a wooden mannequin: h is its height. Its joints are angles in degrees, all 0 standing
+    with arms down: neck, spine, shoulderL, elbowL, shoulderR, elbowR, hipL, kneeL, hipR, kneeR (positive turns
+    clockwise; each is relative to the part above). side (0 facing you, 100 side on) turns it. Every joint animates;
+    the presets "Walk", "Walk across", "Run", "Jump", "Wave hello", "Dance", "Sit down", "Cheer" and "T-pose" pose it.
+
+    Physics, on any flat layer: phys "falls" (a rigid body that drops, bounces and tumbles; a figure falls as a
+    ragdoll) or "fixed" (a solid surface; keyframe it to push things), with bounce and friction (0 to 100), mass,
+    vx and vy (a push, pixels a second), spin (degrees a second) and physAt (when it starts falling; before then its
+    keyframes move it, and their speed carries on). The scene's gravity (pixels a second squared, default 1800),
+    walls ("floor", "box" or "none") and drag (air, default 1) can be set from any layer's props."""
     return await acall("add_layer", {"type": type, "name": name, "props": props or {}, "in": start, "out": end})
 
 

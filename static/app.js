@@ -46,36 +46,42 @@ function curveSVG(name, w = 34, h = 22) {
 // ---------- model ----------
 const ANIM = ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'radius', 'fill', 'fill2', 'mid1', 'mid2', 'mid3', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth',
   'blur', 'shadow', 'rgb', 'size', 'reveal', 'sweep', 'spacing', 'bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert',
-  'rotX', 'rotY', 'z', 'd', 'lightAngle', 'orbit', 'tilt', 'dolly', 'zoom'];
+  'rotX', 'rotY', 'z', 'd', 'lightAngle', 'orbit', 'tilt', 'dolly', 'zoom', ...Figure.JOINTS, 'side', 'limb'];
 const ADJUST = ['bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert'];
 const COMMON = ['x', 'y', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'blur', 'shadow', 'rgb', ...ADJUST];
 // turned on X and Y and pushed back in depth: any layer with 3D on, and the 3D layers themselves
 const DEPTH = ['rotX', 'rotY', 'z'];
 const FLAT = [...COMMON, 'three', ...DEPTH];
+// Physics: what a layer does when it falls, and the scene's gravity, walls and air, set from any layer
+const PHYS = [...Physics.FIELDS, ...Physics.SCENE];
 const PROPS = {
-  rect:    [...FLAT, 'w', 'h', 'radius', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth'],
-  ellipse: [...FLAT, 'w', 'h', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth'],
-  star:    [...FLAT, 'w', 'h', 'points', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth'],
-  polygon: [...FLAT, 'w', 'h', 'points', 'radius', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth'],
-  arc:     [...FLAT, 'w', 'h', 'sweep', 'stroke', 'strokeWidth'],
-  wave:    [...FLAT, 'w', 'h', 'reveal', 'stroke', 'strokeWidth'],
-  text:    [...FLAT, 'text', 'size', 'weight', 'spacing', 'reveal', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth'],
-  image:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth'],
-  video:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth'],
+  rect:    [...FLAT, 'w', 'h', 'radius', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
+  ellipse: [...FLAT, 'w', 'h', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
+  star:    [...FLAT, 'w', 'h', 'points', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
+  polygon: [...FLAT, 'w', 'h', 'points', 'radius', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
+  arc:     [...FLAT, 'w', 'h', 'sweep', 'stroke', 'strokeWidth', ...PHYS],
+  wave:    [...FLAT, 'w', 'h', 'reveal', 'stroke', 'strokeWidth', ...PHYS],
+  text:    [...FLAT, 'text', 'size', 'weight', 'spacing', 'reveal', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
+  image:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...PHYS],
+  video:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...PHYS],
   shape3d: [...COMMON, ...DEPTH, 'w', 'h', 'd', 'shape', 'text', 'radius', 'fill', 'material', 'lightAngle'],
   model:   [...COMMON, ...DEPTH, 'w', 'h', 'lightAngle'],
+  figure:  [...COMMON, 'w', 'h', 'fill', 'stroke', 'strokeWidth', 'side', 'limb', ...Figure.JOINTS, ...PHYS],
   camera:  ['x', 'y', 'orbit', 'tilt', 'dolly', 'zoom', 'rotation'],
 };
 const GROUPS = [['Transform', ['x', 'y', 'w', 'h', 'd', 'rotation', 'scale', 'sx', 'sy']],
   ['3D', ['three', 'shape', 'rotX', 'rotY', 'z', 'material', 'lightAngle']], ['Camera', ['orbit', 'tilt', 'dolly', 'zoom']],
   ['Style', ['fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', 'radius', 'points', 'sweep', 'opacity']],
-  ['Text', ['text', 'size', 'weight', 'spacing', 'reveal']], ['Effects', ['blur', 'shadow', 'rgb']], ['Adjust', ADJUST]];
+  ['Text', ['text', 'size', 'weight', 'spacing', 'reveal']], ['Pose', ['side', 'limb', ...Figure.JOINTS]], ['Physics', PHYS],
+  ['Effects', ['blur', 'shadow', 'rgb']], ['Adjust', ADJUST]];
 const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', scale: 'Scale', sx: 'Stretch X', sy: 'Stretch Y',
   opacity: 'Opacity', radius: 'Corners', fill: 'Fill', grad: 'Gradient', fill2: 'Fill 2', mid1: 'Via', mid2: 'Via 2', mid3: 'Via 3', gradAngle: 'Angle°', gradMorph: 'To radial %', stroke: 'Stroke', strokeWidth: 'Stroke W', blur: 'Blur', shadow: 'Shadow', rgb: 'RGB split',
   size: 'Font size', text: 'Text', points: 'Points', weight: 'Weight', reveal: 'Reveal', sweep: 'Sweep°', spacing: 'Tracking',
   bright: 'Brightness', contrast: 'Contrast', sat: 'Saturation', hue: 'Hue°', gray: 'Grayscale', sepia: 'Sepia', invert: 'Invert',
   three: '3D layer', shape: 'Shape', rotX: 'Rotate X', rotY: 'Rotate Y', z: 'Depth', d: 'Thickness', material: 'Material', lightAngle: 'Light°',
-  orbit: 'Orbit°', tilt: 'Tilt°', dolly: 'Dolly', zoom: 'Zoom' };
+  orbit: 'Orbit°', tilt: 'Tilt°', dolly: 'Dolly', zoom: 'Zoom', ...Figure.LABELS,
+  phys: 'Physics', bounce: 'Bounce %', friction: 'Friction %', mass: 'Weight', vx: 'Push X', vy: 'Push Y', spin: 'Spin°/s', physAt: 'Starts at',
+  gravity: 'Gravity', walls: 'Walls', drag: 'Air drag' };
 // a camera's position is the point it looks at, and its rotation turns the whole view
 const CAMERA_LABEL = { x: 'Look at X', y: 'Look at Y', rotation: 'Roll°' };
 const STEP = { gradMorph: 1, opacity: .05, scale: .05, sx: .05, sy: .05, reveal: .05, zoom: .05 };
@@ -83,7 +89,11 @@ const PALETTE = ['#7c5cff', '#ff5c8a', '#20c997', '#ffb020', '#3fa9ff', '#ff7a45
 const DEFAULTS = { rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0, rgb: 0,
   size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, sweep: 270, points: 5, w: 300, h: 300,
   bright: 100, contrast: 100, sat: 100, hue: 0, gray: 0, sepia: 0, invert: 0, grad: 'none', gradAngle: 90, gradMorph: 0, mid1: '', mid2: '', mid3: '',
-  three: false, rotX: 0, rotY: 0, z: 0, d: 300, shape: 'cube', material: 'glossy', lightAngle: -45, orbit: 0, tilt: 0, dolly: 0, zoom: 1 };
+  three: false, rotX: 0, rotY: 0, z: 0, d: 300, shape: 'cube', material: 'glossy', lightAngle: -45, orbit: 0, tilt: 0, dolly: 0, zoom: 1,
+  phys: 'none', bounce: 40, friction: 30, mass: 1, vx: 0, vy: 0, spin: 0, physAt: 0, side: 0, limb: 100,
+  ...Object.fromEntries(Figure.JOINTS.map(j => [j, 0])) };
+// the scene's own physics settings, kept on S
+const SCENE_DEFAULTS = { gravity: 1800, walls: 'floor', drag: 1 };
 // A fill can be a gradient from Fill to Fill 2: linear at an angle (0° runs left to right, 90° top to bottom), or
 // radial from the middle out. It spans the layer's own box, so it moves, scales and turns with the layer.
 // Morph (0 to 100, animatable) turns it into the other kind: a linear one rounds into a radial one, and back. In
@@ -123,7 +133,8 @@ function makeLayer(type, p = {}, name) {
     p: { ...DEFAULTS, x: S.w / 2, y: S.h / 2, fill, ...(type === 'arc' ? { strokeWidth: 24, stroke: fill } : {}), ...p }, keys: {} };
   S.layers.push(L); return L;
 }
-function newLayer(type) { const L = makeLayer(type); sel = L.id; selKey = null; selKeys = []; freshLayer = L.id; refresh(); }
+const NEW_LAYER = { figure: { w: 210, h: 460, fill: '#e8c39e' } };
+function newLayer(type) { const { name, ...p } = NEW_LAYER[type] || {}; const L = makeLayer(type, p, name); sel = L.id; selKey = null; selKeys = []; freshLayer = L.id; refresh(); }
 
 // ---------- keyframes ----------
 const hex = c => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16));
@@ -202,8 +213,11 @@ const keysAt = (L, t) => Object.values(L.keys).flat().filter(k => near(k.t, t));
 
 // ---------- rendering ----------
 const FONT = '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-function state(L, t) { const o = { ...L.p }; for (const k of ANIM) if (L.keys[k]?.length) o[k] = val(L, k, t);
+function keyState(L, t) { const o = { ...L.p }; for (const k of ANIM) if (L.keys[k]?.length) o[k] = val(L, k, t);
   for (const k of COLORS) if (isVar(o[k])) o[k] = resolveColor(o[k]); return o; }
+// what a layer is at time t: its keyframes, then what the physics did to it
+function state(L, t) { const o = keyState(L, t); return L.p.phys && L.p.phys !== 'none' ? Physics.apply(L, t, o) : o; }
+Physics.init({ keyState, bounds });
 function shapePath(c, L, o) {
   const w = o.w, h = o.h;
   c.beginPath();
@@ -253,6 +267,7 @@ function drawLayer(c, L, t) {
 // what a layer draws, centred on 0,0 at its own size: the layer, before it is moved, turned or scaled
 function drawContent(c, L, o, t) {
   if (L.type === 'shape3d' || L.type === 'model') return placeholder3d(c, L, o);
+  if (L.type === 'figure') return Figure.draw(c, o);
   c.fillStyle = o.fill; c.strokeStyle = o.stroke; c.lineWidth = o.strokeWidth; c.lineJoin = 'round'; c.lineCap = 'round';
   if (L.type === 'text') {
     setFont(c, o); c.textAlign = 'left'; c.textBaseline = 'middle';
@@ -295,6 +310,7 @@ function bounds(L, t) {
   return { o, w: Math.abs(o.w) + (L.type === 'arc' || L.type === 'wave' ? o.strokeWidth : 0), h: Math.abs(o.h) + (L.type === 'arc' || L.type === 'wave' ? o.strokeWidth : 0) };
 }
 function renderScene(c, t, scale = 1) {
+  Physics.prepare();
   c.setTransform(scale, 0, 0, scale, 0, 0);
   c.fillStyle = resolveColor(S.bg); c.fillRect(0, 0, S.w, S.h);
   for (const L of S.layers) if (visibleAt(L, t)) { c.save(); c.globalCompositeOperation = L.blend || 'source-over'; drawLayer(c, L, t); c.restore(); }
@@ -357,6 +373,10 @@ function render(showUI = true) {
     ctx.strokeStyle = '#4c8dff'; ctx.lineWidth = 1 * k; ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
     if (L.type !== 'text' && !(L.fix?.w && L.fix?.h)) { const s = 7 * k; ctx.fillStyle = '#fff'; ctx.lineWidth = 1 * k;
       for (const [hx, hy] of HANDLES) { ctx.fillRect(hx * bw / 2 - s / 2, hy * bh / 2 - s / 2, s, s); ctx.strokeRect(hx * bw / 2 - s / 2, hy * bh / 2 - s / 2, s, s); } }
+    // a figure's joints, to drag into a pose
+    if (L.type === 'figure' && posable(L)) { const J = Figure.joints(o);
+      for (const [pt] of Figure.HANDLES) { const [x, y] = J[pt]; ctx.beginPath(); ctx.arc(x * sx, y * sy, 6 * k, 0, PI * 2);
+        ctx.fillStyle = pt.startsWith('hand') || pt.startsWith('foot') || pt === 'head' ? '#4c8dff' : '#fff'; ctx.fill(); ctx.lineWidth = 1.5 * k; ctx.strokeStyle = '#4c8dff'; ctx.stroke(); } }
     ctx.restore();
   }
   if (showUI && snapGuides) {
@@ -404,6 +424,14 @@ function local(L, px, py) {
   return [(dx * Math.cos(a) - dy * Math.sin(a)) / (o.scale * o.sx || 1), (dx * Math.sin(a) + dy * Math.cos(a)) / (o.scale * o.sy || 1)];
 }
 let drag = null;
+// A figure is posed by its joints, unless the physics has it (a ragdoll that has started falling).
+const posable = L => !(L.p.phys === 'falls' && time >= Math.max(lin(L), +L.p.physAt || 0));
+function jointAt(L, px, py, k) {
+  const o = state(L, time), J = Figure.joints(o), [lx, ly] = local(L, px, py), sc = Math.abs(o.scale * o.sx) || 1;
+  let best = null, bestD = 11 * k / sc;
+  for (const [pt, which] of Figure.HANDLES) { const d = Math.hypot(J[pt][0] - lx, J[pt][1] - ly); if (d < bestD) { best = which; bestD = d; } }
+  return best;
+}
 const marqueeEl = Object.assign(document.createElement('div'), { className: 'marquee' });
 function hitLayer(px, py) {
   for (let i = S.layers.length - 1; i >= 0; i--) {
@@ -467,6 +495,10 @@ cv.addEventListener('pointerdown', e => {
   }
   if (e.button > 1) return;
   const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+  if (!additive && group.length === 1 && L0?.type === 'figure' && visibleAt(L0, time) && posable(L0)) {
+    const which = jointAt(L0, px, py, k);
+    if (which) { drag = { mode: 'pose', L: L0, which, x0: e.clientX, y0: e.clientY }; cv.setPointerCapture(e.pointerId); return; }
+  }
   if (!additive && group.length === 1 && L0) {
     const at = handleAt(L0, px, py, k);
     if (at) { const o = state(L0, time);
@@ -508,6 +540,11 @@ cv.addEventListener('pointermove', e => {
     Object.assign(marqueeEl.style, { left: Math.min(drag.x0, e.clientX) + 'px', top: Math.min(drag.y0, e.clientY) + 'px',
       width: Math.abs(e.clientX - drag.x0) + 'px', height: Math.abs(e.clientY - drag.y0) + 'px' });
     render(); renderLayers(); return;
+  }
+  if (drag.mode === 'pose') {
+    const o = state(L, time);
+    for (const [j, v] of Object.entries(Figure.pose(o, drag.which, local(L, px, py)))) setProp(L, j, Math.round(v * 10) / 10);
+    refresh(false); renderPropsValues(); return;
   }
   if (drag.mode === 'move') {
     let dx = px - drag.px0, dy = py - drag.py0;
@@ -622,6 +659,7 @@ const ICON = {
   arc: ic('<path d="M8 2.5a5.5 5.5 0 1 1-5.5 5.5"/>'),
   wave: ic('<path d="M1.5 9c1.6-3.4 2.8-3.4 4.2 0s2.6 3.4 4.2 0 2.6-3.4 4.4 0"/>'),
   text: ic('<path d="M3 4V3h10v1M8 3v10M6 13h4"/>'),
+  figure: ic('<circle cx="8" cy="3" r="1.6"/><path d="M8 5v5M5 7.5l3-1.5 3 1.5M6 14l2-4 2 4"/>'),
   eye: ic('<path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/>'),
   eyeOff: ic('<path d="M2 2l12 12M6.5 4C7 3.7 7.5 3.5 8 3.5c4 0 6.5 4.5 6.5 4.5s-.7 1.2-1.9 2.4M4.1 5.2C2.5 6.4 1.5 8 1.5 8S4 12.5 8 12.5c1 0 1.9-.3 2.7-.7"/>'),
   lock: ic('<rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/>'),
@@ -808,7 +846,11 @@ function renderProps() {
         // turning and depth only once a flat layer is made 3D; letters only for 3D text, corners only for a cube
         if (DEPTH.includes(k) && !R3D.is3d(L)) continue;
         if (L.type === 'shape3d' && ((k === 'text' && o.shape !== 'text') || (k === 'radius' && o.shape !== 'cube'))) continue;
-        const anim = ANIM.includes(k), here = L.keys[k]?.some(x => near(x.t, time)), keyed = L.keys[k]?.length, v = o[k];
+        // physics: only what the chosen kind uses; the scene's own settings once anything has physics
+        if (PHYS.includes(k) && k !== 'phys' && (o.phys || 'none') === 'none') continue;
+        if (['mass', 'vx', 'vy', 'spin', 'physAt'].includes(k) && o.phys !== 'falls') continue;
+        const anim = ANIM.includes(k), here = L.keys[k]?.some(x => near(x.t, time)), keyed = L.keys[k]?.length,
+          v = Physics.SCENE.includes(k) ? S[k] ?? SCENE_DEFAULTS[k] : o[k];
         const fx = FIX_OF[k], isFixed = fixed(L, k);
         const kb = anim ? `<button class="kf ${keyed ? 'has' : ''} ${here ? 'here' : ''}" data-key="${k}" title="${here ? 'Remove keyframe' : 'Add keyframe at playhead'}"${isFixed ? ' disabled' : ''}>${here ? ICON.key : ICON.keyOff}</button>` : '<span class="kf"></span>';
         let field;
@@ -820,8 +862,10 @@ function renderProps() {
         else if (k === 'three') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="three" title="${v ? 'Make it flat again' : 'Turn it in 3D, push it back, and let a camera move around it'}"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
         else if (k === 'shape') field = `<button class="selectbtn" data-menu="shape"><span>${R3D.SHAPES.find(x => x[0] === v)?.[1] || v}</span>${ICON.chev}</button>`;
         else if (k === 'material') field = `<button class="selectbtn" data-menu="material"><span>${R3D.MATERIALS.find(x => x[0] === v)?.[1] || v}</span>${ICON.chev}</button>`;
+        else if (k === 'phys') field = `<button class="selectbtn" data-menu="phys"><span>${(Physics.KINDS.find(x => x[0] === (v || 'none')) || Physics.KINDS[0])[1]}</span>${ICON.chev}</button>`;
+        else if (k === 'walls') field = `<button class="selectbtn" data-menu="walls"><span>${(Physics.WALLS.find(x => x[0] === v) || Physics.WALLS[0])[1]}</span>${ICON.chev}</button>`;
         else field = `<input data-p="${k}" value="${fmt(v)}" inputmode="decimal" spellcheck="false"${isFixed ? ' disabled' : ''}>`;
-        const wide = ['fill', 'fill2', ...MIDS, 'grad', 'stroke', 'text', 'weight', 'three', 'shape', 'material'].includes(k) ? ' wide' : '';
+        const wide = ['fill', 'fill2', ...MIDS, 'grad', 'stroke', 'text', 'weight', 'three', 'shape', 'material', 'phys', 'walls'].includes(k) ? ' wide' : '';
         // Keeping the proportions means nothing once either side is locked.
         const lock = k === 'w' && list.includes('h') && !L.fix?.w && !L.fix?.h ? `<button class="ib aspect ${aspectLocked(L) ? 'on' : ''}" data-cmd="aspect" title="${aspectLocked(L) ? 'Aspect ratio locked: click to unlock' : 'Lock aspect ratio'}">${aspectLocked(L) ? ICON.link : ICON.unlink}</button>` : '';
         const drop = MIDS.includes(k) ? `<button class="ib" data-cmd="delstop" data-k="${k}" title="Take this colour out of the gradient">${ICON.trash}</button>` : '';
@@ -836,7 +880,8 @@ function renderProps() {
 let tab = 'props';
 function renderPropsValues() {
   const L = cur(); if (!L || tab !== 'props') return; const o = state(L, time);
-  document.querySelectorAll('#props [data-p]').forEach(i => { if (i !== document.activeElement && i.dataset.p !== 'text') i.value = fmt(o[i.dataset.p]); });
+  document.querySelectorAll('#props [data-p]').forEach(i => { const k = i.dataset.p;
+    if (i !== document.activeElement && k !== 'text') i.value = fmt(Physics.SCENE.includes(k) ? S[k] ?? SCENE_DEFAULTS[k] : o[k]); });
   document.querySelectorAll('#props [data-color]').forEach(b => { const k = b.dataset.color, v = o[k], linked = !L.keys[k]?.length && varName(L.p[k]);
     b.classList.toggle('linked', !!linked); b.querySelector('i').style.background = v; b.querySelector('span').textContent = linked ? '--' + linked : v.toUpperCase(); });
   document.querySelectorAll('#props [data-key]').forEach(b => { const k = b.dataset.key, here = L.keys[k]?.some(x => near(x.t, time));
@@ -851,6 +896,7 @@ Pn.addEventListener('input', e => {
     if (e.target.dataset.lt === 'in') L.in = Math.max(0, Math.min(v, lout(L) - 1 / FPS)); else L.out = Math.min(S.dur, Math.max(v, lin(L) + 1 / FPS));
     render(); renderTracks(); return; }
   const k = e.target.dataset.p; if (!k) return;
+  if (Physics.SCENE.includes(k)) { const v = parseFloat(e.target.value); if (isNaN(v)) return; S[k] = v; render(); return; }
   if (k === 'text') setProp(L, k, e.target.value);
   else { const v = parseFloat(e.target.value); if (isNaN(v)) return;
     if ((k === 'w' || k === 'h') && aspectLocked(L)) { const o = state(L, time), other = k === 'w' ? 'h' : 'w';
@@ -889,6 +935,13 @@ Pn.addEventListener('click', e => {
   else if (t.dataset.menu === 'material')
     UI.menu(t, R3D.MATERIALS.map(([value, label]) => ({ value, label })), L.p.material, v => { L.p.material = v; refresh(); });
   else if (t.dataset.fix) toggleFix(L, t.dataset.fix);
+  else if (t.dataset.menu === 'phys')
+    UI.menu(t, Physics.KINDS.map(([value, label]) => ({ value, label })), L.p.phys || 'none', v => {
+      L.p.phys = v; if (v === 'falls' && !L.p.physAt) L.p.physAt = Math.max(0, +time.toFixed(2)); refresh();
+      status(v === 'none' ? `${L.name} is animated by its keyframes` : v === 'fixed' ? `${L.name} is solid: falling layers land on it`
+        : `${L.name} falls from ${(+L.p.physAt).toFixed(2)}s${L.type === 'figure' ? ', as a ragdoll' : ''}: press play`); });
+  else if (t.dataset.menu === 'walls')
+    UI.menu(t, Physics.WALLS.map(([value, label]) => ({ value, label })), S.walls || 'floor', v => { S.walls = v; refresh(); });
   else if (t.dataset.cmd === 'addstop') {
     // the new stop starts as the colour half way between its neighbours, so the gradient does not change until it is set
     const o = state(L, time), free = MIDS.find(m => !isColor(o[m]) && !L.keys[m]?.length); if (!free) return;
@@ -987,6 +1040,37 @@ const PRESETS = {
     'Pull back': (a, o, L) => { if (L.type !== 'camera') return 'Camera layers only'; a('dolly', 0, o.dolly, 'sineInOut'); a('dolly', 2, o.dolly - S.h * .8); },
     'Crane up': (a, o, L) => { if (L.type !== 'camera') return 'Camera layers only'; a('tilt', 0, o.tilt, 'sineInOut'); a('tilt', 2, o.tilt + 35); },
   },
+  Figure: {
+    'Walk': (a, o, L) => figureLoop(a, o, L, .9, WALK, .018),
+    'Walk across': (a, o, L) => figureLoop(a, o, L, .9, WALK, .018) || (a('x', 0, o.x, 'linear', true), a('x', S.dur, o.x + S.w * .6 * Math.sign(o.sx || 1), 'linear', true), undefined),
+    'Run': (a, o, L) => figureLoop(a, o, L, .6, RUN, .035),
+    'Wave hello': (a, o, L) => { if (L.type !== 'figure') return 'Figures only';
+      a('shoulderR', 0, o.shoulderR, 'sineOut'); a('elbowR', 0, o.elbowR, 'sineOut');
+      a('shoulderR', .35, -140, 'sineInOut');
+      for (let i = 0; i < 5; i++) a('elbowR', .35 + i * .28, i % 2 ? -10 : -45, 'sineInOut');
+      a('shoulderR', .35 + 5 * .28, -140, 'sineInOut'); a('shoulderR', .35 + 5 * .28 + .45, 0); a('elbowR', .35 + 5 * .28 + .45, 0); },
+    'Jump': (a, o, L) => { if (L.type !== 'figure') return 'Figures only'; const up = Math.abs(o.h) * .45 * (o.scale || 1);
+      const keys = (dt, pose, ease) => { for (const [j, v] of Object.entries(pose)) a(j, dt, v, ease); };
+      keys(0, Figure.POSES.stand, 'sineInOut'); keys(.35, Figure.POSES.crouch, 'expoOut');
+      keys(.6, { ...Figure.POSES.stand, shoulderL: 160, shoulderR: -160, hipL: -8, hipR: 8, kneeL: 20, kneeR: 20 }, 'sineInOut');
+      keys(1.05, Figure.POSES.crouch, 'sineInOut'); keys(1.45, Figure.POSES.stand);
+      a('y', .35, o.y, 'expoOut'); a('y', .75, o.y - up, 'sineIn'); a('y', 1.05, o.y, 'sineInOut'); },
+    'Dance': (a, o, L) => figureLoop(a, o, L, 1, DANCE, .02, false),
+    'Sit down': (a, o, L) => { if (L.type !== 'figure') return 'Figures only';
+      for (const [j, v] of Object.entries(Figure.POSES.sit)) { a(j, 0, o[j], 'sineInOut'); a(j, .8, v); }
+      a('y', 0, o.y, 'sineInOut'); a('y', .8, o.y + Math.abs(o.h) * .21 * (o.scale || 1)); },
+    'Cheer': (a, o, L) => { if (L.type !== 'figure') return 'Figures only';
+      for (const [j, v] of Object.entries(Figure.POSES.cheer)) { a(j, 0, o[j], 'backOut'); a(j, .5, v); } },
+    'T-pose': (a, o, L) => { if (L.type !== 'figure') return 'Figures only'; for (const [j, v] of Object.entries(Figure.POSES.tpose)) a(j, 0, v); },
+  },
+  Physics: {
+    'Let it fall': (a, o, L) => physPreset(a, L, { phys: 'falls' }),
+    'Throw it': (a, o, L) => physPreset(a, L, { phys: 'falls', vx: 900, vy: -1100, spin: 260 }),
+    'Bouncy ball': (a, o, L) => physPreset(a, L, { phys: 'falls', bounce: 88, friction: 5 }),
+    'Heavy and dead': (a, o, L) => physPreset(a, L, { phys: 'falls', bounce: 2, friction: 80, mass: 6 }),
+    'Make it solid': (a, o, L) => physPreset(a, L, { phys: 'fixed' }),
+    'No physics': (a, o, L) => physPreset(a, L, { phys: 'none' }),
+  },
   'Loop (whole clip)': {
     'Float': (a, o) => loopKeys(a, 'y', 1.6, [o.y, o.y - 24]),
     'Breathe': (a, o) => loopKeys(a, 'scale', 2, [o.scale, o.scale * 1.08]),
@@ -1000,6 +1084,37 @@ const PRESETS = {
       cs.forEach((c, i) => a('fill', i * S.dur / (cs.length - 1), c, 'sineInOut', true)); },
   },
 };
+// Walking and running, side on and facing right: four poses a stride, each the mirror of the one two before.
+const WALK = [{ hipL: -24, kneeL: 4, hipR: 20, kneeR: 12, shoulderL: 18, shoulderR: -18, elbowL: -14, elbowR: -22, spine: 4 },
+  { hipL: 0, kneeL: 6, hipR: -4, kneeR: 50, shoulderL: 0, shoulderR: 0, elbowL: -16, elbowR: -16, spine: 4 }];
+const RUN = [{ hipL: -50, kneeL: 30, hipR: 32, kneeR: 40, shoulderL: 45, shoulderR: -55, elbowL: -80, elbowR: -90, spine: 14 },
+  { hipL: -5, kneeL: 20, hipR: -20, kneeR: 110, shoulderL: 0, shoulderR: 0, elbowL: -85, elbowR: -85, spine: 14 }];
+const DANCE = [{ shoulderL: 150, shoulderR: -30, elbowL: 20, elbowR: -60, hipL: -10, hipR: 6, kneeL: 25, kneeR: 0, spine: -8, neck: 10 },
+  { shoulderL: 40, shoulderR: -40, elbowL: -70, elbowR: 70, hipL: 0, hipR: 0, kneeL: 15, kneeR: 15, spine: 0, neck: 0 }];
+const mirror = p => Object.fromEntries(Object.entries(p).map(([k, v]) => [k.endsWith('L') ? k.slice(0, -1) + 'R' : k.endsWith('R') ? k.slice(0, -1) + 'L' : k,
+  k.endsWith('L') || k.endsWith('R') ? (k.startsWith('shoulder') || k.startsWith('elbow') ? -v : v) : (k === 'spine' || k === 'neck' ? -v : v)]));
+// A figure's cycle, over the whole clip: a pose every quarter PERIOD (two given, then their mirror images), with the
+// body bobbing BOB of its height on the in-between poses. SIDE turns it side on first.
+function figureLoop(a, o, L, period, poses, bob, side = true) {
+  if (L.type !== 'figure') return 'Figures only';
+  // turned side on, the mirror of a stride is the same leg forward on the other side, not a reflection
+  const cycle = side ? [poses[0], poses[1], swapSides(poses[0]), swapSides(poses[1])] : [poses[0], poses[1], mirror(poses[0]), poses[1]];
+  if (side && !L.keys.side?.length && a.real) L.p.side = 100;
+  const n = Math.max(1, Math.round(S.dur / period)), q = S.dur / (n * 4), lift = Math.abs(o.h) * bob * (o.scale || 1);
+  for (let i = 0; i <= n * 4; i++) {
+    const p = cycle[i % 4];
+    for (const [j, v] of Object.entries(p)) a(j, i * q, v, 'sineInOut', true);
+    a('y', i * q, i % 2 ? o.y - lift : o.y, 'sineInOut', true);
+  }
+}
+const swapSides = p => Object.fromEntries(Object.entries(p).map(([k, v]) => [k.endsWith('L') ? k.slice(0, -1) + 'R' : k.endsWith('R') ? k.slice(0, -1) + 'L' : k, v]));
+// Physics presets set how a layer behaves rather than keyframes. Shown in the list (a dry run), they only say so.
+function physPreset(a, L, set) {
+  if (!a.real) return 'Physics';
+  if (L.type === 'camera' || L.type === 'shape3d' || L.type === 'model' || R3D.is3d(L)) return 'Flat layers only: 3D ones have no physics yet';
+  Object.assign(L.p, set);
+  if (set.phys === 'falls') L.p.physAt = Math.max(lin(L), +time.toFixed(2));
+}
 function loopKeys(a, prop, period, [v0, v1]) {
   const n = Math.max(1, Math.round(S.dur / period)), half = S.dur / n / 2;
   for (let i = 0; i <= n * 2; i++) a(prop, i * half, i % 2 ? v1 : v0, 'sineInOut', true);
@@ -1015,15 +1130,17 @@ function applyPreset(L, name) {
     const t = Math.max(0, Math.min(S.dur, abs ? dt : (dt < 0 ? 0 : t0 + dt)));
     if (dt === -1) return setKey(L, p, 0, v, ease); if (dt >= 1e3) return setKey(L, p, S.dur, v, ease);
     setKey(L, p, t, v, ease || 'easeInOut'); end = Math.max(end, t); };
+  add.real = true;
   const msg = fn(add, o, L);
   if (msg) return status(msg);
-  sel = L.id; time = end; refresh(); status(`${name} added to ${L.name}`);
+  sel = L.id; time = end; refresh();
+  status(Object.keys(PRESETS.Physics).includes(name) ? `${L.name}: ${name.toLowerCase()}${L.p.phys === 'falls' ? `, from ${(+L.p.physAt).toFixed(2)}s. Press play` : ''}` : `${name} added to ${L.name}`);
 }
 function presetMeta(fn, L) {
   const D = L || { type: 'rect', p: { ...DEFAULTS, fill: PALETTE[0] }, keys: {} }; let m = 0, loopy = false;
   if (!L && /Camera layers only/.test(String(fn))) return 'camera';
   const msg = fn((p, dt, v, e, abs) => { if (abs || dt === -1 || dt >= 1e3) loopy = true; else m = Math.max(m, dt); }, { ...D.p, x: 0, y: 0 }, D);
-  return msg ? msg.replace(' layers only', ' only') : loopy ? 'loop' : m.toFixed(1) + 's';
+  return msg ? msg.replace(' layers only', ' only').replace('Figures only', 'figure') : loopy ? 'loop' : m.toFixed(1) + 's';
 }
 function presetsHTML(L) {
   let h = '<div class="presets">';
@@ -2035,6 +2152,7 @@ const COMMANDS = [
   ['Add', 'Arc', 'a', () => newLayer('arc')],
   ['Add', 'Wave', 'w', () => newLayer('wave')],
   ['Add', 'Text', 't', () => newLayer('text')],
+  ['Add', 'Figure (a person to pose and animate)', '', () => newLayer('figure')],
   ...R3D.SHAPES.map(([shape, label]) => ['Add', label === '3D text' ? label : `3D ${label.toLowerCase()}`, '', () => add3d(shape)]),
   ['Add', 'Camera', '', () => addCamera()],
   ['Add', 'Import a 3D model…', '', () => modelInput.click()],
@@ -2755,7 +2873,10 @@ const LIVE = (() => {
     add_layer: a => {
       if (!PROPS[a.type] || ['image', 'video', 'model'].includes(a.type)) throw new Error(`type must be one of ${Object.keys(PROPS).filter(t => !['image', 'video', 'model'].includes(t)).join(', ')}`);
       const props = a.props || {}; for (const p in props) if (!PROPS[a.type].includes(p)) throw new Error(`${a.type} layers have no "${p}"`);
-      const L = makeLayer(a.type, props, a.name);
+      const scene = Object.fromEntries(Object.entries(props).filter(([p]) => Physics.SCENE.includes(p)));
+      for (const p in scene) delete props[p];
+      const L = makeLayer(a.type, { ...(NEW_LAYER[a.type] || {}), ...props }, a.name);
+      for (const [p, v] of Object.entries(scene)) S[p] = p === 'walls' ? String(v) : +v;
       if (a.in != null) L.in = +a.in; if (a.out != null) L.out = +a.out;
       sel = L.id; return done(`added ${L.type} "${L.name}"`, { id: L.id });
     },
@@ -2782,6 +2903,8 @@ const LIVE = (() => {
         checkProp(L, p);
         if (fixed(L, p)) throw new Error(`"${L.name}" has its ${FIX_NAME[FIX_OF[p]].toLowerCase()} locked: unlock it first (lock_${FIX_OF[p] === 'pos' ? 'position' : FIX_OF[p] === 'w' ? 'width' : 'height'}: false)`);
         if (p === 'name') { L.name = String(v); continue; }
+        if (Physics.SCENE.includes(p)) { S[p] = p === 'walls' ? String(v) : +v; continue; }
+        if (p === 'phys' && v === 'falls' && props.physAt == null && !L.p.physAt) L.p.physAt = t;
         if (a.keyframe || L.keys[p]?.length) setKey(L, p, t, v, easeOK(a.ease) || 'easeInOut'); else L.p[p] = keyValue(p, v);
       }
       if (a.name) L.name = String(a.name);

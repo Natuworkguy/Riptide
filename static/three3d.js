@@ -242,8 +242,28 @@ const R3D = (() => {
     for (const L of S.layers) { if (L.type === 'model') model(L.p.asset); if (L.type === 'shape3d' && L.p.shape === 'text') loadFont(); }
     for (let i = 0; i < 600 && loading.size; i++) await new Promise(r => setTimeout(r, 50));
   }
+
+  // ----- a 3D layer as a file: glTF, binary (.glb), in metres -----
+  // A shape as its mesh, at its size (a canvas pixel is a centimetre), standing on the ground; an imported model as
+  // it came in.
+  async function exportModel(L, t) {
+    if (!T?.GLTFExporter) throw new Error('this copy of three.js cannot write glTF');
+    await ready();
+    const o = state(L, t), root = new T.Group(); root.name = L.name || L.type;
+    if (L.type === 'shape3d') {
+      const g = geometry(o); if (!g) throw new Error('the shape has not loaded yet');
+      const [w, h, d] = shapeSize(o, g), mesh = new T.Mesh(g, material(o));
+      mesh.name = L.name || 'Shape'; mesh.scale.set(w / 100, h / 100, d / 100); mesh.position.y = h / 200; root.add(mesh);
+    } else if (L.type === 'model') {
+      const m = models.get(L.p.asset); if (!m || m.error) throw new Error('the model has not loaded yet');
+      root.add(m.group.clone(true));
+    } else throw new Error('only 3D shapes and models can be exported as a model');
+    const out = await new T.GLTFExporter().parseAsync(root, { binary: true, onlyVisible: true });
+    root.traverse(x => { if (x.isMesh && L.type === 'shape3d') x.material.dispose(); });
+    return new Blob([out], { type: 'model/gltf-binary' });
+  }
   const forget = id => { const m = models.get(id); m?.group?.traverse(o => { o.geometry?.dispose?.(); }); models.delete(id); };
 
-  return { SHAPES, MATERIALS, MODEL_TYPES, modelFormat, ok, is3d, solid, wants, draw, hull, inside, isFlat, ready, forget, cameraLayer, model, loadFont,
+  return { SHAPES, MATERIALS, MODEL_TYPES, modelFormat, ok, is3d, solid, wants, draw, hull, inside, isFlat, ready, forget, cameraLayer, model, loadFont, exportModel,
     get available() { return !!T; } };
 })();

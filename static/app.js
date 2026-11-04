@@ -2497,6 +2497,16 @@ function add3d(shape = 'cube', x = S.w / 2, y = S.h / 2) {
   if (text) R3D.loadFont();
   sel = L.id; freshLayer = L.id; refresh(); status(`Added ${L.name}: turn it with Rotate X and Y, or add a camera to move around it`);
 }
+// a 3D layer as a .glb file, as it is at the playhead
+async function exportModelFile(L) {
+  status(`Exporting ${L.name} as a 3D model…`);
+  try {
+    const blob = await R3D.exportModel(L, time);
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `${(L.name || 'model').replace(/[\\/:*?"<>|]+/g, '-')}.glb` });
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    status(`Saved ${a.download} (${Math.max(1, Math.round(blob.size / 1024))} KB)`);
+  } catch (e) { status(`Could not export ${L.name}: ${e.message || e}`); }
+}
 function addCamera() {
   if (S.layers.some(L => L.type === 'camera')) status('There is a camera already: the top one is the one that films');
   const L = makeLayer('camera', {}, 'Camera'); L.p.x = S.w / 2; L.p.y = S.h / 2;
@@ -2757,6 +2767,7 @@ function layerItems(L) {
       { label: 'Send backward', act: () => arrange(L, 'down') }, { label: 'Send to back', act: () => arrange(L, 'back') }] },
     '-',
     { label: 'Key all properties', icon: ICON.key, kbd: 'K', act: () => { for (const p of PROPS[L.type]) if (ANIM.includes(p)) setKey(L, p, time, val(L, p, time)); refresh(); status('Keyed every property at ' + fmtTime(time)); } },
+    ...(L.type === 'shape3d' || L.type === 'model' ? [{ label: 'Export as 3D model…', icon: ICON.model, act: () => exportModelFile(L) }] : []),
     { label: 'Split at playhead', icon: ICON.blade, kbd: '⌘K', disabled: !(time > lin(L) && time < lout(L)), act: splitLayer },
     { label: 'Start here', kbd: '[', act: () => { L.in = Math.min(time, lout(L) - 1 / FPS); refresh(); } },
     { label: 'End here', kbd: ']', act: () => { L.out = Math.max(time, lin(L) + 1 / FPS); refresh(); } },

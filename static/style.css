@@ -580,3 +580,12 @@ body.recording .checker{box-shadow:0 0 0 2px #ff4d4f}
 
 /* shift-drag on the timeline: a box that picks every keyframe in it */
 .marquee{position:absolute;z-index:6;border:1px solid #4c8dff;background:#4c8dff1f;border-radius:2px;pointer-events:none}
+
+/* Music: the links from a layer's numbers to the song */
+.react-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 8px 0; border-top: 1px solid var(--line, rgba(255,255,255,.08)); }
+.react-row:first-of-type { border-top: 0; }
+.react-row .selectbtn:nth-of-type(3) { grid-column: 1 / -1; }
+.react-row .rnum { display: flex; align-items: center; gap: 6px; font-size: 11px; opacity: .85; }
+.react-row .rnum em { font-style: normal; white-space: nowrap; }
+.react-row .rnum input { width: 100%; min-width: 0; }
+.react-row [data-rdel] { justify-self: end; grid-column: 2; }

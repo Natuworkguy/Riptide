@@ -157,6 +157,20 @@ async def set_keyframes(layer: str, prop: str, keys: list[dict], replace: bool =
 
 
 @mcp.tool()
+async def follow_music(layer: str, prop: str | None = None,
+                       band: Literal["level", "bass", "mids", "treble", "kick", "snare", "hats", "vocals"] = "kick",
+                       amount: float = 0.15, source: str = "mix", smooth: float | None = None, clear: bool = False) -> dict:
+    """Make a layer's number follow the music: amount is added to prop (e.g. "scale", "y", "rotation", "bright",
+    "shadow", "blur", "opacity") when the band is at its loudest, so {"prop": "scale", "band": "kick", "amount": 0.15}
+    punches it 15% bigger on every kick. Bands: level (loudness), bass, mids, treble, and parts of the song: kick,
+    snare and hats as hits, vocals. source is "mix" (everything playing) or one audio track, by id, name or number:
+    import stems (drums, bass, vocals) as their own tracks to follow one exactly. smooth is how many milliseconds it
+    takes to fall back (0 for hits, about 80 otherwise). clear removes the link on prop, or all of them."""
+    return await acall("follow_music", {"id": layer, "prop": prop, "band": band, "amount": amount, "source": source,
+                                        "smooth": smooth, "clear": clear})
+
+
+@mcp.tool()
 async def delete_keyframes(layer: str, prop: str | None = None, at_time: float | None = None) -> dict:
     """Delete keyframes: one property or all of them, at one time or every time. The value left behind is the one at that moment."""
     return await acall("delete_keyframes", {"id": layer, "prop": prop, "time": at_time})

@@ -216,7 +216,8 @@ const FONT = '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif
 function keyState(L, t) { const o = { ...L.p }; for (const k of ANIM) if (L.keys[k]?.length) o[k] = val(L, k, t);
   for (const k of COLORS) if (isVar(o[k])) o[k] = resolveColor(o[k]); return o; }
 // what a layer is at time t: its keyframes, then what the physics did to it
-function state(L, t) { const o = keyState(L, t); return L.p.phys && L.p.phys !== 'none' ? Physics.apply(L, t, o) : o; }
+function state(L, t) { let o = keyState(L, t); if (L.p.phys && L.p.phys !== 'none') o = Physics.apply(L, t, o);
+  return L.react?.length && typeof Reactive !== 'undefined' ? Reactive.apply(L, t, o) : o; }
 Physics.init({ keyState, bounds });
 function shapePath(c, L, o) {
   const w = o.w, h = o.h;
@@ -874,6 +875,7 @@ function renderProps() {
       }
       h += '</div></div>';
     }
+    if (typeof Reactive !== 'undefined') h += Reactive.panelHTML(L);
   } else h += presetsHTML(L);
   Pn.innerHTML = h; propsFor = L.id;
 }
@@ -1063,6 +1065,15 @@ const PRESETS = {
       for (const [j, v] of Object.entries(Figure.POSES.cheer)) { a(j, 0, o[j], 'backOut'); a(j, .5, v); } },
     'T-pose': (a, o, L) => { if (L.type !== 'figure') return 'Figures only'; for (const [j, v] of Object.entries(Figure.POSES.tpose)) a(j, 0, v); },
   },
+  Music: {
+    'Pulse to the kick': (a, o, L) => musicPreset(a, L, 'scale', 'kick', .16, 0),
+    'Bounce to the bass': (a, o, L) => musicPreset(a, L, 'y', 'bass', -36, 90),
+    'Shake on the snare': (a, o, L) => musicPreset(a, L, 'rotation', 'snare', 7, 0),
+    'Flash on the hats': (a, o, L) => musicPreset(a, L, 'bright', 'hats', 45, 0),
+    'Glow with the vocals': (a, o, L) => musicPreset(a, L, 'shadow', 'vocals', 40, 160),
+    'Breathe with the song': (a, o, L) => musicPreset(a, L, 'scale', 'level', .08, 250),
+    'Stop following the music': (a, o, L) => { if (!a.real) return 'Music'; delete L.react; },
+  },
   Physics: {
     'Let it fall': (a, o, L) => physPreset(a, L, { phys: 'falls' }),
     'Throw it': (a, o, L) => physPreset(a, L, { phys: 'falls', vx: 900, vy: -1100, spin: 260 }),
@@ -1108,6 +1119,14 @@ function figureLoop(a, o, L, period, poses, bob, side = true) {
   }
 }
 const swapSides = p => Object.fromEntries(Object.entries(p).map(([k, v]) => [k.endsWith('L') ? k.slice(0, -1) + 'R' : k.endsWith('R') ? k.slice(0, -1) + 'L' : k, v]));
+// Music presets link a property to the song (reactive.js); like the physics ones, they set no keyframes.
+function musicPreset(a, L, prop, band, amount, smooth) {
+  if (!a.real) return 'Music';
+  if (!PROPS[L.type].includes(prop)) return `${L.type} layers have no ${LABEL[prop] || prop}`;
+  if (!hasAudio()) return 'Add some music to the timeline first';
+  L.react = (L.react || []).filter(r => r.prop !== prop);
+  Reactive.add(L, prop, band, amount, 'mix', smooth);
+}
 // Physics presets set how a layer behaves rather than keyframes. Shown in the list (a dry run), they only say so.
 function physPreset(a, L, set) {
   if (!a.real) return 'Physics';
@@ -1134,6 +1153,7 @@ function applyPreset(L, name) {
   const msg = fn(add, o, L);
   if (msg) return status(msg);
   sel = L.id; time = end; refresh();
+  if (Object.keys(PRESETS.Music).includes(name)) return status(L.react?.length ? `${L.name} follows the music: press play` : `${L.name} no longer follows the music`);
   status(Object.keys(PRESETS.Physics).includes(name) ? `${L.name}: ${name.toLowerCase()}${L.p.phys === 'falls' ? `, from ${(+L.p.physAt).toFixed(2)}s. Press play` : ''}` : `${name} added to ${L.name}`);
 }
 function presetMeta(fn, L) {
@@ -2014,6 +2034,7 @@ $('#export').onclick = async () => {
   const frames = Math.max(1, Math.round((o.end - o.start) * o.fps)), ext = { mp4: 'mp4', webm: 'webm', gif: 'gif', png: 'zip' }[o.format];
   btn.disabled = true; btn.classList.add('busy'); sel = null;
   try {
+    if (typeof Reactive !== 'undefined') { lab.textContent = 'Listening to the music…'; await Reactive.ready(); }
     const { id } = await (await api('/api/export', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fps: o.fps, format: o.format, quality: o.quality }) })).json();
     for (let f = 0; f < frames; f++) {
@@ -2857,9 +2878,10 @@ const LIVE = (() => {
       easings: EASE_ITEMS.map(i => i.value), presets: Object.fromEntries(Object.entries(PRESETS).map(([g, it]) => [g, Object.keys(it)])),
       blend_modes: BLENDS.map(b => b[0] === 'source-over' ? 'normal' : b[0]), looks: Object.keys(LOOKS),
     }),
-    render_frame: async a => { const t = Math.max(0, Math.min(S.dur, +(a.time ?? time))); await seekVideos(t);
+    render_frame: async a => { const t = Math.max(0, Math.min(S.dur, +(a.time ?? time))); await Reactive.ready(); await seekVideos(t);
       return { ok: true, time: t, png: frameURL(t, +a.width || 540) }; },
     render_frames: async a => {   // contact sheet of several moments, so an agent can see motion in one image
+      await Reactive.ready();
       const n = Math.max(2, Math.min(16, +a.count || 8)), ts = a.times?.length ? a.times.map(Number) : Array.from({ length: n }, (_, i) => i * S.dur / (n - 1) * .999);
       const cols = Math.min(4, ts.length), rows = Math.ceil(ts.length / cols), cw = Math.min(360, +a.width || 300), chh = Math.round(cw * S.h / S.w);
       const sh = document.createElement('canvas'); sh.width = cols * (cw + 6) - 6; sh.height = rows * (chh + 24) - 6; const g = sh.getContext('2d');
@@ -2922,6 +2944,20 @@ const LIVE = (() => {
       if (a.replace) delete L.keys[a.prop];
       for (const k of a.keys || []) setKey(L, a.prop, Math.max(0, +k.t), k.v, easeOK(k.ease) || 'easeInOut');
       return done(`set ${(a.keys || []).length} keyframes on ${L.name}.${a.prop}`);
+    },
+    follow_music: async a => {
+      const L = findL(a);
+      if (a.clear) { if (a.prop) L.react = (L.react || []).filter(r => r.prop !== a.prop); else delete L.react;
+        if (!L.react?.length) delete L.react; return done(`"${L.name}" ${a.prop ? `${a.prop} no longer follows` : 'no longer follows'} the music`); }
+      checkProp(L, a.prop); if (!ANIM.includes(a.prop) || COLORS.includes(a.prop)) throw new Error(`"${a.prop}" is not a number that can follow the music`);
+      if (!Reactive.BANDS.some(b => b[0] === a.band)) throw new Error(`band must be one of ${Reactive.BANDS.map(b => b[0]).join(', ')}`);
+      let source = 'mix';
+      if (a.source && a.source !== 'mix') { const T = tracks().find((T, i) => T.id === a.source || T.name === a.source || String(i + 1) === String(a.source));
+        if (!T) throw new Error(`no audio track "${a.source}"`); source = T.id; }
+      L.react = (L.react || []).filter(r => r.prop !== a.prop);
+      Reactive.add(L, a.prop, a.band, +a.amount || 0, source, a.smooth == null ? undefined : +a.smooth);
+      await Reactive.ready();
+      return done(`"${L.name}" ${a.prop} follows the ${a.band}${source !== 'mix' ? ` of ${tracks().find(T => T.id === source).name}` : ''}`);
     },
     delete_keyframes: a => {
       const L = findL(a), props = a.prop ? [a.prop] : Object.keys(L.keys); let n = 0;

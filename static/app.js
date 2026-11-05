@@ -1127,12 +1127,76 @@ function musicPreset(a, L, prop, band, amount, smooth) {
   L.react = (L.react || []).filter(r => r.prop !== prop);
   Reactive.add(L, prop, band, amount, 'mix', smooth);
 }
-// Physics presets set how a layer behaves rather than keyframes. Shown in the list (a dry run), they only say so.
+// The falling presets run the physics once and write what it did as keyframes, from the playhead until the layer
+// comes to rest: an animation like any other, on the timeline, to edit, ease, move or delete. Make it solid and No
+// physics set the layer's physics, as the Physics field does.
 function physPreset(a, L, set) {
-  if (!a.real) return 'Physics';
+  if (!a.real) return set.phys === 'falls' ? 'to rest' : set.phys === 'fixed' ? 'solid' : 'off';
   if (L.type === 'camera' || L.type === 'shape3d' || L.type === 'model' || R3D.is3d(L)) return 'Flat layers only: 3D ones have no physics yet';
+  if (set.phys !== 'falls') { Object.assign(L.p, set); Physics.forget(); return; }
+  if (fixed(L, 'x')) return `${L.name}'s position is locked: unlock it to let it fall`;
+  const was = { ...L.p };
   Object.assign(L.p, set);
-  if (set.phys === 'falls') L.p.physAt = Math.max(lin(L), +time.toFixed(2));
+  L.p.physAt = Math.max(lin(L), +time.toFixed(2));
+  if (bakePhysics(L, a)) return;
+  L.p = was; Physics.forget();
+  return `${L.name} is already at rest: there is nothing for it to fall onto or off`;
+}
+// The physics of falling layer L, from its Start time, as keyframes (through A, a preset's key adder, when given):
+// sampled at 60fps, then thinned to the keys that keep it within 2 pixels or a degree and a half. Its physics is then off,
+// the keys doing what the physics did. How many keys it wrote.
+const PHYS_TOL = { x: 2, y: 2 };
+function bakePhysics(L, a) {
+  Physics.forget();
+  const start = Math.max(lin(L), +L.p.physAt || 0), stop = Math.min(lout(L), S.dur, start + 120);
+  const props = ['x', 'y', 'rotation', ...(L.type === 'figure' ? Figure.JOINTS : [])].filter(p => !fixed(L, p));
+  const ts = [], vs = Object.fromEntries(props.map(p => [p, []]));
+  for (let t = start; t <= stop + 1e-9; t += 1 / 60) {
+    const o = state(L, t); ts.push(t);
+    for (const p of props) {
+      let v = +o[p] || 0; const prev = vs[p].at(-1);
+      // angles stay continuous, so a key never spins the long way round
+      if (p !== 'x' && p !== 'y' && prev != null) v += Math.round((prev - v) / 360) * 360;
+      vs[p].push(v);
+    }
+  }
+  if (ts.length < 2) return 0;
+  // it is done when nothing moves any more
+  const tol = p => PHYS_TOL[p] ?? 1.5;
+  let last = 0;
+  for (const p of props) { const v = vs[p], end = v.at(-1);
+    for (let i = v.length - 1; i > last; i--) if (Math.abs(v[i] - end) > tol(p)) { last = i; break; } }
+  if (!last) return 0;
+  const n = Math.min(ts.length, last + 2);
+  L.p.phys = 'none';
+  Physics.forget();
+  let wrote = 0;
+  for (const p of props) {
+    const v = vs[p].slice(0, n), keep = thin(ts, v, tol(p));
+    if (v.every(x => Math.abs(x - v[0]) <= tol(p)) && !L.keys[p]?.length) continue;
+    // what the physics took over from the keys after it started is gone
+    if (L.keys[p]) L.keys[p] = L.keys[p].filter(k => k.t < start - 1e-6);
+    for (let i = 0; i < n; i++) if (keep[i]) {
+      const value = Math.round(v[i] * 100) / 100;
+      if (a) a(p, ts[i] - time, value, 'linear'); else setKey(L, p, ts[i], value, 'linear');
+      wrote++;
+    }
+  }
+  return wrote;
+}
+// Which of the samples V (at times TS) to keep so straight lines between them stay within TOL of the rest.
+function thin(ts, v, tol) {
+  const keep = new Uint8Array(v.length); keep[0] = keep[v.length - 1] = 1;
+  const todo = [[0, v.length - 1]];
+  while (todo.length) {
+    const [i, j] = todo.pop(); let worst = tol, at = -1;
+    for (let k = i + 1; k < j; k++) {
+      const d = Math.abs(v[i] + (v[j] - v[i]) * (ts[k] - ts[i]) / (ts[j] - ts[i]) - v[k]);
+      if (d > worst) { worst = d; at = k; }
+    }
+    if (at >= 0) { keep[at] = 1; todo.push([i, at], [at, j]); }
+  }
+  return keep;
 }
 function loopKeys(a, prop, period, [v0, v1]) {
   const n = Math.max(1, Math.round(S.dur / period)), half = S.dur / n / 2;
@@ -1154,7 +1218,7 @@ function applyPreset(L, name) {
   if (msg) return status(msg);
   sel = L.id; time = end; refresh();
   if (Object.keys(PRESETS.Music).includes(name)) return status(L.react?.length ? `${L.name} follows the music: press play` : `${L.name} no longer follows the music`);
-  status(Object.keys(PRESETS.Physics).includes(name) ? `${L.name}: ${name.toLowerCase()}${L.p.phys === 'falls' ? `, from ${(+L.p.physAt).toFixed(2)}s. Press play` : ''}` : `${name} added to ${L.name}`);
+  status(name === 'Make it solid' || name === 'No physics' ? `${L.name}: ${name.toLowerCase()}` : `${name} added to ${L.name}`);
 }
 function presetMeta(fn, L) {
   const D = L || { type: 'rect', p: { ...DEFAULTS, fill: PALETTE[0] }, keys: {} }; let m = 0, loopy = false;
@@ -2767,6 +2831,7 @@ function layerItems(L) {
       { label: 'Send backward', act: () => arrange(L, 'down') }, { label: 'Send to back', act: () => arrange(L, 'back') }] },
     '-',
     { label: 'Key all properties', icon: ICON.key, kbd: 'K', act: () => { for (const p of PROPS[L.type]) if (ANIM.includes(p)) setKey(L, p, time, val(L, p, time)); refresh(); status('Keyed every property at ' + fmtTime(time)); } },
+    ...(L.p.phys === 'falls' ? [{ label: 'Bake physics to keyframes', act: () => { const n = bakePhysics(L); refresh(); status(n ? `${L.name}'s fall is keyframes now` : `${L.name} doesn't move: nothing to bake`); } }] : []),
     ...(L.type === 'shape3d' || L.type === 'model' ? [{ label: 'Export as 3D model…', icon: ICON.model, act: () => exportModelFile(L) }] : []),
     { label: 'Split at playhead', icon: ICON.blade, kbd: '⌘K', disabled: !(time > lin(L) && time < lout(L)), act: splitLayer },
     { label: 'Start here', kbd: '[', act: () => { L.in = Math.min(time, lout(L) - 1 / FPS); refresh(); } },

@@ -46,7 +46,7 @@ function curveSVG(name, w = 34, h = 22) {
 // ---------- model ----------
 const ANIM = ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'radius', 'fill', 'fill2', 'mid1', 'mid2', 'mid3', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth',
   'blur', 'shadow', 'rgb', 'size', 'reveal', 'sweep', 'spacing', 'bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert',
-  'rotX', 'rotY', 'z', 'd', 'lightAngle', 'orbit', 'tilt', 'dolly', 'zoom', ...Figure.JOINTS, 'side', 'limb', 'caps'];
+  'rotX', 'rotY', 'z', 'd', 'lightAngle', 'orbit', 'tilt', 'dolly', 'zoom', ...Figure.JOINTS, 'side', 'limb', 'caps', 'lineh'];
 const ADJUST = ['bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert'];
 const COMMON = ['x', 'y', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'blur', 'shadow', 'rgb', ...ADJUST];
 // turned on X and Y and pushed back in depth: any layer with 3D on, and the 3D layers themselves
@@ -61,7 +61,7 @@ const PROPS = {
   polygon: [...FLAT, 'w', 'h', 'points', 'radius', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
   arc:     [...FLAT, 'w', 'h', 'sweep', 'stroke', 'strokeWidth', ...PHYS],
   wave:    [...FLAT, 'w', 'h', 'reveal', 'stroke', 'strokeWidth', ...PHYS],
-  text:    [...FLAT, 'text', 'size', 'weight', 'spacing', 'reveal', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
+  text:    [...FLAT, 'text', 'font', 'size', 'weight', 'italic', 'align', 'tcase', 'lineh', 'spacing', 'reveal', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
   image:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...PHYS],
   video:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...PHYS],
   shape3d: [...COMMON, ...DEPTH, 'w', 'h', 'd', 'shape', 'text', 'radius', 'fill', 'material', 'lightAngle'],
@@ -72,11 +72,12 @@ const PROPS = {
 const GROUPS = [['Transform', ['x', 'y', 'w', 'h', 'd', 'rotation', 'scale', 'sx', 'sy']],
   ['3D', ['three', 'shape', 'rotX', 'rotY', 'z', 'material', 'lightAngle']], ['Camera', ['orbit', 'tilt', 'dolly', 'zoom']],
   ['Style', ['fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', 'radius', 'points', 'sweep', 'opacity']],
-  ['Text', ['text', 'size', 'weight', 'spacing', 'reveal']], ['Pose', ['side', 'limb', 'caps', ...Figure.JOINTS]], ['Physics', PHYS],
+  ['Text', ['text', 'font', 'weight', 'size', 'lineh', 'italic', 'align', 'tcase', 'spacing', 'reveal']], ['Pose', ['side', 'limb', 'caps', ...Figure.JOINTS]], ['Physics', PHYS],
   ['Effects', ['blur', 'shadow', 'rgb']], ['Adjust', ADJUST]];
 const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', scale: 'Scale', sx: 'Stretch X', sy: 'Stretch Y',
   opacity: 'Opacity', radius: 'Corners', fill: 'Fill', grad: 'Gradient', fill2: 'Fill 2', mid1: 'Via', mid2: 'Via 2', mid3: 'Via 3', gradAngle: 'Angle°', gradMorph: 'To radial %', stroke: 'Stroke', strokeWidth: 'Stroke W', blur: 'Blur', shadow: 'Shadow', rgb: 'RGB split',
   size: 'Font size', text: 'Text', points: 'Points', weight: 'Weight', reveal: 'Reveal', sweep: 'Sweep°', spacing: 'Tracking',
+  font: 'Font', italic: 'Italic', align: 'Align', tcase: 'Case', lineh: 'Leading',
   bright: 'Brightness', contrast: 'Contrast', sat: 'Saturation', hue: 'Hue°', gray: 'Grayscale', sepia: 'Sepia', invert: 'Invert',
   three: '3D layer', shape: 'Shape', rotX: 'Rotate X', rotY: 'Rotate Y', z: 'Depth', d: 'Thickness', material: 'Material', lightAngle: 'Light°',
   orbit: 'Orbit°', tilt: 'Tilt°', dolly: 'Dolly', zoom: 'Zoom', ...Figure.LABELS,
@@ -87,7 +88,7 @@ const CAMERA_LABEL = { x: 'Look at X', y: 'Look at Y', rotation: 'Roll°' };
 const STEP = { gradMorph: 1, opacity: .05, scale: .05, sx: .05, sy: .05, reveal: .05, zoom: .05 };
 const PALETTE = ['#7c5cff', '#ff5c8a', '#20c997', '#ffb020', '#3fa9ff', '#ff7a45'];
 const DEFAULTS = { rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0, rgb: 0,
-  size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, sweep: 270, points: 5, w: 300, h: 300,
+  size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, font: 'Inter', italic: false, align: 'center', tcase: 'none', lineh: 110, sweep: 270, points: 5, w: 300, h: 300,
   bright: 100, contrast: 100, sat: 100, hue: 0, gray: 0, sepia: 0, invert: 0, grad: 'none', gradAngle: 90, gradMorph: 0, mid1: '', mid2: '', mid3: '',
   three: false, rotX: 0, rotY: 0, z: 0, d: 300, shape: 'cube', material: 'glossy', lightAngle: -45, orbit: 0, tilt: 0, dolly: 0, zoom: 1,
   phys: 'none', bounce: 40, friction: 30, mass: 1, vx: 0, vy: 0, spin: 0, physAt: 0, side: 0, limb: 100, caps: 100,
@@ -212,7 +213,6 @@ const keyTimes = L => [...new Set(Object.values(L.keys).flat().map(k => Math.rou
 const keysAt = (L, t) => Object.values(L.keys).flat().filter(k => near(k.t, t));
 
 // ---------- rendering ----------
-const FONT = '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 function keyState(L, t) { const o = { ...L.p }; for (const k of ANIM) if (L.keys[k]?.length) o[k] = val(L, k, t);
   for (const k of COLORS) if (isVar(o[k])) o[k] = resolveColor(o[k]); return o; }
 // what a layer is at time t: its keyframes, then what the physics did to it
@@ -241,8 +241,18 @@ function shapePath(c, L, o) {
     c.bezierCurveTo(X(21.8), Y(13.5), X(23.2), Y(13.5), X(26), Y(18.5));
   }
 }
-function textOf(o) { const s = String(o.text); return s.slice(0, Math.round(s.length * Math.max(0, Math.min(1, o.reveal)))); }
-function setFont(c, o) { c.font = `${o.weight} ${o.size}px ${FONT}`; if ('letterSpacing' in c) c.letterSpacing = o.spacing + 'px'; }
+// a text layer's words as shown: in capitals, small letters or title case when asked for
+function caseText(o) {
+  const s = String(o.text);
+  if (o.tcase === 'upper') return s.toUpperCase();
+  if (o.tcase === 'lower') return s.toLowerCase();
+  if (o.tcase === 'title') return s.toLowerCase().replace(/(^|[\s\-"'(])(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
+  return s;
+}
+function textOf(o) { const s = caseText(o); return s.slice(0, Math.round(s.length * Math.max(0, Math.min(1, o.reveal)))); }
+// its font, asked for from the library the first time (the text redraws when it arrives)
+function setFont(c, o) { Fonts.ensure(o.font, o.weight, o.italic); c.font = Fonts.css(o); if ('letterSpacing' in c) c.letterSpacing = o.spacing + 'px'; }
+const lineH = o => o.size * (o.lineh ?? 110) / 100;
 function drawLayer(c, L, t) {
   if (L.type === 'camera') return;
   const o = state(L, t);
@@ -272,11 +282,14 @@ function drawContent(c, L, o, t) {
   c.fillStyle = o.fill; c.strokeStyle = o.stroke; c.lineWidth = o.strokeWidth; c.lineJoin = 'round'; c.lineCap = 'round';
   if (L.type === 'text') {
     setFont(c, o); c.textAlign = 'left'; c.textBaseline = 'middle';
-    const full = String(o.text).split('\n'), shown = textOf(o).split('\n'), lh = o.size * 1.1, y0 = -(full.length - 1) * lh / 2;
-    c.fillStyle = fillOf(c, o, Math.max(10, ...full.map(s => c.measureText(s).width)), lh * full.length);
-    // each line is anchored where its full text sits, so a typewriter reveal does not shift it
+    const full = caseText(o).split('\n'), shown = textOf(o).split('\n'), lh = lineH(o), y0 = -(full.length - 1) * lh / 2;
+    const widest = Math.max(10, ...full.map(s => c.measureText(s).width));
+    c.fillStyle = fillOf(c, o, widest, lh * full.length);
+    // each line is anchored where its full text sits, so a typewriter reveal does not shift it; lines line up
+    // on the left, the middle or the right of the block
     shown.forEach((ln, i) => {
-      const x = -c.measureText(full[i] || '').width / 2;
+      const w = c.measureText(full[i] || '').width;
+      const x = o.align === 'left' ? -widest / 2 : o.align === 'right' ? widest / 2 - w : -w / 2;
       if (o.strokeWidth > 0) c.strokeText(ln, x, y0 + i * lh);
       c.fillText(ln, x, y0 + i * lh);
     });
@@ -306,8 +319,8 @@ function placeholder3d(c, L, o) {
 function bounds(L, t) {
   const o = state(L, t);
   if (L.type === 'camera') return { o, w: 0, h: 0 };
-  if (L.type === 'text') { setFont(ctx, o); const ls = String(o.text).split('\n');
-    return { o, w: Math.max(10, ...ls.map(s => ctx.measureText(s).width)), h: o.size * 1.1 * ls.length }; }
+  if (L.type === 'text') { setFont(ctx, o); const ls = caseText(o).split('\n');
+    return { o, w: Math.max(10, ...ls.map(s => ctx.measureText(s).width)), h: lineH(o) * ls.length }; }
   return { o, w: Math.abs(o.w) + (L.type === 'arc' || L.type === 'wave' ? o.strokeWidth : 0), h: Math.abs(o.h) + (L.type === 'arc' || L.type === 'wave' ? o.strokeWidth : 0) };
 }
 function renderScene(c, t, scale = 1) {
@@ -632,7 +645,8 @@ function editText(L) {
     const r = cv.getBoundingClientRect(), k = r.width / S.w, o = state(L, time), { w, h } = bounds(L, time);
     const s = o.scale * k;
     ta.style.cssText = `left:${r.left + o.x * k}px;top:${r.top + o.y * k}px;width:${w * s * Math.abs(o.sx) + 40}px;height:${h * s * Math.abs(o.sy) + 16}px;` +
-      `font:${o.weight} ${o.size * s}px/${1.1} ${FONT};letter-spacing:${o.spacing * s}px;` +
+      `font:${Fonts.css(o, o.size * s)};line-height:${(o.lineh ?? 110) / 100};text-align:${o.align || 'center'};` +
+      `text-transform:${{ upper: 'uppercase', lower: 'lowercase', title: 'capitalize' }[o.tcase] || 'none'};letter-spacing:${o.spacing * s}px;` +
       `transform:translate(-50%,-50%) rotate(${o.rotation}deg) scale(${o.sx},${o.sy})`;
   };
   place(); render(); ta.focus(); ta.select();
@@ -789,6 +803,20 @@ function removeLayer() { const ls = selLayers(); if (!ls.length) return; S.layer
   status(ls.length > 1 ? `Deleted ${ls.length} layers` : 'Deleted ' + ls[0].name); }
 
 // ---------- properties panel ----------
+const TEXT_ALIGNS = [['left', 'Left'], ['center', 'Centre'], ['right', 'Right']];
+const TEXT_CASES = [['none', 'As typed'], ['upper', 'UPPERCASE'], ['lower', 'lowercase'], ['title', 'Title Case']];
+// A font file the user adds (.ttf, .otf, .woff, .woff2): kept in the project, and given to the selected text.
+const fontPicker = Object.assign(document.createElement('input'), { type: 'file', accept: '.ttf,.otf,.woff,.woff2' });
+fontPicker.onchange = async () => {
+  const f = fontPicker.files[0]; fontPicker.value = ''; if (!f) return;
+  try {
+    const added = await Fonts.addFile(f);
+    S.fonts = [...(S.fonts || []).filter(x => x.name !== added.name), added];
+    const L = cur(); if (L?.type === 'text') L.p.font = added.name;
+    refresh(); status(`Added the font ${added.name}`);
+  } catch (e) { UI.alert('Could not add ' + f.name, 'It is not a font this browser can read.'); }
+};
+Fonts.onLoad(() => render());
 const WEIGHTS = [[300, 'Light'], [400, 'Regular'], [500, 'Medium'], [600, 'Semibold'], [700, 'Bold'], [800, 'Extra bold'], [900, 'Black']];
 const BLENDS = [['source-over', 'Normal'], ['multiply', 'Multiply'], ['screen', 'Screen'], ['overlay', 'Overlay'], ['darken', 'Darken'], ['lighten', 'Lighten'],
   ['color-dodge', 'Color dodge'], ['color-burn', 'Color burn'], ['hard-light', 'Hard light'], ['soft-light', 'Soft light'], ['difference', 'Difference'],
@@ -860,13 +888,17 @@ function renderProps() {
           field = `<button class="swatch${linked ? ' linked' : ''}" data-color="${k}"><i style="background:${v}"></i><span>${linked ? '--' + linked : v.toUpperCase()}</span></button>`; }
         else if (k === 'text') field = `<textarea data-p="text" rows="2" spellcheck="false">${esc(v)}</textarea>`;
         else if (k === 'weight') field = `<button class="selectbtn" data-menu="weight"><span>${WEIGHTS.find(w => w[0] == v)?.[1] || v}</span>${ICON.chev}</button>`;
+        else if (k === 'font') field = `<button class="selectbtn" data-menu="font"><span style="font-family:${esc(Fonts.stack(v))}">${esc(v || 'Inter')}</span>${ICON.chev}</button>`;
+        else if (k === 'italic') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="italic"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
+        else if (k === 'align') field = `<button class="selectbtn" data-menu="align"><span>${(TEXT_ALIGNS.find(a => a[0] === v) || TEXT_ALIGNS[1])[1]}</span>${ICON.chev}</button>`;
+        else if (k === 'tcase') field = `<button class="selectbtn" data-menu="tcase"><span>${(TEXT_CASES.find(a => a[0] === v) || TEXT_CASES[0])[1]}</span>${ICON.chev}</button>`;
         else if (k === 'three') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="three" title="${v ? 'Make it flat again' : 'Turn it in 3D, push it back, and let a camera move around it'}"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
         else if (k === 'shape') field = `<button class="selectbtn" data-menu="shape"><span>${R3D.SHAPES.find(x => x[0] === v)?.[1] || v}</span>${ICON.chev}</button>`;
         else if (k === 'material') field = `<button class="selectbtn" data-menu="material"><span>${R3D.MATERIALS.find(x => x[0] === v)?.[1] || v}</span>${ICON.chev}</button>`;
         else if (k === 'phys') field = `<button class="selectbtn" data-menu="phys"><span>${(Physics.KINDS.find(x => x[0] === (v || 'none')) || Physics.KINDS[0])[1]}</span>${ICON.chev}</button>`;
         else if (k === 'walls') field = `<button class="selectbtn" data-menu="walls"><span>${(Physics.WALLS.find(x => x[0] === v) || Physics.WALLS[0])[1]}</span>${ICON.chev}</button>`;
         else field = `<input data-p="${k}" value="${fmt(v)}" inputmode="decimal" spellcheck="false"${isFixed ? ' disabled' : ''}>`;
-        const wide = ['fill', 'fill2', ...MIDS, 'grad', 'stroke', 'text', 'weight', 'three', 'shape', 'material', 'phys', 'walls'].includes(k) ? ' wide' : '';
+        const wide = ['fill', 'fill2', ...MIDS, 'grad', 'stroke', 'text', 'weight', 'font', 'italic', 'three', 'shape', 'material', 'phys', 'walls'].includes(k) ? ' wide' : '';
         // Keeping the proportions means nothing once either side is locked.
         const lock = k === 'w' && list.includes('h') && !L.fix?.w && !L.fix?.h ? `<button class="ib aspect ${aspectLocked(L) ? 'on' : ''}" data-cmd="aspect" title="${aspectLocked(L) ? 'Aspect ratio locked: click to unlock' : 'Lock aspect ratio'}">${aspectLocked(L) ? ICON.link : ICON.unlink}</button>` : '';
         const drop = MIDS.includes(k) ? `<button class="ib" data-cmd="delstop" data-k="${k}" title="Take this colour out of the gradient">${ICON.trash}</button>` : '';
@@ -931,6 +963,7 @@ Pn.addEventListener('click', e => {
   else if (t.dataset.cmd === 'del') removeLayer();
   else if (t.dataset.cmd === 'flipx' || t.dataset.cmd === 'flipy') { const k = t.dataset.cmd === 'flipx' ? 'sx' : 'sy'; setProp(L, k, -state(L, time)[k]); refresh(); }
   else if (t.dataset.cmd === 'fitcanvas') fitCanvasToImage(L);
+  else if (t.dataset.cmd === 'italic') { L.p.italic = !L.p.italic; refresh(); }
   else if (t.dataset.cmd === 'three') { L.p.three = !L.p.three; refresh(); status(L.p.three ? `${L.name} is 3D: turn it with Rotate X and Y, push it back with Depth` : `${L.name} is flat again`); }
   else if (t.dataset.menu === 'shape')
     UI.menu(t, R3D.SHAPES.map(([value, label]) => ({ value, label })), L.p.shape, v => { L.p.shape = v; if (v === 'text') R3D.loadFont(); refresh(); });
@@ -972,6 +1005,18 @@ Pn.addEventListener('click', e => {
       }
       L.p.gradAngle ??= 90; L.p.grad = v; refresh(); status(v === 'none' ? 'Solid fill' : `${v[0].toUpperCase() + v.slice(1)} gradient`);
     });
+  else if (t.dataset.menu === 'font') {
+    // the library's names, each in itself, then the menu: the project's own fonts first, and a way to add one
+    Fonts.preview();
+    UI.menu(t, [...Fonts.items(S.fonts || []), { value: '__add', label: 'Add a font file…', group: 'More' }], L.p.font || 'Inter', v => {
+      if (v === '__add') return fontPicker.click();
+      L.p.font = v; Fonts.ensure(v, L.p.weight, L.p.italic); refresh(); status(`${L.name}: ${v}`);
+    }, it => it.value === '__add' ? '' : `<b style="font-family:${esc(Fonts.previewStack(it.value))};width:26px;font-weight:600">Aa</b>`);
+  }
+  else if (t.dataset.menu === 'align')
+    UI.menu(t, TEXT_ALIGNS.map(([v, l]) => ({ value: v, label: l })), L.p.align || 'center', v => { L.p.align = v; refresh(); });
+  else if (t.dataset.menu === 'tcase')
+    UI.menu(t, TEXT_CASES.map(([v, l]) => ({ value: v, label: l })), L.p.tcase || 'none', v => { L.p.tcase = v; refresh(); });
   else if (t.dataset.menu === 'weight')
     UI.menu(t, WEIGHTS.map(([v, l]) => ({ value: v, label: l, hint: v })), L.p.weight, v => { L.p.weight = v; refresh(); },
       it => `<b style="font-weight:${it.value};width:22px">Aa</b>`);
@@ -1984,7 +2029,7 @@ function loadText(text, name, handle = null) {
     const src = a.src; delete a.src;
     fetch(src).then(r => r.blob()).then(b => { VBLOB[id] = b; VURL[id] = URL.createObjectURL(b); assetSig = ''; refresh(true, false); });
   }
-  adoptAudio(p); selClip = null;
+  adoptAudio(p); selClip = null; Fonts.adopt(p.fonts);
   S = { dur: 5, bg: '#0b1026', ...p }; projectName = name.replace(/\.(rip|wob)$/i, ''); fileHandle = handle;
   uid = Math.max(0, ...S.layers.map(l => l.id)) + 1; sel = null; selKey = null; selKeys = []; time = 0;
   refresh(true, false); resetHistory(); setDirty(false); setMode(S.mode || 'video'); status('Opened ' + name);
@@ -2099,6 +2144,7 @@ $('#export').onclick = async () => {
   btn.disabled = true; btn.classList.add('busy'); sel = null;
   try {
     if (typeof Reactive !== 'undefined') { lab.textContent = 'Listening to the music…'; await Reactive.ready(); }
+    lab.textContent = 'Loading fonts…'; await Fonts.ready(S.layers);
     const { id } = await (await api('/api/export', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fps: o.fps, format: o.format, quality: o.quality }) })).json();
     for (let f = 0; f < frames; f++) {
@@ -2125,7 +2171,7 @@ $('#export').onclick = async () => {
 async function exportStill(o) {
   const W = Math.max(1, Math.round(S.w * o.scale)), H = Math.max(1, Math.round(S.h * o.scale));
   const oc = document.createElement('canvas'); oc.width = W; oc.height = H;
-  await seekVideos(time); renderScene(oc.getContext('2d'), time, W / S.w);
+  await Fonts.ready(S.layers); await seekVideos(time); renderScene(oc.getContext('2d'), time, W / S.w);
   const blob = await new Promise(r => oc.toBlob(r, 'image/' + o.img, o.q));
   if (!blob) return UI.alert('Export failed', `This browser cannot encode ${o.img.toUpperCase()}.`);
   const ext = o.img === 'jpeg' ? 'jpg' : o.img;

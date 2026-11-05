@@ -13,6 +13,7 @@ A browser motion-graphics and image editor with a small Flask backend for video 
 ## Video mode
 - Layers: rectangle, ellipse, polygon, star, arc, text, image; move, resize, snap to centre, hide/lock, reorder, duplicate, copy/paste
 - Keyframe any property with 23 easing curves; edit text in place on the canvas
+- Fonts: the system's own, a library of 55 web fonts (sans, serif, display, script and monospace, each previewed in itself in the Font menu and fetched only when used), or your own .ttf, .otf, .woff or .woff2 file, saved inside the project. Text also takes italic, alignment (left, centre, right), case (as typed, UPPERCASE, lowercase, Title Case) and leading (line height, keyframeable); exports wait for every font to load
 - Timeline: zoom (Ctrl/Cmd + wheel, slider, Fit), expandable per-property keyframe rows, layer in/out trim bars, slide layers in time, split at playhead (Cmd+K), markers (M), snapping to playhead/markers/keys/edits (hold Shift to bypass)
 - Blend modes, colour adjustments (brightness, contrast, saturation, hue, grayscale, sepia, invert) and blur/shadow, all keyframeable
 - 44 animation presets: click to apply at the playhead or drag onto a layer in the viewer or timeline

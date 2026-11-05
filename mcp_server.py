@@ -107,6 +107,9 @@ async def add_layer(type: Literal["rect", "ellipse", "polygon", "star", "arc", "
               props: dict | None = None, start: float | None = None, end: float | None = None) -> dict:
     """Add a layer on top. `props` are initial values, e.g. {"x": 540, "y": 300, "w": 400, "h": 120, "fill": "#ff5a36", "radius": 20}
     or for text {"text": "Hello", "size": 96, "weight": 800, "fill": "#111111"}. `start`/`end` limit when it is visible (seconds).
+    Text also takes "font" (a font's name: Inter, Arial, Georgia, or a library font such as Montserrat, Bebas Neue, Playfair
+    Display, Pacifico, JetBrains Mono, fetched when used), "italic" (true/false), "align" ("left" | "center" | "right"),
+    "tcase" ("none" | "upper" | "lower" | "title") and "lineh" (line height, % of the size, 110 by default).
 
     3D: "shape3d" is a lit solid, {"shape": "cube" | "sphere" | "cylinder" | "cone" | "torus" | "text", "w": 300, "h": 300,
     "d": 300 (thickness), "rotX": -20, "rotY": 30, "material": "matte" | "glossy" | "metal", "fill": "#4c8dff",

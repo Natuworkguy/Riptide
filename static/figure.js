@@ -8,7 +8,7 @@
 const Figure = (() => {
   const JOINTS = ['neck', 'spine', 'shoulderL', 'elbowL', 'shoulderR', 'elbowR', 'hipL', 'kneeL', 'hipR', 'kneeR'];
   const LABELS = { neck: 'Neck°', spine: 'Spine°', shoulderL: 'L shoulder°', elbowL: 'L elbow°', shoulderR: 'R shoulder°', elbowR: 'R elbow°',
-    hipL: 'L hip°', kneeL: 'L knee°', hipR: 'R hip°', kneeR: 'R knee°', side: 'Side view %', limb: 'Limb width %' };
+    hipL: 'L hip°', kneeL: 'L knee°', hipR: 'R hip°', kneeR: 'R knee°', side: 'Side view %', limb: 'Limb width %', caps: 'Joint caps %' };
   // lengths in units of u, an eighth and a bit of the height
   const U = 8.4, TORSO = 3, NECK_UP = .75, HEAD_R = .62, UPPER_ARM = 1.45, FOREARM = 1.35, THIGH = 1.95, SHIN = 1.95, PELVIS_Y = .15;
   const R = d => d * Math.PI / 180;
@@ -85,10 +85,14 @@ const Figure = (() => {
     c.beginPath(); c.ellipse(J.head[0], J.head[1], HEAD_R * u * (1 - side * .08), HEAD_R * u * 1.12, R(sp + (o.neck || 0)), 0, Math.PI * 2);
     c.fillStyle = base; c.fill(); if (outline) { c.lineWidth = o.strokeWidth; c.strokeStyle = o.stroke; c.stroke(); }
     leg('R', base); arm('R', base);
-    // joints, a little lighter
-    c.fillStyle = light;
-    for (const k of ['elbowL', 'elbowR', 'kneeL', 'kneeR', 'shoulderL', 'shoulderR', 'hipL', 'hipR']) {
-      const p = J[k]; c.beginPath(); c.arc(p[0], p[1], thick * (k.startsWith('shoulder') || k.startsWith('hip') ? .52 : .42), 0, Math.PI * 2); c.fill();
+    // joints, a little lighter, as strong as Joint caps says: 0 hides them
+    const caps = Math.max(0, Math.min(100, o.caps ?? 100)) / 100;
+    if (caps > 0) {
+      const alpha = c.globalAlpha; c.globalAlpha = alpha * caps; c.fillStyle = light;
+      for (const k of ['elbowL', 'elbowR', 'kneeL', 'kneeR', 'shoulderL', 'shoulderR', 'hipL', 'hipR']) {
+        const p = J[k]; c.beginPath(); c.arc(p[0], p[1], thick * (k.startsWith('shoulder') || k.startsWith('hip') ? .52 : .42), 0, Math.PI * 2); c.fill();
+      }
+      c.globalAlpha = alpha;
     }
     for (const k of ['handL', 'handR']) { const p = J[k]; c.beginPath(); c.arc(p[0], p[1], thick * .55, 0, Math.PI * 2); c.fillStyle = k === 'handL' ? back : base; c.fill(); }
   }

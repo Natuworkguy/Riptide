@@ -46,7 +46,7 @@ function curveSVG(name, w = 34, h = 22) {
 // ---------- model ----------
 const ANIM = ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'radius', 'fill', 'fill2', 'mid1', 'mid2', 'mid3', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth',
   'blur', 'shadow', 'rgb', 'size', 'reveal', 'sweep', 'spacing', 'bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert',
-  'rotX', 'rotY', 'z', 'd', 'lightAngle', 'orbit', 'tilt', 'dolly', 'zoom', ...Figure.JOINTS, 'side', 'limb'];
+  'rotX', 'rotY', 'z', 'd', 'lightAngle', 'orbit', 'tilt', 'dolly', 'zoom', ...Figure.JOINTS, 'side', 'limb', 'caps'];
 const ADJUST = ['bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert'];
 const COMMON = ['x', 'y', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'blur', 'shadow', 'rgb', ...ADJUST];
 // turned on X and Y and pushed back in depth: any layer with 3D on, and the 3D layers themselves
@@ -66,13 +66,13 @@ const PROPS = {
   video:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...PHYS],
   shape3d: [...COMMON, ...DEPTH, 'w', 'h', 'd', 'shape', 'text', 'radius', 'fill', 'material', 'lightAngle'],
   model:   [...COMMON, ...DEPTH, 'w', 'h', 'lightAngle'],
-  figure:  [...COMMON, 'w', 'h', 'fill', 'stroke', 'strokeWidth', 'side', 'limb', ...Figure.JOINTS, ...PHYS],
+  figure:  [...COMMON, 'w', 'h', 'fill', 'stroke', 'strokeWidth', 'side', 'limb', 'caps', ...Figure.JOINTS, ...PHYS],
   camera:  ['x', 'y', 'orbit', 'tilt', 'dolly', 'zoom', 'rotation'],
 };
 const GROUPS = [['Transform', ['x', 'y', 'w', 'h', 'd', 'rotation', 'scale', 'sx', 'sy']],
   ['3D', ['three', 'shape', 'rotX', 'rotY', 'z', 'material', 'lightAngle']], ['Camera', ['orbit', 'tilt', 'dolly', 'zoom']],
   ['Style', ['fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', 'radius', 'points', 'sweep', 'opacity']],
-  ['Text', ['text', 'size', 'weight', 'spacing', 'reveal']], ['Pose', ['side', 'limb', ...Figure.JOINTS]], ['Physics', PHYS],
+  ['Text', ['text', 'size', 'weight', 'spacing', 'reveal']], ['Pose', ['side', 'limb', 'caps', ...Figure.JOINTS]], ['Physics', PHYS],
   ['Effects', ['blur', 'shadow', 'rgb']], ['Adjust', ADJUST]];
 const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', scale: 'Scale', sx: 'Stretch X', sy: 'Stretch Y',
   opacity: 'Opacity', radius: 'Corners', fill: 'Fill', grad: 'Gradient', fill2: 'Fill 2', mid1: 'Via', mid2: 'Via 2', mid3: 'Via 3', gradAngle: 'Angle°', gradMorph: 'To radial %', stroke: 'Stroke', strokeWidth: 'Stroke W', blur: 'Blur', shadow: 'Shadow', rgb: 'RGB split',
@@ -90,7 +90,7 @@ const DEFAULTS = { rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, 
   size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, sweep: 270, points: 5, w: 300, h: 300,
   bright: 100, contrast: 100, sat: 100, hue: 0, gray: 0, sepia: 0, invert: 0, grad: 'none', gradAngle: 90, gradMorph: 0, mid1: '', mid2: '', mid3: '',
   three: false, rotX: 0, rotY: 0, z: 0, d: 300, shape: 'cube', material: 'glossy', lightAngle: -45, orbit: 0, tilt: 0, dolly: 0, zoom: 1,
-  phys: 'none', bounce: 40, friction: 30, mass: 1, vx: 0, vy: 0, spin: 0, physAt: 0, side: 0, limb: 100,
+  phys: 'none', bounce: 40, friction: 30, mass: 1, vx: 0, vy: 0, spin: 0, physAt: 0, side: 0, limb: 100, caps: 100,
   ...Object.fromEntries(Figure.JOINTS.map(j => [j, 0])) };
 // the scene's own physics settings, kept on S
 const SCENE_DEFAULTS = { gravity: 1800, walls: 'floor', drag: 1 };

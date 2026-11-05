@@ -228,7 +228,7 @@ canvas#c{display:block;max-width:100%;max-height:100%;box-shadow:0 0 0 1px #2e2e
 .switch.on{color:var(--text)}.switch.on i{background:var(--accent)}.switch.on i::after{transform:translateX(10px);background:#fff}
 
 /* popovers, menus, colour picker */
-.pop{position:fixed;z-index:100;background:#252525;border:1px solid #3a3a3a;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.pop{position:fixed;z-index:250;background:#252525;border:1px solid #3a3a3a;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
 .pop.out{display:none}
 .menu{padding:4px;max-height:min(420px,70vh);overflow:auto;min-width:200px}
 .mgroup{font-size:10px;font-weight:600;color:var(--faint);padding:8px 8px 3px;text-transform:uppercase;letter-spacing:.06em}

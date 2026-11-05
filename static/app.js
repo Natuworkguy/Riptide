@@ -421,17 +421,24 @@ function bounds(L, t) {
     return { o, w: Math.max(10, ...ls.map(s => ctx.measureText(s).width)), h: lineH(o) * ls.length }; }
   return { o, w: Math.abs(o.w) + (L.type === 'arc' || L.type === 'wave' ? o.strokeWidth : 0), h: Math.abs(o.h) + (L.type === 'arc' || L.type === 'wave' ? o.strokeWidth : 0) };
 }
-function renderScene(c, t, scale = 1) {
+// opt: dx, dy place the scene in a frame of another shape (an export's), clipped to it, with black bars around it
+// unless transparent; transparent leaves out the background, for video with an alpha channel
+function renderScene(c, t, scale = 1, opt = {}) {
   Physics.prepare();
-  c.setTransform(scale, 0, 0, scale, 0, 0);
-  c.fillStyle = resolveColor(S.bg); c.fillRect(0, 0, S.w, S.h);
+  const dx = opt.dx || 0, dy = opt.dy || 0;
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  if (opt.frame) { c.clearRect(0, 0, c.canvas.width, c.canvas.height); if (!opt.transparent) { c.fillStyle = '#000'; c.fillRect(0, 0, c.canvas.width, c.canvas.height); } }
+  c.save();
+  if (opt.frame) { c.beginPath(); c.rect(dx, dy, S.w * scale, S.h * scale); c.clip(); }
+  c.setTransform(scale, 0, 0, scale, dx, dy);
+  if (opt.transparent) c.clearRect(0, 0, S.w, S.h); else { c.fillStyle = resolveColor(S.bg); c.fillRect(0, 0, S.w, S.h); }
   S.layers.forEach((L, i) => {
     if (!visibleAt(L, t) || isMatte(i)) return;
     c.save(); c.globalCompositeOperation = L.blend || 'source-over';
     if (finishes(L)) finishLayer(c, L, t, i); else drawLayer(c, L, t);
     c.restore();
   });
-  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.restore(); c.setTransform(1, 0, 0, 1, 0, 0);
 }
 
 // ---------- finishing: masks, mattes, keying, grading ----------
@@ -2753,7 +2760,33 @@ addEventListener('paste', e => {
 // Frames are rendered here at the chosen size and frame rate, then the server encodes them with ffmpeg
 // (MP4/H.264, WebM/VP9, GIF with a generated palette) or zips them (PNG sequence, no ffmpeg needed).
 async function api(path, opts) { const r = await fetch(path, opts); if (!r.ok) throw new Error((await r.text()).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()); return r; }
-let exportOpts = { format: 'mp4', fps: 30, res: 1080, quality: 'high', range: 'all', audio: true };
+let exportOpts = { format: 'mp4', fps: 30, res: 1080, quality: 'high', range: 'all', audio: true, aspect: 'canvas', fit: 'fill', alpha: false, preset: 'custom' };
+// Presets: what a platform or the next program wants, in one pick. A frame of another shape than the canvas is
+// filled (cropped to the middle) or fitted (with bars), as each one says.
+const EXPORT_PRESETS = [
+  ['yt1080', 'YouTube 1080p', { format: 'mp4', fps: 30, res: 1080, quality: 'high', aspect: '16:9', fit: 'fit', alpha: false }],
+  ['yt4k', 'YouTube 4K', { format: 'mp4', fps: 30, res: 2160, quality: 'high', aspect: '16:9', fit: 'fit', alpha: false }],
+  ['vertical', 'Shorts, Reels and TikTok (9:16)', { format: 'mp4', fps: 30, res: 1080, quality: 'high', aspect: '9:16', fit: 'fill', alpha: false }],
+  ['square', 'Instagram square (1:1)', { format: 'mp4', fps: 30, res: 1080, quality: 'high', aspect: '1:1', fit: 'fill', alpha: false }],
+  ['portrait', 'Instagram portrait (4:5)', { format: 'mp4', fps: 30, res: 1080, quality: 'high', aspect: '4:5', fit: 'fill', alpha: false }],
+  ['prores', 'Transparent ProRes 4444 (.mov)', { format: 'mov', fps: 30, res: 0, aspect: 'canvas', alpha: true }],
+  ['webmalpha', 'Transparent WebM', { format: 'webm', fps: 30, res: 0, quality: 'high', aspect: 'canvas', alpha: true }],
+  ['web', 'Web, small (720p WebM)', { format: 'webm', fps: 30, res: 720, quality: 'standard', aspect: 'canvas', alpha: false }],
+  ['gif', 'GIF (480p, 24 fps)', { format: 'gif', fps: 24, res: 480, aspect: 'canvas', alpha: false }],
+];
+const ASPECTS = [['canvas', 'Canvas'], ['16:9', '16:9'], ['9:16', '9:16'], ['1:1', '1:1'], ['4:5', '4:5']];
+// your own presets, in this browser
+const savedPresets = () => { try { return JSON.parse(localStorage.getItem('riptide.exportPresets') || '{}') || {}; } catch (_) { return {}; } };
+const storePresets = v => { try { localStorage.setItem('riptide.exportPresets', JSON.stringify(v)); } catch (_) {} };
+// the frame an export makes: its size, and where the canvas sits in it
+function exportFrame(o) {
+  const ar = o.aspect && o.aspect !== 'canvas' ? (([a, b]) => a / b)(o.aspect.split(':').map(Number)) : S.w / S.h;
+  const short = o.res || Math.min(S.w, S.h), even = v => Math.max(2, Math.round(v / 2) * 2);
+  const W = o.aspect === 'canvas' && !o.res ? even(S.w) : even(ar >= 1 ? short * ar : short), H = o.aspect === 'canvas' && !o.res ? even(S.h) : even(ar >= 1 ? short : short / ar);
+  const k = o.aspect === 'canvas' ? W / S.w : (o.fit === 'fit' ? Math.min : Math.max)(W / S.w, H / S.h);
+  return { W, H, k, opt: { dx: (W - S.w * k) / 2, dy: (H - S.h * k) / 2, frame: true, transparent: !!o.alpha } };
+}
+const alphaOK = (o, still) => still ? o.img !== 'jpeg' : ['webm', 'mov', 'png'].includes(o.format);
 // resolution presets set the short side of the frame (1080p = 1920×1080 landscape, 1080×1920 portrait, 1080×1080 square)
 const RES = [[0, 'Original'], [480, '480p'], [720, '720p'], [1080, '1080p'], [1440, '1440p'], [2160, '4K'], [4320, '8K']];
 const resScale = res => res ? res / Math.min(S.w, S.h) : 1;
@@ -2761,23 +2794,28 @@ function exportDialog() {
   return new Promise(res => {
     const o = { ...exportOpts }, mk = (S.markers || []).slice().sort((a, b) => a.t - b.t);
     const still = () => S.mode === 'image' || o.format === 'still';
-    const fields = () => [S.mode === 'image' ? null : ['format', 'Format', [['mp4', 'MP4'], ['webm', 'WebM'], ['gif', 'GIF'], ['png', 'PNG seq.'], ['still', 'Still']]],
+    const fields = () => [S.mode === 'image' ? null : ['format', 'Format', [['mp4', 'MP4'], ['webm', 'WebM'], ['mov', 'MOV'], ['gif', 'GIF'], ['png', 'PNG seq.'], ['still', 'Still']]],
       still() ? ['img', 'Image type', [['png', 'PNG'], ['jpeg', 'JPEG'], ['webp', 'WebP']]] : null,
       still() && o.img !== 'png' ? ['q', 'Quality', [[.7, 'Low'], [.85, 'Medium'], [.95, 'High'], [1, 'Max']]] : null,
       still() ? null : ['fps', 'Frame rate', [[24, '24'], [25, '25'], [30, '30'], [60, '60']]],
       ['res', 'Resolution', RES],
-      still() || o.format === 'gif' || o.format === 'png' ? null : ['quality', 'Quality', [['draft', 'Draft'], ['standard', 'Standard'], ['high', 'High'], ['max', 'Maximum']]],
+      ['aspect', 'Frame', ASPECTS],
+      o.aspect !== 'canvas' ? ['fit', 'Fit', [['fill', 'Fill (crop)'], ['fit', 'Fit (bars)']]] : null,
+      still() || o.format === 'gif' || o.format === 'png' || o.format === 'mov' ? null : ['quality', 'Quality', [['draft', 'Draft'], ['standard', 'Standard'], ['high', 'High'], ['max', 'Maximum']]],
       still() ? null : ['range', 'Range', [['all', 'Whole timeline'], ['markers', 'Between markers']]]].filter(Boolean);
-    o.img ||= 'png'; o.q ||= .9;
+    o.img ||= 'png'; o.q ||= .9; o.aspect ||= 'canvas'; o.fit ||= 'fill'; o.preset ||= 'custom';
+    const presetName = () => EXPORT_PRESETS.find(p => p[0] === o.preset)?.[1] || (savedPresets()[o.preset] ? o.preset : 'Custom');
     const wrap = document.createElement('div'); wrap.className = 'modal-wrap';
     const draw = () => {
       o.scale = resScale(o.res);
-      const s = Math.round(S.w * o.scale / 2) * 2 + '×' + Math.round(S.h * o.scale / 2) * 2;
-      const big = Math.round(S.w * o.scale) * Math.round(S.h * o.scale) > 9e6;
+      const F = exportFrame(o), s = F.W + '×' + F.H, big = F.W * F.H > 9e6;
       const [a, b] = o.range === 'markers' && mk.length >= 2 ? [mk[0].t, mk.at(-1).t] : [0, S.dur];
-      const canAudio = !still() && hasAudio() && (o.format === 'mp4' || o.format === 'webm'), nt = tracks().filter(T => T.clips.length).length;
-      wrap.innerHTML = `<div class="modal"><h3>${still() ? 'Export image' : 'Export'}</h3><div class="form">${fields().map(([k, l, opts]) => `<div class="ff"><label>${l}</label><div class="seg">${opts.map(([v, t]) =>
+      const canAudio = !still() && hasAudio() && ['mp4', 'webm', 'mov'].includes(o.format), nt = tracks().filter(T => T.clips.length).length;
+      wrap.innerHTML = `<div class="modal"><h3>${still() ? 'Export image' : 'Export'}</h3><div class="form">
+        ${still() ? '' : `<div class="ff"><label>Preset</label><button class="selectbtn" data-presets><span>${esc(presetName())}</span>${ICON.chev}</button></div>`}
+        ${fields().map(([k, l, opts]) => `<div class="ff"><label>${l}</label><div class="seg">${opts.map(([v, t]) =>
         `<button data-k="${k}" data-v="${v}" class="${o[k] == v ? 'on' : ''}" ${k === 'range' && v === 'markers' && mk.length < 2 ? 'disabled title="Add two markers first"' : ''}>${t}</button>`).join('')}</div></div>`).join('')}
+        <div class="ff"><label>Background</label><button class="check ${alphaOK(o, still()) && o.alpha ? 'on' : ''}" data-alpha ${alphaOK(o, still()) ? '' : 'disabled title="MP4, GIF and JPEG cannot be transparent"'}><i></i>Transparent</button></div>
         ${still() ? '' : `<div class="ff"><label>Audio</label><button class="check ${canAudio && o.audio ? 'on' : ''}" data-audio ${canAudio ? '' : 'disabled'}><i></i>${hasAudio() ? `Include audio (${nt} track${nt > 1 ? 's' : ''})` : 'No audio'}</button></div>`}</div>
         <p class="formnote">${still() ? `${s} px · frame at ${fmtTime(time)}` : `${s} px · ${fmtTime(a)} to ${fmtTime(b)} · ${Math.round((b - a) * o.fps)} frames${o.format === 'png' ? ' · zipped' : ''}`}${big ? '<br>Large frames: rendering and uploading will take a while.' : ''}</p>
         <div class="mbtns"><button class="btn" data-c>Cancel</button><button class="btn primary" data-ok>Export</button></div></div>`;
@@ -2786,8 +2824,20 @@ function exportDialog() {
     const close = v => { wrap.remove(); res(v); };
     wrap.addEventListener('click', e => {
       const b = e.target.closest('button'); if (e.target === wrap) return close(null); if (!b) return;
-      if (b.dataset.k) { const v = b.dataset.v; o[b.dataset.k] = isNaN(+v) ? v : +v; draw(); }
+      if (b.dataset.k) { const v = b.dataset.v; o[b.dataset.k] = isNaN(+v) || b.dataset.k === 'aspect' ? v : +v; o.preset = 'custom'; draw(); }
       else if (b.dataset.audio !== undefined) { o.audio = !o.audio; draw(); }
+      else if (b.dataset.alpha !== undefined) { o.alpha = !o.alpha; o.preset = 'custom'; draw(); }
+      else if (b.dataset.presets !== undefined) {
+        const mine = savedPresets();
+        UI.menu(b, [...EXPORT_PRESETS.map(([value, label]) => ({ value, label, group: 'Presets' })), ...Object.keys(mine).map(n => ({ value: n, label: n, group: 'Yours' })),
+          { value: '__save', label: 'Save these settings…', group: 'More' }, ...(Object.keys(mine).length ? [{ value: '__forget', label: 'Remove one of yours…', group: 'More' }] : [])], o.preset, async v => {
+          if (v === '__save') { const n = (await UI.prompt('Name this preset', '', 'Save'))?.trim(); if (!n) return;
+            const { preset, still: _, start, end, scale, ...keep } = o; storePresets({ ...savedPresets(), [n]: keep }); o.preset = n; draw(); return status(`Saved the export preset ${n}`); }
+          if (v === '__forget') { const n = (await UI.prompt('Remove which preset? (its name)', '', 'Remove'))?.trim(); const all = savedPresets();
+            if (n && all[n]) { delete all[n]; storePresets(all); if (o.preset === n) o.preset = 'custom'; draw(); status(`Removed ${n}`); } return; }
+          Object.assign(o, EXPORT_PRESETS.find(p => p[0] === v)?.[2] || mine[v] || {}); o.preset = v; draw();
+        });
+      }
       else if (b.dataset.c !== undefined) close(null);
       else if (b.dataset.ok !== undefined) { exportOpts = o; close({ ...o, still: still(), start: o.range === 'markers' && mk.length >= 2 ? mk[0].t : 0, end: o.range === 'markers' && mk.length >= 2 ? mk.at(-1).t : S.dur }); }
     });
@@ -2801,23 +2851,23 @@ $('#export').onclick = async () => {
   const o = await exportDialog(); if (!o) return;
   if (o.still) return exportStill(o);
   const btn = $('#export'), lab = btn.querySelector('span'), keep = time, sel0 = sel;
-  const W = Math.round(S.w * o.scale / 2) * 2, H = Math.round(S.h * o.scale / 2) * 2;
+  const F = exportFrame(o), { W, H } = F, alpha = !!o.alpha && alphaOK(o, false);
   const oc = document.createElement('canvas'); oc.width = W; oc.height = H; const octx = oc.getContext('2d');
-  const frames = Math.max(1, Math.round((o.end - o.start) * o.fps)), ext = { mp4: 'mp4', webm: 'webm', gif: 'gif', png: 'zip' }[o.format];
+  const frames = Math.max(1, Math.round((o.end - o.start) * o.fps)), ext = { mp4: 'mp4', webm: 'webm', mov: 'mov', gif: 'gif', png: 'zip' }[o.format];
   btn.disabled = true; btn.classList.add('busy'); sel = null;
   try {
     if (typeof Reactive !== 'undefined') { lab.textContent = 'Listening to the music…'; await Reactive.ready(); }
     lab.textContent = 'Loading fonts…'; await Fonts.ready(S.layers);
     const { id } = await (await api('/api/export', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fps: o.fps, format: o.format, quality: o.quality }) })).json();
+      body: JSON.stringify({ fps: o.fps, format: o.format, quality: o.quality, alpha }) })).json();
     for (let f = 0; f < frames; f++) {
-      time = o.start + f / o.fps; await seekVideos(time); renderScene(octx, time, W / S.w);
+      time = o.start + f / o.fps; await seekVideos(time); renderScene(octx, time, F.k, { ...F.opt, transparent: alpha });
       const blob = await new Promise(r => oc.toBlob(r, 'image/png'));
       await api(`/api/export/${id}/frame/${f}`, { method: 'POST', body: blob });
       const p = (f + 1) / frames; btn.style.setProperty('--p', p * 100 + '%'); lab.textContent = `Rendering ${Math.round(p * 100)}%`;
       if (f % 10 === 0) { render(); placeHead(); }
     }
-    if (o.audio && hasAudio() && (o.format === 'mp4' || o.format === 'webm')) {
+    if (o.audio && hasAudio() && ['mp4', 'webm', 'mov'].includes(o.format)) {
       lab.textContent = 'Mixing audio…';
       const wav = await mixAudio(o.start, o.end);               // every track, fades and volumes, mixed in the browser
       if (wav) await api(`/api/export/${id}/audio?offset=0&volume=1`, { method: 'POST', body: wav });
@@ -2825,16 +2875,16 @@ $('#export').onclick = async () => {
     lab.textContent = o.format === 'png' ? 'Packing…' : 'Encoding…';
     const out = await (await api(`/api/export/${id}/finish?duration=${o.end - o.start}`, { method: 'POST' })).blob();
     const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(out), download: `${projectName}.${ext}` }); a.click();
-    status(`Exported ${projectName}.${ext} · ${W}×${H} · ${o.fps} fps · ${(out.size / 1e6).toFixed(1)} MB`);
+    status(`Exported ${projectName}.${ext} · ${W}×${H} · ${o.fps} fps${alpha ? ' · transparent' : ''} · ${(out.size / 1e6).toFixed(1)} MB`);
   } catch (e) { UI.alert('Export failed', e.message); }
   btn.disabled = false; btn.classList.remove('busy'); btn.style.removeProperty('--p'); lab.textContent = 'Export…'; time = keep; sel = sel0; refresh(true, false);
 };
 
 // still image export happens entirely in the browser (no server, no ffmpeg)
 async function exportStill(o) {
-  const W = Math.max(1, Math.round(S.w * o.scale)), H = Math.max(1, Math.round(S.h * o.scale));
+  const F = exportFrame(o), { W, H } = F;
   const oc = document.createElement('canvas'); oc.width = W; oc.height = H;
-  await Fonts.ready(S.layers); await seekVideos(time); renderScene(oc.getContext('2d'), time, W / S.w);
+  await Fonts.ready(S.layers); await seekVideos(time); renderScene(oc.getContext('2d'), time, F.k, { ...F.opt, transparent: !!o.alpha && alphaOK(o, true) });
   const blob = await new Promise(r => oc.toBlob(r, 'image/' + o.img, o.q));
   if (!blob) return UI.alert('Export failed', `This browser cannot encode ${o.img.toUpperCase()}.`);
   const ext = o.img === 'jpeg' ? 'jpg' : o.img;

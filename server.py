@@ -1,7 +1,7 @@
 """Riptide server: serves the editor and turns rendered frames into video.
 
 Projects are .rip files saved by the browser; the server only handles exports:
-MP4 (H.264/AAC), WebM (VP9/Opus) and GIF through ffmpeg, or a zip of PNG frames (no ffmpeg needed).
+MP4 (H.264/AAC), WebM (VP9/Opus), MOV (ProRes) and GIF through ffmpeg, or a zip of PNG frames (no ffmpeg needed).
 """
 import json
 import queue
@@ -29,7 +29,14 @@ QUALITY = {"draft": (28, "veryfast", 42), "standard": (22, "medium", 33), "high"
 FORMATS = {
     "mp4": ("video/mp4", ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart"], ["-c:a", "aac", "-b:a", "192k"]),
     "webm": ("video/webm", ["-c:v", "libvpx-vp9", "-b:v", "0", "-pix_fmt", "yuv420p", "-row-mt", "1"], ["-c:a", "libopus", "-b:a", "160k"]),
+    # ProRes 422 HQ, or 4444 with its alpha when the background is transparent: for handing to another editor
+    "mov": ("video/quicktime", ["-c:v", "prores_ks", "-profile:v", "3", "-pix_fmt", "yuv422p10le", "-vendor", "apl0"], ["-c:a", "pcm_s16le"]),
     "gif": ("image/gif", [], []),
+}
+# a transparent background, kept: WebM's VP9 carries alpha, and MOV switches to ProRes 4444
+ALPHA = {
+    "webm": ["-c:v", "libvpx-vp9", "-b:v", "0", "-pix_fmt", "yuva420p", "-auto-alt-ref", "0", "-row-mt", "1"],
+    "mov": ["-c:v", "prores_ks", "-profile:v", "4", "-pix_fmt", "yuva444p10le", "-alpha_bits", "16", "-vendor", "apl0"],
 }
 
 
@@ -158,7 +165,8 @@ def start_export():
     quality = cfg.get("quality", "high")
     if quality not in QUALITY:
         abort(400, f"Unknown quality {quality!r}")
-    sessions[sid] = {"dir": folder, "fps": max(1, min(int(cfg.get("fps", 30)), 60)), "format": fmt, "quality": quality, "audio": None}
+    sessions[sid] = {"dir": folder, "fps": max(1, min(int(cfg.get("fps", 30)), 60)), "format": fmt, "quality": quality, "audio": None,
+                     "alpha": bool(cfg.get("alpha")) and fmt in ALPHA}
     return jsonify(id=sid)
 
 
@@ -215,6 +223,8 @@ def finish_export(sid):
     if not ffmpeg:
         fail(s, "ffmpeg is not installed. Run: brew install ffmpeg (PNG sequence export works without it)")
     mime, vargs, aargs = FORMATS[fmt]
+    if s.get("alpha"):
+        vargs = ALPHA[fmt]
     out = folder / f"out.{fmt}"
     cmd = [ffmpeg, "-y", "-loglevel", "error", "-framerate", str(fps), "-i", str(folder / "f%05d.png")]
     if fmt == "gif":
@@ -236,7 +246,8 @@ def finish_export(sid):
                 gain += f"*min(1,max(0,({a['end']:.4f}-t)/{a['fadeout']:.4f}))"
             cmd += ["-map", "0:v", "-map", "1:a", "-af", f"volume='{gain}':eval=frame,apad"] + aargs
         crf, preset, vp9 = QUALITY[s["quality"]]
-        vargs = vargs + (["-crf", str(crf), "-preset", preset] if fmt == "mp4" else ["-crf", str(vp9)])
+        # ProRes has its own fixed quality per profile
+        vargs = vargs + (["-crf", str(crf), "-preset", preset] if fmt == "mp4" else ["-crf", str(vp9)] if fmt == "webm" else [])
         cmd += ["-vf", "pad=ceil(iw/2)*2:ceil(ih/2)*2"] + vargs
         if duration > 0:
             cmd += ["-t", f"{duration:.3f}"]

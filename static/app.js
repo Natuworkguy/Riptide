@@ -257,10 +257,46 @@ function textOf(o) { const s = caseText(o); return s.slice(0, Math.round(s.lengt
 // its font, asked for from the library the first time (the text redraws when it arrives)
 function setFont(c, o) { Fonts.ensure(o.font, o.weight, o.italic); c.font = Fonts.css(o); if ('letterSpacing' in c) c.letterSpacing = o.spacing + 'px'; }
 const lineH = o => o.size * (o.lineh ?? 110) / 100;
+// ---------- transitions ----------
+// A layer can come in and go out with a transition: L.tin and L.tout, each { kind, dur, dir }. It plays over the
+// first (or last) `dur` seconds of the layer, so two clips that overlap by that much cross from one to the other.
+const TRANSITIONS = [['fade', 'Crossfade'], ['dipblack', 'Dip to black'], ['dipwhite', 'Dip to white'], ['wipe', 'Wipe'],
+  ['slide', 'Slide'], ['push', 'Push'], ['zoom', 'Zoom'], ['blur', 'Blur'], ['glitch', 'Glitch'], ['spin', 'Spin']];
+const DIRS = [['left', 'From the left'], ['right', 'From the right'], ['up', 'From above'], ['down', 'From below']];
+const TR_DIRECTED = new Set(['wipe', 'slide', 'push']);
+// where a layer is in its transitions at t: { kind, dir, p } with p from 0 (not there) to 1 (all there), or null
+function transitionAt(L, t) {
+  const a = lin(L), b = lout(L);
+  for (const [tr, p] of [[L.tin, (t - a) / (L.tin?.dur || 1)], [L.tout, (b - t) / (L.tout?.dur || 1)]])
+    if (tr?.kind && tr.dur > 0 && p < 1) return { kind: tr.kind, dir: tr.dir || 'left', p: Math.max(0, Math.min(1, p)), out: tr === L.tout };
+  return null;
+}
+const smooth = p => p * p * (3 - 2 * p);
+// what a transition does to a layer's state, before it is drawn
+function shapeTransition(o, tr, L, t) {
+  const p = smooth(tr.p), q = 1 - p, { w, h } = bounds(L, t);
+  const dx = tr.dir === 'left' ? -1 : tr.dir === 'right' ? 1 : 0, dy = tr.dir === 'up' ? -1 : tr.dir === 'down' ? 1 : 0;
+  switch (tr.kind) {
+    case 'fade': o.opacity *= p; break;
+    case 'slide': o.x += dx * S.w * q; o.y += dy * S.h * q; break;
+    case 'push': o.x += dx * S.w * q * (tr.out ? -1 : 1); o.y += dy * S.h * q * (tr.out ? -1 : 1); break;
+    case 'zoom': o.scale *= tr.out ? 1 + q * .6 : .4 + .6 * p; o.opacity *= p; break;
+    case 'blur': o.blur += q * 40; o.opacity *= Math.min(1, p * 1.6); break;
+    case 'spin': o.rotation += q * (tr.out ? 180 : -180); o.scale *= .3 + .7 * p; o.opacity *= p; break;
+    case 'glitch': {
+      // jumps, a split and a flicker, settling as it comes in
+      const n = Math.sin(t * 91.7) * 43758.5453, r = n - Math.floor(n);
+      o.x += (r - .5) * 120 * q; o.rgb += 24 * q; o.opacity *= r < q * .5 ? .25 : 1; break;
+    }
+  }
+  return { wipe: tr.kind === 'wipe' ? { p, dx, dy, w: Math.abs(w), h: Math.abs(h) } : null,
+    dip: tr.kind === 'dipblack' || tr.kind === 'dipwhite' ? { color: tr.kind === 'dipblack' ? '#000' : '#fff', a: q, w: Math.abs(w), h: Math.abs(h) } : null };
+}
 function drawLayer(c, L, t) {
   if (L.type === 'camera') return;
   const o = state(L, t);
   if (L.id === editingId) o.reveal = 1;
+  const tr = transitionAt(L, t), fx = tr ? shapeTransition(o, tr, L, t) : null;
   if (o.opacity <= 0) return;
   c.save();
   c.globalAlpha = Math.min(1, o.opacity);
@@ -276,7 +312,14 @@ function drawLayer(c, L, t) {
     if (o.gray) f.push(`grayscale(${o.gray}%)`); if (o.sepia) f.push(`sepia(${o.sepia}%)`); if (o.invert) f.push(`invert(${o.invert}%)`);
     if (f.length) c.filter = f.join(' '); }
   if (o.shadow > 0) { c.shadowColor = 'rgba(0,0,0,.45)'; c.shadowBlur = o.shadow; c.shadowOffsetY = o.shadow / 3; }
+  // a wipe shows the part of the layer the edge has crossed
+  if (fx?.wipe && !deep) { const { p, dx, dy, w, h } = fx.wipe; c.beginPath();
+    if (dx) c.rect(dx < 0 ? -w / 2 : w / 2 - w * p, -h / 2, w * p, h); else c.rect(-w / 2, dy < 0 ? -h / 2 : h / 2 - h * p, w, h * p);
+    c.clip(); }
   if (deep) R3D.draw(c, L, o, t, drawContent); else drawContent(c, L, o, t);
+  // a dip covers the layer with black or white, all of it at the dip's middle
+  if (fx?.dip && fx.dip.a > 0 && !deep) { c.filter = 'none'; c.shadowColor = 'transparent'; c.globalAlpha = Math.min(1, fx.dip.a * 1.4) * Math.min(1, o.opacity);
+    c.fillStyle = fx.dip.color; c.fillRect(-fx.dip.w / 2, -fx.dip.h / 2, fx.dip.w, fx.dip.h); }
   c.restore();
 }
 // what a layer draws, centred on 0,0 at its own size: the layer, before it is moved, turned or scaled
@@ -1463,6 +1506,7 @@ function renderTracks() {
     }, m => { if (m) refresh(); else { sel = L.id; selKey = null; selKeys = []; refresh(); } }, () => { leaveCopies([L]); renderLayers(); });
     ln.appendChild(bar);
     if (L.type === 'video' && VURL[L.p.asset]) clipWave(bar, L);
+    transitionHandles(bar, L, place);
     keyTimes(L).forEach(t => diamond(ln, L, t));
     ln.addEventListener('pointerdown', e => { if (e.target === ln) { if (e.shiftKey) return boxSelect(e); selKey = null; selKeys = []; scrubFrom(e, ln); } });
     C.appendChild(row);
@@ -1814,6 +1858,56 @@ function peaksFor(src) {
     return out;
   })();
   peaksCache.set(src, p); return p;
+}
+// A layer's transitions on its bar: a shaded stretch at its start or end, as long as the transition. Drag one to make
+// it longer or shorter; double-click it to take the transition off.
+function transitionHandles(bar, L, place) {
+  for (const side of ['in', 'out']) {
+    const tr = side === 'in' ? L.tin : L.tout; if (!tr?.kind) continue;
+    const h = document.createElement('div'); h.className = 'trn ' + side;
+    const name = (TRANSITIONS.find(x => x[0] === tr.kind) || [, tr.kind])[1];
+    h.title = `${name} ${side}, ${tr.dur.toFixed(2)}s · drag to change its length, double-click to remove`;
+    const size = () => { h.style.width = Math.max(6, t2x(lin(L) + tr.dur) - t2x(lin(L))) + 'px'; };
+    size(); bar.appendChild(h);
+    let d0 = tr.dur;
+    h.addEventListener('pointerdown', () => { d0 = tr.dur; });
+    dragOn(h, (ev, dx) => {
+      const d = (side === 'in' ? dx : -dx) / (t2x(1) - t2x(0));
+      tr.dur = Math.max(1 / FPS, Math.min(lout(L) - lin(L), Math.round((d0 + d) * FPS) / FPS)); size(); render();
+    }, m => { if (m) refresh(); });
+    h.addEventListener('dblclick', e => { e.stopPropagation(); if (side === 'in') delete L.tin; else delete L.tout; refresh(); status(`Took ${name} off ${L.name}`); });
+  }
+}
+function setTransition(L, side, kind, dir) {
+  if (kind === 'none') { if (side === 'in') delete L.tin; else delete L.tout; refresh(); return status(`No transition ${side} on ${L.name}`); }
+  const was = side === 'in' ? L.tin : L.tout;
+  const tr = { kind, dur: was?.dur || Math.min(.6, (lout(L) - lin(L)) / 2), dir: dir || was?.dir || 'left' };
+  if (side === 'in') L.tin = tr; else L.tout = tr;
+  refresh(); status(`${(TRANSITIONS.find(x => x[0] === kind) || [])[1]} ${side} on ${L.name}: drag its end on the timeline to change its length`);
+}
+// From this clip to the next one on the timeline: they overlap by the transition's length, and the one drawn on top
+// goes through it (coming in, or going out) while the other plays on underneath.
+function transitionToNext(L, kind = 'fade', d = .6) {
+  const next = S.layers.filter(o => o !== L && o.type !== 'camera' && lin(o) >= lin(L) + 1e-3 && Math.abs(lin(o) - lout(L)) < 1.01)
+    .sort((a, b) => Math.abs(lin(a) - lout(L)) - Math.abs(lin(b) - lout(L)))[0];
+  if (!next) return status('Nothing starts where this layer ends: put the next clip right after it first');
+  const overlap = lout(L) - lin(next);
+  if (overlap < d) {
+    // the layer underneath plays on: it is the one that is lengthened, so the one on top keeps its timing
+    const under = S.layers.indexOf(L) < S.layers.indexOf(next) ? L : next;
+    if (under === L) L.out = Math.min(S.dur, lin(next) + d);
+    else {
+      // started earlier, a clip starts that much earlier in its source too, so every frame stays where it was
+      const early = lin(next) - Math.max(0, lout(L) - d);
+      next.in = lin(next) - early;
+      if (next.type === 'video') next.p.vin = Math.max(0, (next.p.vin || 0) - early * Math.max(0, next.p.speed ?? 100) / 100);
+    }
+  }
+  const len = Math.max(1 / FPS, Math.min(d, lout(L) - lin(next)));
+  const top = S.layers.indexOf(L) > S.layers.indexOf(next) ? L : next;
+  if (top === next) { next.tin = { kind, dur: len, dir: 'right' }; delete L.tout; }
+  else { L.tout = { kind, dur: len, dir: 'left' }; delete next.tin; }
+  refresh(); status(`${(TRANSITIONS.find(x => x[0] === kind) || [])[1]} from ${L.name} to ${next.name}, ${len.toFixed(2)}s`);
 }
 // a video clip's own sound, drawn faintly along its bar, as the bar plays it (its speed and direction included)
 function clipWave(bar, L) {
@@ -3038,6 +3132,13 @@ function layerItems(L) {
     '-',
     { label: 'Key all properties', icon: ICON.key, kbd: 'K', act: () => { for (const p of PROPS[L.type]) if (ANIM.includes(p)) setKey(L, p, time, val(L, p, time)); refresh(); status('Keyed every property at ' + fmtTime(time)); } },
     ...(L.p.phys === 'falls' ? [{ label: 'Bake physics to keyframes', act: () => { const n = bakePhysics(L); refresh(); status(n ? `${L.name}'s fall is keyframes now` : `${L.name} doesn't move: nothing to bake`); } }] : []),
+    { label: 'Transition in', sub: [...TRANSITIONS.map(([k, n]) => ({ label: n, check: L.tin?.kind === k,
+        sub: TR_DIRECTED.has(k) ? DIRS.map(([dv, dn]) => ({ label: dn, check: L.tin?.kind === k && L.tin.dir === dv, act: () => setTransition(L, 'in', k, dv) })) : undefined,
+        act: TR_DIRECTED.has(k) ? undefined : () => setTransition(L, 'in', k) })), '-', { label: 'None', act: () => setTransition(L, 'in', 'none') }] },
+    { label: 'Transition out', sub: [...TRANSITIONS.map(([k, n]) => ({ label: n, check: L.tout?.kind === k,
+        sub: TR_DIRECTED.has(k) ? DIRS.map(([dv, dn]) => ({ label: dn.replace('From', 'To'), check: L.tout?.kind === k && L.tout.dir === dv, act: () => setTransition(L, 'out', k, dv) })) : undefined,
+        act: TR_DIRECTED.has(k) ? undefined : () => setTransition(L, 'out', k) })), '-', { label: 'None', act: () => setTransition(L, 'out', 'none') }] },
+    { label: 'Transition to next clip', sub: TRANSITIONS.map(([k, n]) => ({ label: n, act: () => transitionToNext(L, k) })) },
     ...(L.type === 'video' ? [{ label: 'Speed', sub: [
       ...[25, 50, 100, 200, 400].map(v => ({ label: `${v}%`, check: !L.keys.speed?.length && (L.p.speed ?? 100) === v, act: () => setSpeed(L, v) })), '-',
       { label: 'Ramp up', act: () => setSpeed(L, 'up') }, { label: 'Ramp down', act: () => setSpeed(L, 'down') }, '-',

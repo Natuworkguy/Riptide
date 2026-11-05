@@ -586,3 +586,8 @@ body.recording .checker{box-shadow:0 0 0 2px #ff4d4f}
 .react-row + .btnrow { margin-top: 8px; }
 .react-row .ib[data-rdel] { flex: none; margin-right: 2px; color: var(--faint); }
 .react-row .ib[data-rdel]:hover { color: var(--text); }
+
+/* an audio track's Duck switch: a small word, lit when on */
+.ib.duck{width:auto;padding:0 6px;font-size:10px;font-weight:600;letter-spacing:.02em;color:var(--faint)}
+.ib.duck.on{color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,transparent)}
+.trim .cwave{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}

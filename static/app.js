@@ -46,8 +46,10 @@ function curveSVG(name, w = 34, h = 22) {
 // ---------- model ----------
 const ANIM = ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'radius', 'fill', 'fill2', 'mid1', 'mid2', 'mid3', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth',
   'blur', 'shadow', 'rgb', 'size', 'reveal', 'sweep', 'spacing', 'bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert',
-  'rotX', 'rotY', 'z', 'd', 'lightAngle', 'orbit', 'tilt', 'dolly', 'zoom', ...Figure.JOINTS, 'side', 'limb', 'caps', 'lineh'];
+  'rotX', 'rotY', 'z', 'd', 'lightAngle', 'orbit', 'tilt', 'dolly', 'zoom', ...Figure.JOINTS, 'side', 'limb', 'caps', 'lineh', 'speed', 'vol'];
 const ADJUST = ['bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert'];
+// a video clip's own time and sound: its speed (keyframed, a ramp), playing backwards, and its volume and fades
+const CLIP = ['speed', 'reverse', 'vol', 'mute', 'afadeIn', 'afadeOut'];
 const COMMON = ['x', 'y', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'blur', 'shadow', 'rgb', ...ADJUST];
 // turned on X and Y and pushed back in depth: any layer with 3D on, and the 3D layers themselves
 const DEPTH = ['rotX', 'rotY', 'z'];
@@ -63,7 +65,7 @@ const PROPS = {
   wave:    [...FLAT, 'w', 'h', 'reveal', 'stroke', 'strokeWidth', ...PHYS],
   text:    [...FLAT, 'text', 'font', 'size', 'weight', 'italic', 'align', 'tcase', 'lineh', 'spacing', 'reveal', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
   image:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...PHYS],
-  video:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...PHYS],
+  video:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...CLIP, ...PHYS],
   shape3d: [...COMMON, ...DEPTH, 'w', 'h', 'd', 'shape', 'text', 'radius', 'fill', 'material', 'lightAngle'],
   model:   [...COMMON, ...DEPTH, 'w', 'h', 'lightAngle'],
   figure:  [...COMMON, 'w', 'h', 'fill', 'stroke', 'strokeWidth', 'side', 'limb', 'caps', ...Figure.JOINTS, ...PHYS],
@@ -73,11 +75,12 @@ const GROUPS = [['Transform', ['x', 'y', 'w', 'h', 'd', 'rotation', 'scale', 'sx
   ['3D', ['three', 'shape', 'rotX', 'rotY', 'z', 'material', 'lightAngle']], ['Camera', ['orbit', 'tilt', 'dolly', 'zoom']],
   ['Style', ['fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', 'radius', 'points', 'sweep', 'opacity']],
   ['Text', ['text', 'font', 'weight', 'size', 'lineh', 'italic', 'align', 'tcase', 'spacing', 'reveal']], ['Pose', ['side', 'limb', 'caps', ...Figure.JOINTS]], ['Physics', PHYS],
-  ['Effects', ['blur', 'shadow', 'rgb']], ['Adjust', ADJUST]];
+  ['Clip', CLIP], ['Effects', ['blur', 'shadow', 'rgb']], ['Adjust', ADJUST]];
 const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', scale: 'Scale', sx: 'Stretch X', sy: 'Stretch Y',
   opacity: 'Opacity', radius: 'Corners', fill: 'Fill', grad: 'Gradient', fill2: 'Fill 2', mid1: 'Via', mid2: 'Via 2', mid3: 'Via 3', gradAngle: 'Angle°', gradMorph: 'To radial %', stroke: 'Stroke', strokeWidth: 'Stroke W', blur: 'Blur', shadow: 'Shadow', rgb: 'RGB split',
   size: 'Font size', text: 'Text', points: 'Points', weight: 'Weight', reveal: 'Reveal', sweep: 'Sweep°', spacing: 'Tracking',
   font: 'Font', italic: 'Italic', align: 'Align', tcase: 'Case', lineh: 'Leading',
+  speed: 'Speed %', reverse: 'Reverse', vol: 'Volume %', mute: 'Mute', afadeIn: 'Fade in s', afadeOut: 'Fade out s',
   bright: 'Brightness', contrast: 'Contrast', sat: 'Saturation', hue: 'Hue°', gray: 'Grayscale', sepia: 'Sepia', invert: 'Invert',
   three: '3D layer', shape: 'Shape', rotX: 'Rotate X', rotY: 'Rotate Y', z: 'Depth', d: 'Thickness', material: 'Material', lightAngle: 'Light°',
   orbit: 'Orbit°', tilt: 'Tilt°', dolly: 'Dolly', zoom: 'Zoom', ...Figure.LABELS,
@@ -88,7 +91,8 @@ const CAMERA_LABEL = { x: 'Look at X', y: 'Look at Y', rotation: 'Roll°' };
 const STEP = { gradMorph: 1, opacity: .05, scale: .05, sx: .05, sy: .05, reveal: .05, zoom: .05 };
 const PALETTE = ['#7c5cff', '#ff5c8a', '#20c997', '#ffb020', '#3fa9ff', '#ff7a45'];
 const DEFAULTS = { rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0, rgb: 0,
-  size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, font: 'Inter', italic: false, align: 'center', tcase: 'none', lineh: 110, sweep: 270, points: 5, w: 300, h: 300,
+  size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, font: 'Inter', italic: false, align: 'center', tcase: 'none', lineh: 110,
+  speed: 100, reverse: false, vol: 100, mute: false, afadeIn: 0, afadeOut: 0, sweep: 270, points: 5, w: 300, h: 300,
   bright: 100, contrast: 100, sat: 100, hue: 0, gray: 0, sepia: 0, invert: 0, grad: 'none', gradAngle: 90, gradMorph: 0, mid1: '', mid2: '', mid3: '',
   three: false, rotX: 0, rotY: 0, z: 0, d: 300, shape: 'cube', material: 'glossy', lightAngle: -45, orbit: 0, tilt: 0, dolly: 0, zoom: 1,
   phys: 'none', bounce: 40, friction: 30, mass: 1, vx: 0, vy: 0, spin: 0, physAt: 0, side: 0, limb: 100, caps: 100,
@@ -889,6 +893,7 @@ function renderProps() {
         else if (k === 'text') field = `<textarea data-p="text" rows="2" spellcheck="false">${esc(v)}</textarea>`;
         else if (k === 'weight') field = `<button class="selectbtn" data-menu="weight"><span>${WEIGHTS.find(w => w[0] == v)?.[1] || v}</span>${ICON.chev}</button>`;
         else if (k === 'font') field = `<button class="selectbtn" data-menu="font"><span style="font-family:${esc(Fonts.stack(v))}">${esc(v || 'Inter')}</span>${ICON.chev}</button>`;
+        else if (k === 'reverse' || k === 'mute') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="${k}"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
         else if (k === 'italic') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="italic"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
         else if (k === 'align') field = `<button class="selectbtn" data-menu="align"><span>${(TEXT_ALIGNS.find(a => a[0] === v) || TEXT_ALIGNS[1])[1]}</span>${ICON.chev}</button>`;
         else if (k === 'tcase') field = `<button class="selectbtn" data-menu="tcase"><span>${(TEXT_CASES.find(a => a[0] === v) || TEXT_CASES[0])[1]}</span>${ICON.chev}</button>`;
@@ -964,6 +969,7 @@ Pn.addEventListener('click', e => {
   else if (t.dataset.cmd === 'flipx' || t.dataset.cmd === 'flipy') { const k = t.dataset.cmd === 'flipx' ? 'sx' : 'sy'; setProp(L, k, -state(L, time)[k]); refresh(); }
   else if (t.dataset.cmd === 'fitcanvas') fitCanvasToImage(L);
   else if (t.dataset.cmd === 'italic') { L.p.italic = !L.p.italic; refresh(); }
+  else if (t.dataset.cmd === 'reverse' || t.dataset.cmd === 'mute') { L.p[t.dataset.cmd] = !L.p[t.dataset.cmd]; DUCKENV.clear(); refresh(); }
   else if (t.dataset.cmd === 'three') { L.p.three = !L.p.three; refresh(); status(L.p.three ? `${L.name} is 3D: turn it with Rotate X and Y, push it back with Depth` : `${L.name} is flat again`); }
   else if (t.dataset.menu === 'shape')
     UI.menu(t, R3D.SHAPES.map(([value, label]) => ({ value, label })), L.p.shape, v => { L.p.shape = v; if (v === 'text') R3D.loadFont(); refresh(); });
@@ -1456,6 +1462,7 @@ function renderTracks() {
       place(); ln.querySelectorAll('.dia').forEach(x => x.remove()); keyTimes(L).forEach(t => diamond(ln, L, t)); render();
     }, m => { if (m) refresh(); else { sel = L.id; selKey = null; selKeys = []; refresh(); } }, () => { leaveCopies([L]); renderLayers(); });
     ln.appendChild(bar);
+    if (L.type === 'video' && VURL[L.p.asset]) clipWave(bar, L);
     keyTimes(L).forEach(t => diamond(ln, L, t));
     ln.addEventListener('pointerdown', e => { if (e.target === ln) { if (e.shiftKey) return boxSelect(e); selKey = null; selKeys = []; scrubFrom(e, ln); } });
     C.appendChild(row);
@@ -1544,7 +1551,13 @@ $('#addMarker').onclick = () => addMarker();
 function splitLayer() {
   const L = cur(); if (!L) return hasAudio() ? splitAudio(selClip) : status('Select a layer or an audio clip to split');
   if (time <= lin(L) + 1e-3 || time >= lout(L) - 1e-3) return status('Move the playhead inside the layer to split it');
-  const c = JSON.parse(JSON.stringify(L)); c.id = uid++; c.name = L.name + ' (2)'; c.in = time; L.out = time;
+  const c = JSON.parse(JSON.stringify(L)); c.id = uid++; c.name = L.name + ' (2)'; c.in = time;
+  if (L.type === 'video') {
+    // the second half carries on from the frame the first stopped at, forwards or backwards
+    const e = played(L, time), all = played(L, lout(L)), v = L.p.vin || 0;
+    if (L.p.reverse) L.p.vin = v + all - e; else c.p.vin = v + e;
+  }
+  L.out = time;
   S.layers.splice(S.layers.indexOf(L) + 1, 0, c); sel = c.id; refresh(); status(`Split ${L.name} at ${fmtTime(time)}`);
 }
 $('#split').onclick = splitLayer;
@@ -1598,6 +1611,7 @@ function clipGain(c, at) {
 }
 function syncAudio(force) {
   const live = new Set();
+  if (tracks().some(T => T.duck) && S.layers.some(L => L.type === 'video' && !DUCKENV.has(L.p.asset))) duckReady();
   for (const [T, c] of allClips()) {
     const src = SND[c.sound]; if (!src) continue;
     live.add(c.id);
@@ -1605,7 +1619,7 @@ function syncAudio(force) {
     if (!el) { el = new Audio(); el.preload = 'auto'; CLIPEL.set(c.id, el); }
     if (el._src !== src) { el.src = src; el._src = src; }
     const at = time - c.start;
-    el.muted = !!T.muted; el.volume = Math.max(0, Math.min(1, (T.volume ?? 1) * clipGain(c, at)));
+    el.muted = !!T.muted; el.volume = Math.max(0, Math.min(1, (T.volume ?? 1) * clipGain(c, at) * duckGain(T, time)));
     if (!playing || at < 0 || at >= c.len) { if (!el.paused) el.pause(); continue; }
     const want = c.in + at;
     if (force || Math.abs(el.currentTime - want) > .08) { try { el.currentTime = want; } catch {} }
@@ -1680,17 +1694,82 @@ function decodeSound(sid) {
 }
 async function mixAudio(t0, t1) {
   const SR = 44100, ctx = new OfflineAudioContext(2, Math.max(1, Math.ceil((t1 - t0) * SR)), SR); let any = false;
+  await duckReady();
   for (const [T, c] of allClips()) {
     if (T.muted || !SND[c.sound]) continue;
     const a = Math.max(c.start, t0), b = Math.min(c.start + c.len, t1); if (b - a < 1e-3) continue;
     const src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = await decodeSound(c.sound);
     src.connect(g).connect(ctx.destination);
     const vol = Math.max(0, Math.min(1, T.volume ?? 1)), n = Math.max(2, Math.ceil((b - a) * 200) + 1), curve = new Float32Array(n);
-    for (let k = 0; k < n; k++) curve[k] = vol * clipGain(c, a - c.start + (b - a) * k / (n - 1));
+    for (let k = 0; k < n; k++) { const at = a + (b - a) * k / (n - 1); curve[k] = vol * clipGain(c, at - c.start) * duckGain(T, at); }
     g.gain.setValueCurveAtTime(curve, a - t0, b - a);
     src.start(a - t0, c.in + (a - c.start), b - a); any = true;
   }
+  // each video clip's own sound, at its speed (a ramp bends it), backwards when it plays backwards
+  for (const L of S.layers) {
+    if (L.type !== 'video' || L.hidden || L.p.mute) continue;
+    const a = Math.max(lin(L), t0), b = Math.min(lout(L), t1); if (b - a < 1e-3) continue;
+    const buf = await clipSound(L.p.asset, L.p.reverse); if (!buf) continue;
+    const src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = buf;
+    src.connect(g).connect(ctx.destination);
+    const n = Math.max(2, Math.ceil((b - a) * 200) + 1), gain = new Float32Array(n), rate = new Float32Array(n);
+    for (let k = 0; k < n; k++) {
+      const at = a + (b - a) * k / (n - 1), sp = Math.max(0, state(L, at).speed ?? 100) / 100;
+      rate[k] = Math.max(.0001, sp); gain[k] = sp < .01 ? 0 : clipVolume(L, at);
+    }
+    g.gain.setValueCurveAtTime(gain, a - t0, b - a);
+    if (L.keys.speed?.length) src.playbackRate.setValueCurveAtTime(rate, a - t0, b - a); else src.playbackRate.value = rate[0];
+    const from = L.p.reverse ? buf.duration - srcTime(L, a) : srcTime(L, a);
+    if (from >= buf.duration || from < 0) continue;
+    src.start(a - t0, Math.max(0, from)); src.stop(b - t0); any = true;
+  }
   return any ? wavBlob(await ctx.startRendering()) : null;
+}
+// A video file's sound, decoded once (null for a clip with none), and the same backwards for one that plays so.
+const CLIPSOUND = new Map();
+function clipSound(asset, reversed = false) {
+  const key = asset + (reversed ? ':r' : '');
+  if (!CLIPSOUND.has(key)) CLIPSOUND.set(key, (async () => {
+    if (reversed) {
+      const fwd = await clipSound(asset); if (!fwd) return null;
+      const out = new AudioBuffer({ length: fwd.length, numberOfChannels: fwd.numberOfChannels, sampleRate: fwd.sampleRate });
+      for (let c = 0; c < fwd.numberOfChannels; c++) out.getChannelData(c).set(fwd.getChannelData(c).slice().reverse());
+      return out;
+    }
+    const blob = VBLOB[asset]; if (!blob) return null;
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    try { return await ac.decodeAudioData(await blob.arrayBuffer()); } catch { return null; } finally { ac.close(); }
+  })());
+  return CLIPSOUND.get(key);
+}
+// Ducking: a music track set to duck dips while a video clip's own sound is loud (someone talking), easing down
+// over a fifth of a second and back up over half a second after. DUCKENV holds each clip's loudness, 20 times a second.
+const DUCKENV = new Map(), DUCK_DB = 0.7;
+async function duckReady() {
+  if (!tracks().some(T => T.duck)) return;
+  for (const L of S.layers) {
+    if (L.type !== 'video' || DUCKENV.has(L.p.asset)) continue;
+    const buf = await clipSound(L.p.asset); if (!buf) { DUCKENV.set(L.p.asset, null); continue; }
+    const ch = buf.getChannelData(0), step = Math.floor(buf.sampleRate / 20), env = new Float32Array(Math.ceil(ch.length / step));
+    for (let i = 0; i < env.length; i++) { let sum = 0, n = 0; for (let j = i * step; j < Math.min(ch.length, (i + 1) * step); j += 4) { sum += ch[j] * ch[j]; n++; } env[i] = Math.sqrt(sum / Math.max(1, n)); }
+    DUCKENV.set(L.p.asset, env);
+  }
+}
+// how loud the clips' own sound is at t, 0 to 1, as heard (each clip's volume counted)
+function speechAt(t) {
+  let m = 0;
+  for (const L of S.layers) {
+    if (L.type !== 'video' || L.hidden || L.p.mute || !visibleAt(L, t)) continue;
+    const env = DUCKENV.get(L.p.asset); if (!env) continue;
+    const i = Math.floor(clipT(L, t) * 20); m = Math.max(m, (env[i] || 0) * clipVolume(L, t));
+  }
+  return m > .02 ? 1 : 0;
+}
+function duckGain(T, t) {
+  if (!T.duck) return 1;
+  // looks a little back for the release and a little ahead for the attack, so it moves before the words
+  let k = 0; for (let d = -.5; d <= .2; d += .05) if (speechAt(t + d)) k = Math.max(k, d > 0 ? 1 - d / .2 : 1 + d / .5);
+  return 1 - DUCK_DB * Math.min(1, k);
 }
 function wavBlob(ab) {
   const ch = ab.numberOfChannels, n = ab.length, dv = new DataView(new ArrayBuffer(44 + n * ch * 2));
@@ -1736,12 +1815,55 @@ function peaksFor(src) {
   })();
   peaksCache.set(src, p); return p;
 }
+// a video clip's own sound, drawn faintly along its bar, as the bar plays it (its speed and direction included)
+function clipWave(bar, L) {
+  const cv = document.createElement('canvas'); cv.className = 'cwave'; bar.prepend(cv);
+  peaksFor(VURL[L.p.asset]).then(pk => {
+    const w = bar.clientWidth, h = bar.clientHeight, dur = S.assets[L.p.asset]?.dur || 0;
+    if (!w || !h || !dur) return;
+    const k = devicePixelRatio || 1; cv.width = w * k; cv.height = h * k;
+    const c = cv.getContext('2d'); c.scale(k, k); c.fillStyle = L.p.mute ? 'rgba(255,255,255,.18)' : 'rgba(255,255,255,.42)';
+    for (let x = 0; x < w; x++) {
+      const t = lin(L) + (lout(L) - lin(L)) * x / w, i = Math.floor(clipT(L, t) / dur * pk.length);
+      const live = (state(L, t).speed ?? 100) > 1 ? 1 : 0;   // a held frame is silent
+      const a = (pk[i] || 0) * h * .9 * Math.min(1, clipVolume(L, t)) * live; c.fillRect(x, (h - a) / 2, 1, Math.max(.5, a));
+    }
+  }).catch(() => {});
+}
+// Speed: a clip's own time, from its right-click menu. A ramp keys Speed from its start to its end; Hold this frame
+// freezes the playhead's frame for two seconds and pushes the rest of the clip later.
+function setSpeed(L, how) {
+  delete L.keys.speed;
+  if (how === 'up' || how === 'down') {
+    const [a, b] = how === 'up' ? [100, 300] : [300, 100];
+    setKey(L, 'speed', lin(L), a, 'easeInOut'); setKey(L, 'speed', lout(L), b, 'easeInOut');
+  } else L.p.speed = how;
+  SPEEDTAB.delete(L.id); refresh();
+  status(how === 'up' ? `${L.name} speeds up from 100% to 300%` : how === 'down' ? `${L.name} slows from 300% to 100%` : `${L.name} plays at ${how}%`);
+}
+function holdFrame(L, hold = 2) {
+  if (time <= lin(L) + 1e-3 || time >= lout(L) - 1e-3) return status('Move the playhead inside the clip to hold a frame');
+  const at = frame(time), src = clipT(L, at), end = lout(L);
+  sel = L.id; splitLayer(); const rest = S.layers.find(l => l.id === sel);
+  // the still: the frame at the playhead, at no speed, for HOLD seconds
+  const still = JSON.parse(JSON.stringify(L)); still.id = uid++; still.name = L.name + ' (hold)';
+  still.in = at; still.out = at + hold; still.p.vin = src; still.p.reverse = false; still.p.speed = 0; delete still.keys.speed;
+  // the rest of the clip, later by the hold, its keys with it
+  rest.in = at + hold; rest.out = end + hold;
+  for (const ks of Object.values(rest.keys)) for (const k of ks) if (k.t >= at - 1e-6) k.t += hold;
+  S.layers.splice(S.layers.indexOf(rest), 0, still);
+  if (rest.out > S.dur) S.dur = Math.ceil(rest.out * FPS) / FPS;
+  sel = still.id; SPEEDTAB.clear(); refresh(); status(`Held the frame at ${fmtTime(at)} for ${hold}s`);
+}
 function audioTrackRow(T) {
   const row = rowEl('audio' + (T.muted ? ' off' : ''), `<span class="lt">${ICON.audio}</span><span class="ln" title="${esc(T.name)} · double-click to rename">${esc(T.name)}</span>
+    <button class="ib duck${T.duck ? ' on' : ''}" data-a="duck" title="${T.duck ? 'Ducks under clip sound: click to stop' : 'Duck under clip sound: dip this track while a video clip\'s own sound is loud, like someone talking'}">Duck</button>
     <button class="ib" data-a="mute" title="${T.muted ? 'Unmute track' : 'Mute track'}">${T.muted ? ICON.eyeOff : ICON.eye}</button>
     <button class="ib" data-a="del" title="Delete track">${ICON.trash}</button>`);
   row.dataset.track = T.id;
   row.querySelector('[data-a=mute]').onclick = () => { T.muted = !T.muted; syncAudio(); refresh(); };
+  row.querySelector('[data-a=duck]').onclick = () => { T.duck = !T.duck; syncAudio(); refresh();
+    status(T.duck ? `${T.name} dips while a clip's own sound is loud` : `${T.name} no longer ducks`); };
   row.querySelector('[data-a=del]').onclick = () => {
     S.audioTracks = tracks().filter(x => x !== T); if (T.clips.some(c => c.id === selClip)) selClip = null;
     syncAudio(); refresh(); status(`Deleted track ${T.name}`); };
@@ -2526,7 +2648,34 @@ async function addVideoAsset(f) {
   S.assets[id] = { kind: 'video', name: f.name, w: v.videoWidth, h: v.videoHeight, dur: v.duration };
   return id;
 }
-const clipT = (L, t) => Math.max(0, Math.min((S.assets[L.p.asset]?.dur || 0) - .04, (L.p.vin || 0) + t - lin(L)));
+// How far into its source a video layer has played by t: its speed, summed from its start (a ramp is keyframed
+// speed), at 120 steps a second, and kept until the speed or the layer's start changes.
+const SPEEDTAB = new Map();
+function played(L, t) {
+  const e = Math.max(0, Math.min(t, lout(L)) - lin(L));
+  if (!L.keys.speed?.length) return e * Math.max(0, L.p.speed ?? 100) / 100;
+  const sig = JSON.stringify([L.keys.speed, lin(L), lout(L)]), step = 1 / 120;
+  let tab = SPEEDTAB.get(L.id);
+  if (!tab || tab.sig !== sig) {
+    const n = Math.ceil((lout(L) - lin(L)) / step) + 1, cum = new Float64Array(n + 1);
+    for (let i = 1; i <= n; i++) cum[i] = cum[i - 1] + Math.max(0, val(L, 'speed', lin(L) + (i - .5) * step)) / 100 * step;
+    tab = { sig, cum }; SPEEDTAB.set(L.id, tab);
+  }
+  const at = e / step, i = Math.min(tab.cum.length - 2, Math.floor(at));
+  return tab.cum[i] + (tab.cum[i + 1] - tab.cum[i]) * (at - i);
+}
+// the moment of its source a video layer shows at t: forwards from Source in, or backwards from where it would end
+function srcTime(L, t) {
+  const v = L.p.vin || 0, e = played(L, t);
+  return L.p.reverse ? v + played(L, lout(L)) - e : v + e;
+}
+const clipT = (L, t) => Math.max(0, Math.min((S.assets[L.p.asset]?.dur || 0) - .04, srcTime(L, t)));
+// a video layer's own sound at t: its volume (keyframed or not) and its fades in and out
+function clipVolume(L, t) {
+  const o = state(L, t), into = t - lin(L), left = lout(L) - t;
+  const fi = o.afadeIn > 0 ? Math.min(1, Math.max(0, into / o.afadeIn)) : 1, fo = o.afadeOut > 0 ? Math.min(1, Math.max(0, left / o.afadeOut)) : 1;
+  return Math.max(0, (o.vol ?? 100) / 100) * fi * fo;
+}
 function videoEl(L) {
   const url = VURL[L.p.asset]; if (!url) return null;
   let v = VEL[L.id];
@@ -2543,13 +2692,24 @@ function videoFrame(L, t) {
   if (!playing && !exporting) { const ct = clipT(L, t); if (Math.abs(v.currentTime - ct) > .02 && !v.seeking) v.currentTime = ct; }
   return v;
 }
+// While playing, each video plays at its speed with its sound; backwards, frozen or too fast or slow for the
+// browser, it is stepped frame by frame instead, silent, as its sound is in the export only.
 function syncVideos() {
   for (const L of S.layers) {
     if (L.type !== 'video') continue; const v = videoEl(L); if (!v) continue;
     const on = playing && visibleAt(L, time), ct = clipT(L, time);
-    if (!on) { if (!v.paused) v.pause(); continue; }
+    if (!on) { if (!v.paused) v.pause(); v.muted = true; continue; }
+    const o = state(L, time), sp = Math.max(0, o.speed ?? 100) / 100;
+    if (L.p.reverse || sp < .0625 || sp > 16) {
+      if (!v.paused) v.pause(); v.muted = true;
+      if (Math.abs(v.currentTime - ct) > .03 && !v.seeking) v.currentTime = ct;
+      continue;
+    }
+    // as the export plays it: faster is higher, slower is lower
+    v.preservesPitch = false; v.playbackRate = sp;
+    v.muted = !!o.mute; v.volume = Math.min(1, clipVolume(L, time));
     if (v.paused) { v.currentTime = ct; v.play().catch(() => {}); }
-    else if (Math.abs(v.currentTime - ct) > .2) v.currentTime = ct;
+    else if (Math.abs(v.currentTime - ct) > .25) v.currentTime = ct;
   }
 }
 let exporting = false;
@@ -2878,6 +3038,12 @@ function layerItems(L) {
     '-',
     { label: 'Key all properties', icon: ICON.key, kbd: 'K', act: () => { for (const p of PROPS[L.type]) if (ANIM.includes(p)) setKey(L, p, time, val(L, p, time)); refresh(); status('Keyed every property at ' + fmtTime(time)); } },
     ...(L.p.phys === 'falls' ? [{ label: 'Bake physics to keyframes', act: () => { const n = bakePhysics(L); refresh(); status(n ? `${L.name}'s fall is keyframes now` : `${L.name} doesn't move: nothing to bake`); } }] : []),
+    ...(L.type === 'video' ? [{ label: 'Speed', sub: [
+      ...[25, 50, 100, 200, 400].map(v => ({ label: `${v}%`, check: !L.keys.speed?.length && (L.p.speed ?? 100) === v, act: () => setSpeed(L, v) })), '-',
+      { label: 'Ramp up', act: () => setSpeed(L, 'up') }, { label: 'Ramp down', act: () => setSpeed(L, 'down') }, '-',
+      { label: 'Reverse', check: !!L.p.reverse, act: () => { L.p.reverse = !L.p.reverse; refresh(); status(L.p.reverse ? `${L.name} plays backwards` : `${L.name} plays forwards`); } },
+      { label: 'Hold this frame (2s)', act: () => holdFrame(L) }] },
+      { label: L.p.mute ? 'Unmute clip sound' : 'Mute clip sound', act: () => { L.p.mute = !L.p.mute; refresh(); } }] : []),
     ...(L.type === 'shape3d' || L.type === 'model' ? [{ label: 'Export as 3D model…', icon: ICON.model, act: () => exportModelFile(L) }] : []),
     { label: 'Split at playhead', icon: ICON.blade, kbd: '⌘K', disabled: !(time > lin(L) && time < lout(L)), act: splitLayer },
     { label: 'Start here', kbd: '[', act: () => { L.in = Math.min(time, lout(L) - 1 / FPS); refresh(); } },

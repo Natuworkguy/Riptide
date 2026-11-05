@@ -17,7 +17,9 @@ A browser motion-graphics and image editor with a small Flask backend for video 
 - Timeline: zoom (Ctrl/Cmd + wheel, slider, Fit), expandable per-property keyframe rows, layer in/out trim bars, slide layers in time, split at playhead (Cmd+K), markers (M), snapping to playhead/markers/keys/edits (hold Shift to bypass)
 - Blend modes, colour adjustments (brightness, contrast, saturation, hue, grayscale, sepia, invert) and blur/shadow, all keyframeable
 - 44 animation presets: click to apply at the playhead or drag onto a layer in the viewer or timeline
-- Video clips as layers: import or drop MP4/WebM/MOV, trim with the layer bar, set Source in, animate/adjust/blend like any layer; frame-accurate in exports (clip audio is not included; add it as an audio track instead)
+- Video clips as layers: import or drop MP4/WebM/MOV, trim with the layer bar, set Source in, animate/adjust/blend like any layer; frame-accurate in exports. A split clip carries on from the frame it was split at
+- Clip sound: a video clip keeps its own sound, in the preview and in exports, drawn as a waveform along its bar, with Volume % (keyframe it to ride the level), Mute, and fades in and out. Set an audio track to Duck and it dips under the clips' own sound while it is loud, like someone talking, and comes back up after
+- Speed and time: Speed % on any video clip (keyframe it for a smooth ramp, or Ramp up and Ramp down from the right-click Speed menu, with 25% to 400% presets), Reverse to play it backwards, and Hold this frame to freeze the playhead's frame for two seconds and push the rest of the clip later. Sound follows the speed, higher when faster
 - Import by dropping files anywhere (onto the viewer to place them), pasting with Cmd+V, or dragging an image straight from another web page
 - Resizable layers panel: drag its right edge for width and the bar under the layer list for height (double-click to reset)
 - Drag with the middle mouse button to drag a copy: a layer on the canvas, a layer's bar in the timeline, or a keyframe. The original stays where it was

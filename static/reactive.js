@@ -175,13 +175,13 @@ const Reactive = (() => {
   const sourceName = id => id && id !== 'mix' ? (tracks().find(T => T.id === id)?.name || 'a track') : 'The mix';
   function panelHTML(L) {
     if (L.type === 'camera') return '';
-    const rows = (L.react || []).map((r, i) => `<div class="react-row" data-react="${i}">
-        <button class="selectbtn" data-rmenu="prop" title="What moves"><span>${esc(LABEL[r.prop] || r.prop)}</span>${ICON.chev}</button>
-        <button class="selectbtn" data-rmenu="band" title="What it follows"><span>${(BANDS.find(b => b[0] === r.band) || BANDS[0])[1]}</span>${ICON.chev}</button>
-        <button class="selectbtn" data-rmenu="source" title="Which audio: the whole mix, or one track (a stem)"><span>${esc(sourceName(r.source))}</span>${ICON.chev}</button>
-        <label class="rnum"><em>Amount</em><input data-ramount value="${fmt(r.amount)}" inputmode="decimal"></label>
-        <label class="rnum"><em>Ease ms</em><input data-rsmooth value="${fmt(r.smooth ?? 0)}" inputmode="decimal"></label>
-        <button class="ib" data-rdel title="Stop following the music">${ICON.trash}</button></div>`).join('');
+    // Each rule is made of the same fields as every other part of the panel: a label, then its value.
+    const rows = (L.react || []).map((r, i) => `<div class="grid react-row" data-react="${i}">
+        <div class="row wide"><label>Moves</label><button class="selectbtn" data-rmenu="prop" title="What moves"><span>${esc(LABEL[r.prop] || r.prop)}</span>${ICON.chev}</button><button class="ib" data-rdel title="Stop following the music">${ICON.trash}</button></div>
+        <div class="row wide"><label>Follows</label><button class="selectbtn" data-rmenu="band" title="What it follows"><span>${(BANDS.find(b => b[0] === r.band) || BANDS[0])[1]}</span>${ICON.chev}</button></div>
+        <div class="row wide"><label>From</label><button class="selectbtn" data-rmenu="source" title="Which audio: the whole mix, or one track (a stem)"><span>${esc(sourceName(r.source))}</span>${ICON.chev}</button></div>
+        <div class="row"><label data-scrub="${Math.abs(r.amount) < 2 ? .01 : 1}">Amount</label><input data-ramount value="${fmt(r.amount)}" inputmode="decimal" spellcheck="false"></div>
+        <div class="row"><label data-scrub="10">Ease</label><input data-rsmooth value="${fmt(r.smooth ?? 0)}" inputmode="decimal" spellcheck="false"><em class="unit">ms</em></div></div>`).join('');
     const none = !hasAudio();
     return `<div class="sec"><div class="sech">Music</div>${rows}
       <div class="btnrow wide"><button class="tb small" data-radd>+ Follow the music</button></div>

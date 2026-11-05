@@ -46,11 +46,19 @@ function curveSVG(name, w = 34, h = 22) {
 // ---------- model ----------
 const ANIM = ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'radius', 'fill', 'fill2', 'mid1', 'mid2', 'mid3', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth',
   'blur', 'shadow', 'rgb', 'size', 'reveal', 'sweep', 'spacing', 'bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert',
-  'rotX', 'rotY', 'z', 'd', 'lightAngle', 'orbit', 'tilt', 'dolly', 'zoom', ...Figure.JOINTS, 'side', 'limb', 'caps', 'lineh', 'speed', 'vol'];
+  'rotX', 'rotY', 'z', 'd', 'lightAngle', 'orbit', 'tilt', 'dolly', 'zoom', ...Figure.JOINTS, 'side', 'limb', 'caps', 'lineh', 'speed', 'vol',
+  'mx', 'my', 'mw', 'mh', 'mround', 'feather', 'keyTol', 'keySoft', 'spill', ...Grade.GRADE, 'vig', 'vigSize', 'lutMix'];
 const ADJUST = ['bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert'];
 // a video clip's own time and sound: its speed (keyframed, a ramp), playing backwards, and its volume and fades
 const CLIP = ['speed', 'reverse', 'vol', 'mute', 'afadeIn', 'afadeOut'];
-const COMMON = ['x', 'y', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'blur', 'shadow', 'rgb', ...ADJUST];
+// Finishing, on any layer that draws: a mask cut from it (a box, an oval or a shape drawn point by point, with soft
+// edges), or the layer above it used as its matte; a colour grade; a vignette; a 3D LUT
+const MASK = ['mask', 'matte', 'mx', 'my', 'mw', 'mh', 'mround', 'feather', 'minv'];
+const LOOKP = ['vig', 'vigSize', 'lut', 'lutMix'];
+const FINISH = [...MASK, 'mpts', ...Grade.GRADE, 'curves', ...LOOKP];
+// keying out a green screen: pictures and video only
+const KEYP = ['chroma', 'keyColor', 'keyTol', 'keySoft', 'spill'];
+const COMMON = ['x', 'y', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'blur', 'shadow', 'rgb', ...ADJUST, ...FINISH];
 // turned on X and Y and pushed back in depth: any layer with 3D on, and the 3D layers themselves
 const DEPTH = ['rotX', 'rotY', 'z'];
 const FLAT = [...COMMON, 'three', ...DEPTH];
@@ -64,8 +72,10 @@ const PROPS = {
   arc:     [...FLAT, 'w', 'h', 'sweep', 'stroke', 'strokeWidth', ...PHYS],
   wave:    [...FLAT, 'w', 'h', 'reveal', 'stroke', 'strokeWidth', ...PHYS],
   text:    [...FLAT, 'text', 'font', 'size', 'weight', 'italic', 'align', 'tcase', 'lineh', 'spacing', 'reveal', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
-  image:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...PHYS],
-  video:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...CLIP, ...PHYS],
+  image:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...KEYP, ...PHYS],
+  video:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...CLIP, ...KEYP, ...PHYS],
+  // an adjustment layer: draws nothing itself, and grades, blurs and adjusts everything under it, within its box
+  adjust:  ['x', 'y', 'w', 'h', 'rotation', 'opacity', 'blur', ...ADJUST, ...FINISH.filter(k => k !== 'matte')],
   shape3d: [...COMMON, ...DEPTH, 'w', 'h', 'd', 'shape', 'text', 'radius', 'fill', 'material', 'lightAngle'],
   model:   [...COMMON, ...DEPTH, 'w', 'h', 'lightAngle'],
   figure:  [...COMMON, 'w', 'h', 'fill', 'stroke', 'strokeWidth', 'side', 'limb', 'caps', ...Figure.JOINTS, ...PHYS],
@@ -75,11 +85,16 @@ const GROUPS = [['Transform', ['x', 'y', 'w', 'h', 'd', 'rotation', 'scale', 'sx
   ['3D', ['three', 'shape', 'rotX', 'rotY', 'z', 'material', 'lightAngle']], ['Camera', ['orbit', 'tilt', 'dolly', 'zoom']],
   ['Style', ['fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', 'radius', 'points', 'sweep', 'opacity']],
   ['Text', ['text', 'font', 'weight', 'size', 'lineh', 'italic', 'align', 'tcase', 'spacing', 'reveal']], ['Pose', ['side', 'limb', 'caps', ...Figure.JOINTS]], ['Physics', PHYS],
-  ['Clip', CLIP], ['Effects', ['blur', 'shadow', 'rgb']], ['Adjust', ADJUST]];
+  ['Clip', CLIP], ['Effects', ['blur', 'shadow', 'rgb']], ['Adjust', ADJUST], ['Green screen', KEYP], ['Mask', MASK],
+  ['Grade', Grade.GRADE], ['Curves', ['curves']], ['Vignette and LUT', LOOKP]];
 const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', scale: 'Scale', sx: 'Stretch X', sy: 'Stretch Y',
   opacity: 'Opacity', radius: 'Corners', fill: 'Fill', grad: 'Gradient', fill2: 'Fill 2', mid1: 'Via', mid2: 'Via 2', mid3: 'Via 3', gradAngle: 'Angle°', gradMorph: 'To radial %', stroke: 'Stroke', strokeWidth: 'Stroke W', blur: 'Blur', shadow: 'Shadow', rgb: 'RGB split',
   size: 'Font size', text: 'Text', points: 'Points', weight: 'Weight', reveal: 'Reveal', sweep: 'Sweep°', spacing: 'Tracking',
   font: 'Font', italic: 'Italic', align: 'Align', tcase: 'Case', lineh: 'Leading',
+  mask: 'Mask', matte: 'Track matte', mx: 'Mask X', my: 'Mask Y', mw: 'Mask W', mh: 'Mask H', mround: 'Corners', feather: 'Feather',
+  minv: 'Invert', chroma: 'Key out', keyColor: 'Key colour', keyTol: 'Tolerance', keySoft: 'Softness', spill: 'Spill %',
+  temp: 'Warmth', tint: 'Tint', expo: 'Exposure', lvBlack: 'In black', gamma: 'Gamma', lvWhite: 'In white', outBlack: 'Out black',
+  outWhite: 'Out white', vig: 'Vignette', vigSize: 'Size %', lut: 'LUT', lutMix: 'LUT mix %',
   speed: 'Speed %', reverse: 'Reverse', vol: 'Volume %', mute: 'Mute', afadeIn: 'Fade in s', afadeOut: 'Fade out s',
   bright: 'Brightness', contrast: 'Contrast', sat: 'Saturation', hue: 'Hue°', gray: 'Grayscale', sepia: 'Sepia', invert: 'Invert',
   three: '3D layer', shape: 'Shape', rotX: 'Rotate X', rotY: 'Rotate Y', z: 'Depth', d: 'Thickness', material: 'Material', lightAngle: 'Light°',
@@ -88,11 +103,13 @@ const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', sca
   gravity: 'Gravity', walls: 'Walls', drag: 'Air drag' };
 // a camera's position is the point it looks at, and its rotation turns the whole view
 const CAMERA_LABEL = { x: 'Look at X', y: 'Look at Y', rotation: 'Roll°' };
-const STEP = { gradMorph: 1, opacity: .05, scale: .05, sx: .05, sy: .05, reveal: .05, zoom: .05 };
+const STEP = { gradMorph: 1, opacity: .05, scale: .05, sx: .05, sy: .05, reveal: .05, zoom: .05, expo: .05, gamma: .05 };
 const PALETTE = ['#7c5cff', '#ff5c8a', '#20c997', '#ffb020', '#3fa9ff', '#ff7a45'];
 const DEFAULTS = { rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0, rgb: 0,
   size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, font: 'Inter', italic: false, align: 'center', tcase: 'none', lineh: 110,
-  speed: 100, reverse: false, vol: 100, mute: false, afadeIn: 0, afadeOut: 0, sweep: 270, points: 5, w: 300, h: 300,
+  speed: 100, reverse: false, vol: 100, mute: false, afadeIn: 0, afadeOut: 0,
+  mask: 'none', matte: 'none', mx: 0, my: 0, mw: 0, mh: 0, mround: 0, feather: 0, minv: false,
+  chroma: false, keyColor: '#00b140', keyTol: 30, keySoft: 15, spill: 50, ...Grade.NEUTRAL, vig: 0, vigSize: 60, lut: '', lutMix: 100, sweep: 270, points: 5, w: 300, h: 300,
   bright: 100, contrast: 100, sat: 100, hue: 0, gray: 0, sepia: 0, invert: 0, grad: 'none', gradAngle: 90, gradMorph: 0, mid1: '', mid2: '', mid3: '',
   three: false, rotX: 0, rotY: 0, z: 0, d: 300, shape: 'cube', material: 'glossy', lightAngle: -45, orbit: 0, tilt: 0, dolly: 0, zoom: 1,
   phys: 'none', bounce: 40, friction: 30, mass: 1, vx: 0, vy: 0, spin: 0, physAt: 0, side: 0, limb: 100, caps: 100,
@@ -108,7 +125,7 @@ const GRADS = [['none', 'None'], ['linear', 'Linear'], ['radial', 'Radial']];
 // Between Fill and Fill 2 a gradient can run through up to three more colours (Via), evenly spaced:
 // #fff -> #abc -> #fff is a Fill, one Via and a Fill 2. An empty Via is not a stop.
 const MIDS = ['mid1', 'mid2', 'mid3'];
-const COLORS = ['fill', 'fill2', ...MIDS, 'stroke'];
+const COLORS = ['fill', 'fill2', ...MIDS, 'stroke', 'keyColor'];
 function fillOf(c, o, w, h) {
   if ((o.grad !== 'linear' && o.grad !== 'radial') || !isColor(o.fill2)) return o.fill;
   const m = Math.max(0, Math.min(1, (+o.gradMorph || 0) / 100)), round = o.grad === 'radial' ? 1 - m : m;
@@ -138,8 +155,8 @@ function makeLayer(type, p = {}, name) {
     p: { ...DEFAULTS, x: S.w / 2, y: S.h / 2, fill, ...(type === 'arc' ? { strokeWidth: 24, stroke: fill } : {}), ...p }, keys: {} };
   S.layers.push(L); return L;
 }
-const NEW_LAYER = { figure: { w: 210, h: 460, fill: '#e8c39e' } };
-function newLayer(type) { const { name, ...p } = NEW_LAYER[type] || {}; const L = makeLayer(type, p, name); sel = L.id; selKey = null; selKeys = []; freshLayer = L.id; refresh(); }
+const NEW_LAYER = { figure: { w: 210, h: 460, fill: '#e8c39e' }, adjust: () => ({ w: S.w, h: S.h, name: 'Adjustment', fill: '#8b8b98' }) };
+function newLayer(type) { const N = NEW_LAYER[type], { name, ...p } = (typeof N === 'function' ? N() : N) || {}; const L = makeLayer(type, p, name); sel = L.id; selKey = null; selKeys = []; freshLayer = L.id; refresh(); }
 
 // ---------- keyframes ----------
 const hex = c => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16));
@@ -292,6 +309,17 @@ function shapeTransition(o, tr, L, t) {
   return { wipe: tr.kind === 'wipe' ? { p, dx, dy, w: Math.abs(w), h: Math.abs(h) } : null,
     dip: tr.kind === 'dipblack' || tr.kind === 'dipwhite' ? { color: tr.kind === 'dipblack' ? '#000' : '#fff', a: q, w: Math.abs(w), h: Math.abs(h) } : null };
 }
+// a layer's blur, RGB split and adjustments, as a canvas filter ('' for none)
+function filterOf(o, k = 1) {
+  const f = [];
+  if (o.blur > 0.05) f.push(`blur(${o.blur * k}px)`);
+  // RGB split: a red ghost of the layer to one side and a cyan one to the other, as a glitch or a hit leaves
+  if (o.rgb > 0.05) f.push(`drop-shadow(${-o.rgb * k}px 0 0 rgba(255,0,72,.8)) drop-shadow(${o.rgb * k}px 0 0 rgba(0,230,255,.8))`);
+  if (o.bright !== 100) f.push(`brightness(${o.bright}%)`); if (o.contrast !== 100) f.push(`contrast(${o.contrast}%)`);
+  if (o.sat !== 100) f.push(`saturate(${o.sat}%)`); if (o.hue) f.push(`hue-rotate(${o.hue}deg)`);
+  if (o.gray) f.push(`grayscale(${o.gray}%)`); if (o.sepia) f.push(`sepia(${o.sepia}%)`); if (o.invert) f.push(`invert(${o.invert}%)`);
+  return f.join(' ');
+}
 function drawLayer(c, L, t) {
   if (L.type === 'camera') return;
   const o = state(L, t);
@@ -303,14 +331,7 @@ function drawLayer(c, L, t) {
   // a 3D layer is placed by the 3D view, which is laid over the whole canvas; effects apply to what it drew
   const deep = R3D.wants(L);
   if (!deep) { c.translate(o.x, o.y); c.rotate(o.rotation * PI / 180); c.scale(o.scale * o.sx, o.scale * o.sy); }
-  { const f = [];
-    if (o.blur > 0.05) f.push(`blur(${o.blur}px)`);
-    // RGB split: a red ghost of the layer to one side and a cyan one to the other, as a glitch or a hit leaves
-    if (o.rgb > 0.05) f.push(`drop-shadow(${-o.rgb}px 0 0 rgba(255,0,72,.8)) drop-shadow(${o.rgb}px 0 0 rgba(0,230,255,.8))`);
-    if (o.bright !== 100) f.push(`brightness(${o.bright}%)`); if (o.contrast !== 100) f.push(`contrast(${o.contrast}%)`);
-    if (o.sat !== 100) f.push(`saturate(${o.sat}%)`); if (o.hue) f.push(`hue-rotate(${o.hue}deg)`);
-    if (o.gray) f.push(`grayscale(${o.gray}%)`); if (o.sepia) f.push(`sepia(${o.sepia}%)`); if (o.invert) f.push(`invert(${o.invert}%)`);
-    if (f.length) c.filter = f.join(' '); }
+  { const f = filterOf(o); if (f) c.filter = f; }
   if (o.shadow > 0) { c.shadowColor = 'rgba(0,0,0,.45)'; c.shadowBlur = o.shadow; c.shadowOffsetY = o.shadow / 3; }
   // a wipe shows the part of the layer the edge has crossed
   if (fx?.wipe && !deep) { const { p, dx, dy, w, h } = fx.wipe; c.beginPath();
@@ -324,6 +345,7 @@ function drawLayer(c, L, t) {
 }
 // what a layer draws, centred on 0,0 at its own size: the layer, before it is moved, turned or scaled
 function drawContent(c, L, o, t) {
+  if (L.type === 'adjust') return;
   if (L.type === 'shape3d' || L.type === 'model') return placeholder3d(c, L, o);
   if (L.type === 'figure') return Figure.draw(c, o);
   c.fillStyle = o.fill; c.strokeStyle = o.stroke; c.lineWidth = o.strokeWidth; c.lineJoin = 'round'; c.lineCap = 'round';
@@ -374,8 +396,105 @@ function renderScene(c, t, scale = 1) {
   Physics.prepare();
   c.setTransform(scale, 0, 0, scale, 0, 0);
   c.fillStyle = resolveColor(S.bg); c.fillRect(0, 0, S.w, S.h);
-  for (const L of S.layers) if (visibleAt(L, t)) { c.save(); c.globalCompositeOperation = L.blend || 'source-over'; drawLayer(c, L, t); c.restore(); }
+  S.layers.forEach((L, i) => {
+    if (!visibleAt(L, t) || isMatte(i)) return;
+    c.save(); c.globalCompositeOperation = L.blend || 'source-over';
+    if (finishes(L)) finishLayer(c, L, t, i); else drawLayer(c, L, t);
+    c.restore();
+  });
   c.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+// ---------- finishing: masks, mattes, keying, grading ----------
+// A layer that is masked, matted, keyed or graded is drawn on a sheet of its own first, its pixels worked on there,
+// then laid on the scene with its blend mode. Anything else is drawn straight onto the scene, as before.
+const TRACK_MATTES = [['none', 'None'], ['alpha', 'Alpha: the layer above'], ['alphainv', 'Alpha inverted'], ['luma', 'Luma: the layer above'], ['lumainv', 'Luma inverted']];
+const MASK_KINDS = [['none', 'None'], ['rect', 'Rectangle'], ['ellipse', 'Ellipse'], ['pen', 'Pen (draw its points)']];
+// the layer above one with a track matte is its matte: it shapes that layer, and is not drawn itself
+const isMatte = i => { const B = S.layers[i - 1]; return !!B && (B.p.matte || 'none') !== 'none'; };
+const keyedAny = (L, ks) => ks.some(k => L.keys[k]?.length);
+const maskOn = L => L.p.mask === 'rect' || L.p.mask === 'ellipse' || (L.p.mask === 'pen' && (L.p.mpts?.length || 0) >= 3);
+function finishes(L) {
+  const p = L.p;
+  return L.type === 'adjust' || maskOn(L) || (p.matte || 'none') !== 'none' || p.chroma || !!(p.lut && S.luts?.[p.lut])
+    || Grade.graded(p, p.curves) || +p.vig > 0 || keyedAny(L, [...Grade.GRADE, 'vig']);
+}
+// scratch sheets the size of the canvas being drawn, reused frame to frame
+const SHEETS = [];
+function sheet(i, W, H) {
+  let s = SHEETS[i]; if (!s) { const cv = document.createElement('canvas'); s = SHEETS[i] = { cv, c: cv.getContext('2d', { willReadFrequently: true }) }; }
+  if (s.cv.width !== W || s.cv.height !== H) { s.cv.width = W; s.cv.height = H; }
+  s.c.setTransform(1, 0, 0, 1, 0, 0); s.c.globalCompositeOperation = 'source-over'; s.c.globalAlpha = 1; s.c.filter = 'none';
+  s.c.shadowColor = 'transparent'; s.c.clearRect(0, 0, W, H); return s;
+}
+const toLayer = (c, o) => { c.translate(o.x, o.y); c.rotate(o.rotation * PI / 180); c.scale(o.scale * o.sx || 1e-6, o.scale * o.sy || 1e-6); };
+// the mask's outline, in the layer's own frame: a pen mask's points are around Mask X and Y, so moving those moves it
+function maskPath(c, L, o) {
+  c.beginPath();
+  const w = Math.abs(o.mw), h = Math.abs(o.mh);
+  if (o.mask === 'rect') c.roundRect(o.mx - w / 2, o.my - h / 2, w, h, Math.max(0, Math.min(+o.mround || 0, w / 2, h / 2)));
+  else if (o.mask === 'ellipse') c.ellipse(o.mx, o.my, w / 2, h / 2, 0, 0, PI * 2);
+  else (L.p.mpts || []).forEach(([x, y], i) => i ? c.lineTo(o.mx + x, o.my + y) : c.moveTo(o.mx + x, o.my + y));
+  c.closePath();
+}
+// where on the canvas (in its pixels) the layer can have drawn anything: its box with room for blur and shadow;
+// the whole canvas while a transition might have pushed it further
+function pixelRegion(L, t, o, M, W, H) {
+  if (transitionAt(L, t)) return { x: 0, y: 0, w: W, h: H };
+  const b = box(L, t), k = Math.hypot(M.a, M.b), pad = (o.blur * 3 + o.shadow * 2 + o.rgb + 4) * k;
+  const x0 = Math.max(0, Math.floor((b.x - b.ex) * k + M.e - pad)), y0 = Math.max(0, Math.floor((b.y - b.ey) * k + M.f - pad));
+  const x1 = Math.min(W, Math.ceil((b.x + b.ex) * k + M.e + pad)), y1 = Math.min(H, Math.ceil((b.y + b.ey) * k + M.f + pad));
+  return x1 > x0 && y1 > y0 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
+}
+// depth: a matte that is itself finished is drawn with sheets of its own, a level down
+function finishLayer(c, L, t, i, depth = 0) {
+  const o = state(L, t), W = c.canvas.width, H = c.canvas.height, M = c.getTransform(), k = Math.hypot(M.a, M.b);
+  const A = sheet(depth * 2, W, H), a = A.c;
+  if (L.type === 'adjust') {
+    // what is under it, adjusted, cut to its box
+    if (o.opacity <= 0) return;
+    a.filter = filterOf(o, k) || 'none'; a.drawImage(c.canvas, 0, 0); a.filter = 'none';
+    a.setTransform(M); a.globalCompositeOperation = 'destination-in'; toLayer(a, o); a.fillStyle = '#000'; a.fillRect(-o.w / 2, -o.h / 2, o.w, o.h);
+    a.setTransform(1, 0, 0, 1, 0, 0); a.globalCompositeOperation = 'source-over';
+  } else { a.setTransform(M); drawLayer(a, L, t); a.setTransform(1, 0, 0, 1, 0, 0); }
+  const rg = L.type === 'adjust' ? { x: 0, y: 0, w: W, h: H } : pixelRegion(L, t, o, M, W, H);
+  if (!rg) return;
+  const lut = o.lut && S.luts?.[o.lut];
+  if (o.chroma && PROPS[L.type].includes('chroma') || Grade.graded(o, L.p.curves) || lut) {
+    const img = a.getImageData(rg.x, rg.y, rg.w, rg.h);
+    Grade.apply(img.data, PROPS[L.type].includes('chroma') ? o : { ...o, chroma: false }, L.p.curves, lut);
+    a.putImageData(img, rg.x, rg.y);
+  }
+  // a vignette darkens the layer's own box towards its edges
+  if (o.vig > 0) {
+    a.setTransform(M); toLayer(a, o); a.globalCompositeOperation = 'source-atop';
+    // an oval the box's shape: clear inside Size, darkest at the corners
+    const { w, h } = bounds(L, t), r0 = Math.SQRT2 * Math.max(0, Math.min(.98, o.vigSize / 100));
+    const g = a.createRadialGradient(0, 0, r0, 0, 0, Math.SQRT2); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, `rgba(0,0,0,${Math.min(1, o.vig / 100)})`);
+    a.scale(Math.max(1, w) / 2, Math.max(1, h) / 2); a.fillStyle = g; a.fillRect(-1, -1, 2, 2);
+    a.setTransform(1, 0, 0, 1, 0, 0); a.globalCompositeOperation = 'source-over';
+  }
+  if (maskOn(L)) {
+    const B = sheet(depth * 2 + 1, W, H), b = B.c;
+    b.setTransform(M); toLayer(b, o);
+    const f = Math.max(0, +o.feather || 0) * k * Math.abs(o.scale) * Math.sqrt(Math.abs(o.sx * o.sy) || 1);
+    if (f > .3) b.filter = `blur(${f / 2}px)`;
+    b.fillStyle = '#000'; maskPath(b, L, o); b.fill();
+    a.globalCompositeOperation = o.minv ? 'destination-out' : 'destination-in'; a.drawImage(B.cv, 0, 0); a.globalCompositeOperation = 'source-over';
+  }
+  const kind = L.p.matte || 'none', Mt = S.layers[i + 1];
+  if (kind !== 'none' && L.type !== 'adjust') {
+    const B = sheet(depth * 2 + 1, W, H), b = B.c;
+    if (Mt && visibleAt(Mt, t)) {
+      b.setTransform(M); if (finishes(Mt)) finishLayer(b, Mt, t, i + 1, depth + 1); else drawLayer(b, Mt, t); b.setTransform(1, 0, 0, 1, 0, 0);
+      // luma: how bright the matte is, not how solid, decides what shows
+      if (kind.startsWith('luma')) { const img = b.getImageData(rg.x, rg.y, rg.w, rg.h), d = img.data;
+        for (let j = 0; j < d.length; j += 4) d[j + 3] = (.2126 * d[j] + .7152 * d[j + 1] + .0722 * d[j + 2]) * d[j + 3] / 255;
+        b.putImageData(img, rg.x, rg.y); }
+    }
+    a.globalCompositeOperation = kind.endsWith('inv') ? 'destination-out' : 'destination-in'; a.drawImage(B.cv, 0, 0); a.globalCompositeOperation = 'source-over';
+  }
+  c.save(); c.setTransform(1, 0, 0, 1, 0, 0); if (L.type === 'adjust') c.globalAlpha = Math.min(1, o.opacity); c.drawImage(A.cv, 0, 0); c.restore();
 }
 // where a 3D layer that is turned, pushed back or seen by a moved camera lands on the canvas, as an outline; null
 // for any other layer, which is a box turned in the plane like before
@@ -439,6 +558,7 @@ function render(showUI = true) {
       for (const [pt] of Figure.HANDLES) { const [x, y] = J[pt]; ctx.beginPath(); ctx.arc(x * sx, y * sy, 6 * k, 0, PI * 2);
         ctx.fillStyle = pt.startsWith('hand') || pt.startsWith('foot') || pt === 'head' ? '#4c8dff' : '#fff'; ctx.fill(); ctx.lineWidth = 1.5 * k; ctx.strokeStyle = '#4c8dff'; ctx.stroke(); } }
     ctx.restore();
+    maskOverlay(ctx, L, k);
   }
   if (showUI && snapGuides) {
     ctx.save(); ctx.strokeStyle = '#ff2d2d'; ctx.lineWidth = Math.max(1, k);
@@ -497,6 +617,8 @@ const marqueeEl = Object.assign(document.createElement('div'), { className: 'mar
 function hitLayer(px, py) {
   for (let i = S.layers.length - 1; i >= 0; i--) {
     const L = S.layers[i]; if (!visibleAt(L, time) || L.locked || L.type === 'camera') continue;
+    // an adjustment layer covers what is under it, and a matte is not drawn: picked on the canvas only once selected
+    if ((L.type === 'adjust' || isMatte(i)) && L.id !== sel) continue;
     const hull = hull3d(L, time); if (hull) { if (R3D.inside(hull, px, py)) return L; continue; }
     const { w, h } = bounds(L, time), [lx, ly] = local(L, px, py);
     if (Math.abs(lx) <= w / 2 && Math.abs(ly) <= h / 2) return L;
@@ -556,6 +678,11 @@ cv.addEventListener('pointerdown', e => {
   }
   if (e.button > 1) return;
   const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+  if (!additive && group.length === 1 && L0 && maskEditing === L0.id && (L0.p.mask || 'none') !== 'none' && visibleAt(L0, time)) {
+    const d = maskPress(L0, px, py, k, e);
+    if (d === 'done') return;
+    if (d) { drag = d; cv.setPointerCapture(e.pointerId); return; }
+  }
   if (!additive && group.length === 1 && L0?.type === 'figure' && visibleAt(L0, time) && posable(L0)) {
     const which = jointAt(L0, px, py, k);
     if (which) { drag = { mode: 'pose', L: L0, which, x0: e.clientX, y0: e.clientY }; cv.setPointerCapture(e.pointerId); return; }
@@ -602,6 +729,7 @@ cv.addEventListener('pointermove', e => {
       width: Math.abs(e.clientX - drag.x0) + 'px', height: Math.abs(e.clientY - drag.y0) + 'px' });
     render(); renderLayers(); return;
   }
+  if (drag.mode === 'mask') { maskDrag(drag, px, py); refresh(false); renderPropsValues(); return; }
   if (drag.mode === 'pose') {
     const o = state(L, time);
     for (const [j, v] of Object.entries(Figure.pose(o, drag.which, local(L, px, py)))) setProp(L, j, Math.round(v * 10) / 10);
@@ -722,6 +850,7 @@ const ICON = {
   wave: ic('<path d="M1.5 9c1.6-3.4 2.8-3.4 4.2 0s2.6 3.4 4.2 0 2.6-3.4 4.4 0"/>'),
   text: ic('<path d="M3 4V3h10v1M8 3v10M6 13h4"/>'),
   figure: ic('<circle cx="8" cy="3" r="1.6"/><path d="M8 5v5M5 7.5l3-1.5 3 1.5M6 14l2-4 2 4"/>'),
+  adjust: '<svg class="ico" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.3" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 2.7a5.3 5.3 0 0 1 0 10.6z" fill="currentColor"/></svg>',
   eye: ic('<path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/>'),
   eyeOff: ic('<path d="M2 2l12 12M6.5 4C7 3.7 7.5 3.5 8 3.5c4 0 6.5 4.5 6.5 4.5s-.7 1.2-1.9 2.4M4.1 5.2C2.5 6.4 1.5 8 1.5 8S4 12.5 8 12.5c1 0 1.9-.3 2.7-.7"/>'),
   lock: ic('<rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/>'),
@@ -925,6 +1054,15 @@ function renderProps() {
         // physics: only what the chosen kind uses; the scene's own settings once anything has physics
         if (PHYS.includes(k) && k !== 'phys' && (o.phys || 'none') === 'none') continue;
         if (['mass', 'vx', 'vy', 'spin', 'physAt'].includes(k) && o.phys !== 'falls') continue;
+        // finishing: only what the mask, the key and the LUT in use have
+        if (MASK.includes(k) && k !== 'mask' && k !== 'matte' && (o.mask || 'none') === 'none') continue;
+        if ((k === 'mw' || k === 'mh' || k === 'mround') && o.mask === 'pen') continue;
+        if (k === 'mround' && o.mask !== 'rect') continue;
+        if (KEYP.includes(k) && k !== 'chroma' && !o.chroma) continue;
+        if (k === 'lutMix' && !o.lut) continue;
+        if (k === 'vigSize' && !(o.vig > 0) && !L.keys.vig?.length) continue;
+        if (k === 'curves') { h += curvesHTML(L); continue; }
+        if (k === 'mpts') continue;
         const anim = ANIM.includes(k), here = L.keys[k]?.some(x => near(x.t, time)), keyed = L.keys[k]?.length,
           v = Physics.SCENE.includes(k) ? S[k] ?? SCENE_DEFAULTS[k] : o[k];
         const fx = FIX_OF[k], isFixed = fixed(L, k);
@@ -936,6 +1074,8 @@ function renderProps() {
         else if (k === 'text') field = `<textarea data-p="text" rows="2" spellcheck="false">${esc(v)}</textarea>`;
         else if (k === 'weight') field = `<button class="selectbtn" data-menu="weight"><span>${WEIGHTS.find(w => w[0] == v)?.[1] || v}</span>${ICON.chev}</button>`;
         else if (k === 'font') field = `<button class="selectbtn" data-menu="font"><span style="font-family:${esc(Fonts.stack(v))}">${esc(v || 'Inter')}</span>${ICON.chev}</button>`;
+        else if (k === 'mask' || k === 'matte' || k === 'lut') field = `<button class="selectbtn" data-menu="${k}"><span>${esc(k === 'lut' ? v || 'None' : ((k === 'mask' ? MASK_KINDS : TRACK_MATTES).find(x => x[0] === (v || 'none')) || ['', 'None'])[1])}</span>${ICON.chev}</button>`;
+        else if (k === 'minv' || k === 'chroma') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="${k}"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
         else if (k === 'reverse' || k === 'mute') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="${k}"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
         else if (k === 'italic') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="italic"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
         else if (k === 'align') field = `<button class="selectbtn" data-menu="align"><span>${(TEXT_ALIGNS.find(a => a[0] === v) || TEXT_ALIGNS[1])[1]}</span>${ICON.chev}</button>`;
@@ -946,20 +1086,146 @@ function renderProps() {
         else if (k === 'phys') field = `<button class="selectbtn" data-menu="phys"><span>${(Physics.KINDS.find(x => x[0] === (v || 'none')) || Physics.KINDS[0])[1]}</span>${ICON.chev}</button>`;
         else if (k === 'walls') field = `<button class="selectbtn" data-menu="walls"><span>${(Physics.WALLS.find(x => x[0] === v) || Physics.WALLS[0])[1]}</span>${ICON.chev}</button>`;
         else field = `<input data-p="${k}" value="${fmt(v)}" inputmode="decimal" spellcheck="false"${isFixed ? ' disabled' : ''}>`;
-        const wide = ['fill', 'fill2', ...MIDS, 'grad', 'stroke', 'text', 'weight', 'font', 'italic', 'three', 'shape', 'material', 'phys', 'walls'].includes(k) ? ' wide' : '';
+        const wide = ['fill', 'fill2', ...MIDS, 'grad', 'stroke', 'text', 'weight', 'font', 'italic', 'three', 'shape', 'material', 'phys', 'walls', 'mask', 'matte', 'lut', 'keyColor', 'chroma', 'minv'].includes(k) ? ' wide' : '';
         // Keeping the proportions means nothing once either side is locked.
         const lock = k === 'w' && list.includes('h') && !L.fix?.w && !L.fix?.h ? `<button class="ib aspect ${aspectLocked(L) ? 'on' : ''}" data-cmd="aspect" title="${aspectLocked(L) ? 'Aspect ratio locked: click to unlock' : 'Lock aspect ratio'}">${aspectLocked(L) ? ICON.link : ICON.unlink}</button>` : '';
         const drop = MIDS.includes(k) ? `<button class="ib" data-cmd="delstop" data-k="${k}" title="Take this colour out of the gradient">${ICON.trash}</button>` : '';
         const pin = fx ? `<button class="ib fix ${isFixed ? 'on' : ''}" data-fix="${fx}" title="${isFixed ? `${FIX_NAME[fx]} locked: click to unlock` : `Lock ${FIX_NAME[fx].toLowerCase()}`}">${isFixed ? ICON.lock : ICON.unlock}</button>` : '';
         h += `<div class="row${wide}${isFixed ? ' fixed' : ''}" data-row="${k}">${kb}<label ${field.startsWith('<input') && !isFixed ? `data-scrub="${STEP[k] || 1}"` : ''}>${(L.type === 'camera' && CAMERA_LABEL[k]) || (k === 'gradMorph' && o.grad === 'radial' ? 'To linear %' : LABEL[k])}</label>${field}${drop}${pin}${lock}</div>`;
       }
+      if (g === 'Mask' && (o.mask || 'none') !== 'none') h += `<div class="btnrow wide"><button class="tb small${maskEditing === L.id ? ' on' : ''}" data-cmd="maskedit">${maskEditing === L.id ? 'Done editing' : 'Edit on canvas'}</button>${o.mask === 'pen' ? '<button class="tb small" data-cmd="maskclear">Clear points</button>' : ''}</div>`;
+      if (g === 'Green screen' && o.chroma) h += `<div class="btnrow wide"><button class="tb small" data-cmd="keypick" title="Pick the screen's colour from anywhere on screen">Pick the colour from the canvas</button></div>`;
       h += '</div></div>';
     }
     if (typeof Reactive !== 'undefined') h += Reactive.panelHTML(L);
   } else h += presetsHTML(L);
-  Pn.innerHTML = h; propsFor = L.id;
+  Pn.innerHTML = h; propsFor = L.id; drawCurves();
 }
 let tab = 'props';
+
+// ---------- finishing, in the panel and on the canvas ----------
+let maskEditing = null;                    // the layer whose mask the canvas is editing
+function setMask(L, v) {
+  L.p.mask = v;
+  if (v !== 'none' && (!L.p.mw || !L.p.mh)) { const { w, h } = bounds(L, time); L.p.mw = Math.round(w * .7); L.p.mh = Math.round(h * .7); }
+  maskEditing = v === 'none' ? null : L.id; refresh();
+  if (v === 'pen' && !(L.p.mpts?.length >= 3)) status('Click on the canvas around what to keep: three points or more make the mask');
+  else if (v !== 'none') status('Drag the mask to move it, its corners to resize it; Feather softens its edge');
+}
+// The key colour, picked off the screen with the layer shown unkeyed for the moment, so the screen's own colour is
+// what is under the pointer.
+async function pickKeyColor(L) {
+  if (!('EyeDropper' in window)) return status('This browser cannot pick colours from the screen: set Key colour by hand');
+  L.p.chroma = false; render();
+  try { const { sRGBHex } = await new EyeDropper().open(); L.p.chroma = true; setProp(L, 'keyColor', sRGBHex.toLowerCase()); refresh(); status(`Keying out ${sRGBHex}`); }
+  catch (_) { L.p.chroma = true; render(); }
+}
+const lutPicker = Object.assign(document.createElement('input'), { type: 'file', accept: '.cube' });
+lutPicker.onchange = async () => {
+  const f = lutPicker.files[0], L = cur(); lutPicker.value = ''; if (!f) return;
+  try {
+    const lut = Grade.parseCube(await f.text()), name = f.name.replace(/\.cube$/i, '');
+    (S.luts ||= {})[name] = lut; if (L) { L.p.lut = name; L.p.lutMix ??= 100; } refresh(); status(`Loaded the ${name} LUT (${lut.size}³)`);
+  } catch (e) { UI.alert('Could not load ' + f.name, e.message); }
+};
+
+// Curves: one for all three channels (RGB) and one for each. Points are [x, y] from 0 to 1, the ends included.
+let curveCh = 'rgb';
+const CURVE_COLOR = { rgb: '#e8e8e8', r: '#ff5c5c', g: '#4cd97b', b: '#4c8dff' };
+function curvesHTML(L) {
+  return `<div class="curves" data-curves><div class="seg">${['rgb', 'r', 'g', 'b'].map(c => `<button data-curvech="${c}" class="${curveCh === c ? 'on' : ''}">${c === 'rgb' ? 'RGB' : c.toUpperCase()}</button>`).join('')}
+    <button data-cmd="curvereset" title="Straighten this curve">Reset</button></div>
+    <canvas width="456" height="456"></canvas><p class="note">Click to add a point and drag it to bend the curve. Double-click a point, or drag it off the side, to remove it.</p></div>`;
+}
+let curvePress = null;
+const curvePts = (L, ch) => L.p.curves?.[ch] || Grade.IDENTITY;
+function drawCurves() {
+  const L = cur(), el = $('#props [data-curves] canvas'); if (!L || !el) return;
+  const c = el.getContext('2d'), W = el.width, H = el.height;
+  c.clearRect(0, 0, W, H); c.fillStyle = '#1b1b1b'; c.fillRect(0, 0, W, H);
+  c.strokeStyle = 'rgba(255,255,255,.07)'; c.lineWidth = 2; c.beginPath();
+  for (let i = 1; i < 4; i++) { c.moveTo(W * i / 4, 0); c.lineTo(W * i / 4, H); c.moveTo(0, H * i / 4); c.lineTo(W, H * i / 4); }
+  c.moveTo(0, H); c.lineTo(W, 0); c.stroke();
+  const line = (ch, alpha) => { const T = Grade.curveTable(curvePts(L, ch)); c.strokeStyle = CURVE_COLOR[ch]; c.globalAlpha = alpha; c.lineWidth = 3; c.beginPath();
+    for (let v = 0; v < 256; v++) { const x = v / 255 * W, y = H - T[v] * H; v ? c.lineTo(x, y) : c.moveTo(x, y); } c.stroke(); c.globalAlpha = 1; };
+  for (const ch of ['rgb', 'r', 'g', 'b']) if (ch !== curveCh && !Grade.isIdentity(L.p.curves?.[ch])) line(ch, .35);
+  line(curveCh, 1);
+  for (const [x, y] of curvePts(L, curveCh)) { c.beginPath(); c.arc(x * W, H - y * H, 9, 0, PI * 2); c.fillStyle = '#111'; c.fill(); c.lineWidth = 3; c.strokeStyle = CURVE_COLOR[curveCh]; c.stroke(); }
+}
+$('#props').addEventListener('pointerdown', e => {
+  const el = e.target.closest('[data-curves] canvas'), L = cur(); if (!el || !L || e.button) return;
+  e.preventDefault();
+  const at = ev => { const r = el.getBoundingClientRect(); return [(ev.clientX - r.left) / r.width, 1 - (ev.clientY - r.top) / r.height]; };
+  const cs = (L.p.curves ||= {}), pts = cs[curveCh] = curvePts(L, curveCh).map(p => [...p]).sort((a, b) => a[0] - b[0]);
+  const [x0, y0] = at(e), r = el.getBoundingClientRect(), tol = 12 / r.width;
+  let i = pts.findIndex(([x, y]) => Math.hypot(x - x0, y - y0) < tol * 1.4);
+  // a second press on the same point soon after the first takes it out
+  const again = curvePress && curvePress.ch === curveCh && curvePress.i === i && performance.now() - curvePress.at < 400;
+  curvePress = { ch: curveCh, i, at: performance.now() };
+  if (again && i > 0 && i < pts.length - 1) { pts.splice(i, 1); curvePress = null; commit(); refresh(); return; }
+  if (i < 0) { i = pts.findIndex(p => p[0] > x0); if (i <= 0) i = pts.length - 1; pts.splice(i, 0, [x0, Math.max(0, Math.min(1, y0))]); }
+  let off = false;
+  const follow = (onMove, onUp) => { const up = () => { removeEventListener('pointermove', onMove); removeEventListener('pointerup', up); onUp(); };
+    addEventListener('pointermove', onMove); addEventListener('pointerup', up); };
+  follow(ev => {
+    const [x, y] = at(ev), last = i === pts.length - 1;
+    const lo = i ? pts[i - 1][0] + .01 : 0, hi = last ? 1 : pts[i + 1][0] - .01;
+    // a middle point dragged well off the side is taken out when let go
+    off = i > 0 && !last && (x < -.08 || x > 1.08 || y < -.08 || y > 1.08);
+    pts[i] = [i === 0 ? Math.max(0, Math.min(hi, x)) : last ? Math.max(lo, Math.min(1, x)) : Math.max(lo, Math.min(hi, x)), Math.max(0, Math.min(1, y))];
+    render(); drawCurves();
+  }, () => { if (off) pts.splice(i, 1); commit(); refresh(); });
+  render(); drawCurves();
+});
+
+// The mask on the canvas: its outline whenever its layer is selected, and its handles while it is being edited.
+function maskOverlay(c, L, k) {
+  const o = state(L, time); if ((o.mask || 'none') === 'none') return;
+  const sc = Math.abs(o.scale) * Math.max(Math.abs(o.sx), Math.abs(o.sy)) || 1;
+  c.save(); toLayer(c, o); c.strokeStyle = '#ffd84c'; c.lineWidth = 1.5 * k / sc; c.setLineDash([6 * k / sc, 4 * k / sc]);
+  if (o.mask !== 'pen' || (L.p.mpts?.length || 0) >= 2) { maskPath(c, L, o); if (o.mask === 'pen' && L.p.mpts.length < 3) { c.setLineDash([]); } c.stroke(); }
+  if (maskEditing === L.id) {
+    c.setLineDash([]); const r = 5.5 * k / sc;
+    const dots = o.mask === 'pen' ? (L.p.mpts || []).map(([x, y]) => [o.mx + x, o.my + y])
+      : [[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([hx, hy]) => [o.mx + hx * Math.abs(o.mw) / 2, o.my + hy * Math.abs(o.mh) / 2]);
+    for (const [x, y] of dots) { c.beginPath(); c.arc(x, y, r, 0, PI * 2); c.fillStyle = '#fff'; c.fill(); c.strokeStyle = '#ffd84c'; c.stroke(); }
+  }
+  c.restore();
+}
+// A press on the canvas while the mask is being edited: a handle or point under it to drag, or for a pen mask a
+// new point (put into the edge it is nearest, or added at the end). False when the press is not the mask's.
+function maskPress(L, px, py, k, e) {
+  const o = state(L, time), [lx, ly] = local(L, px, py), sc = Math.abs(o.scale) * Math.max(Math.abs(o.sx), Math.abs(o.sy)) || 1, tol = 10 * k / sc;
+  if (o.mask === 'pen') {
+    const pts = (L.p.mpts ||= []), idx = pts.findIndex(([x, y]) => Math.hypot(o.mx + x - lx, o.my + y - ly) < tol);
+    if (idx >= 0) {
+      if (e.altKey) { pts.splice(idx, 1); commit(); refresh(); return 'done'; }
+      return { mode: 'mask', what: 'pt', L, idx, x0: e.clientX, y0: e.clientY };
+    }
+    let ins = pts.length, best = tol;
+    if (pts.length >= 3) for (let j = 0; j < pts.length; j++) {
+      const [ax, ay] = pts[j], [bx, by] = pts[(j + 1) % pts.length], dx = bx - ax, dy = by - ay;
+      const u = Math.max(0, Math.min(1, ((lx - o.mx - ax) * dx + (ly - o.my - ay) * dy) / (dx * dx + dy * dy || 1)));
+      const d = Math.hypot(ax + dx * u - (lx - o.mx), ay + dy * u - (ly - o.my)); if (d < best) { best = d; ins = j + 1; }
+    }
+    pts.splice(ins, 0, [Math.round(lx - o.mx), Math.round(ly - o.my)]); refresh(false);
+    return { mode: 'mask', what: 'pt', L, idx: ins, x0: e.clientX, y0: e.clientY, moved: true };
+  }
+  const w = Math.abs(o.mw), h = Math.abs(o.mh);
+  for (const [hx, hy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]])
+    if (Math.hypot(o.mx + hx * w / 2 - lx, o.my + hy * h / 2 - ly) < tol)
+      return { mode: 'mask', what: 'corner', L, fx: o.mx - hx * w / 2, fy: o.my - hy * h / 2, x0: e.clientX, y0: e.clientY, moved: true };
+  if (Math.abs(lx - o.mx) <= w / 2 && Math.abs(ly - o.my) <= h / 2)
+    return { mode: 'mask', what: 'move', L, lx0: lx, ly0: ly, mx0: o.mx, my0: o.my, x0: e.clientX, y0: e.clientY };
+  return false;
+}
+function maskDrag(d, px, py) {
+  const L = d.L, o = state(L, time), [lx, ly] = local(L, px, py);
+  if (d.what === 'pt') L.p.mpts[d.idx] = [Math.round(lx - o.mx), Math.round(ly - o.my)];
+  else if (d.what === 'corner') { setProp(L, 'mx', Math.round((d.fx + lx) / 2)); setProp(L, 'my', Math.round((d.fy + ly) / 2));
+    setProp(L, 'mw', Math.max(2, Math.round(Math.abs(lx - d.fx)))); setProp(L, 'mh', Math.max(2, Math.round(Math.abs(ly - d.fy)))); }
+  else { setProp(L, 'mx', Math.round(d.mx0 + lx - d.lx0)); setProp(L, 'my', Math.round(d.my0 + ly - d.ly0)); }
+}
 function renderPropsValues() {
   const L = cur(); if (!L || tab !== 'props') return; const o = state(L, time);
   document.querySelectorAll('#props [data-p]').forEach(i => { const k = i.dataset.p;
@@ -1012,6 +1278,21 @@ Pn.addEventListener('click', e => {
   else if (t.dataset.cmd === 'flipx' || t.dataset.cmd === 'flipy') { const k = t.dataset.cmd === 'flipx' ? 'sx' : 'sy'; setProp(L, k, -state(L, time)[k]); refresh(); }
   else if (t.dataset.cmd === 'fitcanvas') fitCanvasToImage(L);
   else if (t.dataset.cmd === 'italic') { L.p.italic = !L.p.italic; refresh(); }
+  else if (t.dataset.cmd === 'minv' || t.dataset.cmd === 'chroma') { L.p[t.dataset.cmd] = !L.p[t.dataset.cmd]; refresh(); }
+  else if (t.dataset.cmd === 'maskedit') { maskEditing = maskEditing === L.id ? null : L.id; refresh();
+    if (maskEditing) status(L.p.mask === 'pen' ? 'Click to place points, drag one to move it, Alt-click one to remove it' : 'Drag the mask to move it, its corners to resize it'); }
+  else if (t.dataset.cmd === 'maskclear') { L.p.mpts = []; maskEditing = L.id; refresh(); status('Click on the canvas to place the mask\'s points'); }
+  else if (t.dataset.cmd === 'keypick') pickKeyColor(L);
+  else if (t.dataset.cmd === 'curvereset') { if (L.p.curves) L.p.curves[curveCh] = Grade.IDENTITY.map(p => [...p]); refresh(); }
+  else if (t.dataset.curvech) { curveCh = t.dataset.curvech; renderProps(); }
+  else if (t.dataset.menu === 'mask') UI.menu(t, MASK_KINDS.map(([value, label]) => ({ value, label })), L.p.mask || 'none', v => setMask(L, v));
+  else if (t.dataset.menu === 'matte') UI.menu(t, TRACK_MATTES.map(([value, label]) => ({ value, label })), L.p.matte || 'none', v => {
+    L.p.matte = v; refresh(); const above = S.layers[S.layers.indexOf(L) + 1];
+    if (v !== 'none') status(above ? `${above.name} is now ${L.name}'s matte, and is hidden` : 'Put a layer above this one to use as its matte'); });
+  else if (t.dataset.menu === 'lut')
+    UI.menu(t, [{ value: '', label: 'None' }, ...Object.keys(S.luts || {}).map(n => ({ value: n, label: n })), { value: '__load', label: 'Load a .cube file…', group: 'More' }], L.p.lut || '', v => {
+      if (v === '__load') return lutPicker.click();
+      L.p.lut = v; refresh(); });
   else if (t.dataset.cmd === 'reverse' || t.dataset.cmd === 'mute') { L.p[t.dataset.cmd] = !L.p[t.dataset.cmd]; DUCKENV.clear(); refresh(); }
   else if (t.dataset.cmd === 'three') { L.p.three = !L.p.three; refresh(); status(L.p.three ? `${L.name} is 3D: turn it with Rotate X and Y, push it back with Depth` : `${L.name} is flat again`); }
   else if (t.dataset.menu === 'shape')
@@ -2490,7 +2771,8 @@ const COMMANDS = [
   ['Edit', 'Rename layer', 'f2', withL(renameLayer)],
   ['Edit', 'Edit text', 'enter', withL(L => L.type === 'text' ? editText(L) : null)],
   ['Edit', 'Select all layers', 'mod+a', () => selectAll()],
-  ['Edit', 'Deselect', 'escape', () => { setSelection([]); selClip = null; refresh(); }],
+  ['Edit', 'Deselect', 'escape', () => { if (maskEditing) { maskEditing = null; refresh(); return status('Done editing the mask'); } setSelection([]); selClip = null; refresh(); }],
+  ['Add', 'Adjustment layer (grades everything under it)', '', () => newLayer('adjust')],
   // Add
   ['Add', 'Rectangle', 'r', () => newLayer('rect')],
   ['Add', 'Ellipse', 'o', () => newLayer('ellipse')],
@@ -3286,7 +3568,8 @@ const LIVE = (() => {
       const props = a.props || {}; for (const p in props) if (!PROPS[a.type].includes(p)) throw new Error(`${a.type} layers have no "${p}"`);
       const scene = Object.fromEntries(Object.entries(props).filter(([p]) => Physics.SCENE.includes(p)));
       for (const p in scene) delete props[p];
-      const L = makeLayer(a.type, { ...(NEW_LAYER[a.type] || {}), ...props }, a.name);
+      const N = NEW_LAYER[a.type], { name: _, ...base } = (typeof N === 'function' ? N() : N) || {};
+      const L = makeLayer(a.type, { ...base, ...props }, a.name || _);
       for (const [p, v] of Object.entries(scene)) S[p] = p === 'walls' ? String(v) : +v;
       if (a.in != null) L.in = +a.in; if (a.out != null) L.out = +a.out;
       sel = L.id; return done(`added ${L.type} "${L.name}"`, { id: L.id });

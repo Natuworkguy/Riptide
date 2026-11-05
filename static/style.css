@@ -595,3 +595,8 @@ body.recording .checker{box-shadow:0 0 0 2px #ff4d4f}
 .trim .trn{position:absolute;top:0;bottom:0;cursor:ew-resize;z-index:1;border-radius:3px}
 .trim .trn.in{left:0;background:linear-gradient(90deg,rgba(255,255,255,.38),rgba(255,255,255,.06));box-shadow:inset -1px 0 0 rgba(255,255,255,.55)}
 .trim .trn.out{right:0;background:linear-gradient(270deg,rgba(255,255,255,.38),rgba(255,255,255,.06));box-shadow:inset 1px 0 0 rgba(255,255,255,.55)}
+/* curves, in the Grade sections */
+.curves{grid-column:1/-1;display:flex;flex-direction:column;gap:6px}
+.curves canvas{width:100%;aspect-ratio:1;border-radius:var(--r);touch-action:none;cursor:crosshair;display:block}
+.curves .note{padding:0}
+.btnrow .tb.on{background:#ffd84c;color:#111}

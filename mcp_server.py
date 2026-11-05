@@ -103,7 +103,7 @@ async def see_frames(count: int = 8, times: list[float] | None = None, width: in
 
 # ---------- changing ----------
 @mcp.tool()
-async def add_layer(type: Literal["rect", "ellipse", "polygon", "star", "arc", "text", "wave", "shape3d", "camera", "figure"], name: str | None = None,
+async def add_layer(type: Literal["rect", "ellipse", "polygon", "star", "arc", "text", "wave", "shape3d", "camera", "figure", "adjust"], name: str | None = None,
               props: dict | None = None, start: float | None = None, end: float | None = None) -> dict:
     """Add a layer on top. `props` are initial values, e.g. {"x": 540, "y": 300, "w": 400, "h": 120, "fill": "#ff5a36", "radius": 20}
     or for text {"text": "Hello", "size": 96, "weight": 800, "fill": "#111111"}. `start`/`end` limit when it is visible (seconds).
@@ -129,7 +129,18 @@ async def add_layer(type: Literal["rect", "ellipse", "polygon", "star", "arc", "
     ragdoll) or "fixed" (a solid surface; keyframe it to push things), with bounce and friction (0 to 100), mass,
     vx and vy (a push, pixels a second), spin (degrees a second) and physAt (when it starts falling; before then its
     keyframes move it, and their speed carries on). The scene's gravity (pixels a second squared, default 1800),
-    walls ("floor", "box" or "none") and drag (air, default 1) can be set from any layer's props."""
+    walls ("floor", "box" or "none") and drag (air, default 1) can be set from any layer's props.
+
+    Finishing, on any layer that draws: mask "rect" | "ellipse" | "pen" (mx, my, mw, mh place it in the layer's own
+    pixels from its centre; mround rounds a rect's corners; feather softens its edge, pixels; minv true keeps the
+    outside; a pen mask's points are mpts, [[x, y], ...] around mx, my). matte "alpha" | "alphainv" | "luma" |
+    "lumainv" shapes the layer by the one directly above it, which is then not drawn. A colour grade: temp and tint
+    (-100 to 100), expo (stops), levels lvBlack, gamma, lvWhite, outBlack, outWhite (0 to 255), curves
+    {"rgb" | "r" | "g" | "b": [[x, y], ...] from 0 to 1}, vig (vignette, 0 to 100) with vigSize (%), and lut (the name
+    of a .cube LUT loaded in the editor) with lutMix (%). Images and videos key out a green screen with chroma true,
+    keyColor (the screen's colour), keyTol and keySoft (0 to 100) and spill (%). An "adjust" layer draws nothing
+    itself: its blur, adjustments, grade, vignette and mask apply to everything under it, within its box (w and h;
+    it starts the size of the canvas). All the numbers animate."""
     return await acall("add_layer", {"type": type, "name": name, "props": props or {}, "in": start, "out": end})
 
 

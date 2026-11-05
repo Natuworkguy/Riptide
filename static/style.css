@@ -600,3 +600,14 @@ body.recording .checker{box-shadow:0 0 0 2px #ff4d4f}
 .curves canvas{width:100%;aspect-ratio:1;border-radius:var(--r);touch-action:none;cursor:crosshair;display:block}
 .curves .note{padding:0}
 .btnrow .tb.on{background:#ffd84c;color:#111}
+/* the graph editor, in place of the timeline's rows */
+.trow.graph-row{border-bottom:0;background:#161616}
+.trow.graph-row .tnm{align-items:flex-start;padding:8px 6px}
+.gprops{display:flex;flex-direction:column;gap:2px;width:100%}
+.gprop{display:flex;align-items:center;gap:7px;height:22px;padding:0 6px;border-radius:3px;color:var(--dim);font-size:11.5px;text-align:left}
+.gprop i{width:8px;height:8px;border-radius:2px;flex:none}
+.gprop:hover{background:#ffffff0d;color:var(--text)}
+.gprop.on{background:#ffffff14;color:#fff}
+.gprop.dim{opacity:.45}
+.gnote{color:var(--faint);font-size:11px;line-height:1.5;margin:0}
+canvas.graph{display:block;cursor:default}

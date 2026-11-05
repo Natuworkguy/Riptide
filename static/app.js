@@ -36,9 +36,37 @@ const EASE_LIST = [
 ];
 const EASES = Object.fromEntries(EASE_LIST.map(e => [e[0], e[3]]));
 const EASE_ITEMS = EASE_LIST.map(([value, label, group]) => ({ value, label, group }));
-const easeName = v => EASE_LIST.find(e => e[0] === v)?.[1] || v;
-function curveSVG(name, w = 34, h = 22) {
-  const f = EASES[name], pts = [];
+const easeName = v => v === 'bezier' ? 'Custom curve' : EASE_LIST.find(e => e[0] === v)?.[1] || v;
+// A custom curve, shaped in the graph editor: a key's ease 'bezier' with bz [x1, y1, x2, y2], as CSS's
+// cubic-bezier(): the two handles, x across the time to the next key and y up the change in value (y may overshoot).
+const BEZ = new Map();
+function bezier([x1, y1, x2, y2]) {
+  const id = `${x1},${y1},${x2},${y2}`; let f = BEZ.get(id); if (f) return f;
+  const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx, cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+  const X = s => ((ax * s + bx) * s + cx) * s, Y = s => ((ay * s + by) * s + cy) * s, dX = s => (3 * ax * s + 2 * bx) * s + cx;
+  f = t => {
+    if (t <= 0) return 0; if (t >= 1) return 1;
+    let s = t;
+    for (let i = 0; i < 8; i++) { const e = X(s) - t; if (Math.abs(e) < 1e-6) return Y(s); const d = dX(s); if (Math.abs(d) < 1e-6) break; s -= e / d; }
+    let lo = 0, hi = 1; s = t;
+    for (let i = 0; i < 40; i++) { const x = X(s); if (Math.abs(x - t) < 1e-6) break; if (x < t) lo = s; else hi = s; s = (lo + hi) / 2; }
+    return Y(s);
+  };
+  if (BEZ.size > 500) BEZ.clear(); BEZ.set(id, f); return f;
+}
+// what a key's ease does, as a function of 0..1
+const easeFn = k => k.ease === 'bezier' && k.bz ? bezier(k.bz) : EASES[k.ease] || EASES.easeInOut;
+// the named eases as handles, near enough to start shaping from; the rest (elastic, bounce, hold) start straight
+const BEZ_OF = { linear: [1 / 3, 1 / 3, 2 / 3, 2 / 3], sineIn: [.12, 0, .39, 0], sineOut: [.61, 1, .88, 1], sineInOut: [.37, 0, .63, 1],
+  easeIn: [.32, 0, .67, 0], easeOut: [.33, 1, .68, 1], easeInOut: [.65, 0, .35, 1], quartOut: [.25, 1, .5, 1], quartInOut: [.76, 0, .24, 1],
+  expoIn: [.7, 0, .84, 0], expoOut: [.16, 1, .3, 1], expoInOut: [.87, 0, .13, 1], circOut: [0, .55, .45, 1], circInOut: [.85, 0, .15, 1],
+  backIn: [.36, 0, .66, -.56], back: [.34, 1.56, .64, 1], backInOut: [.68, -.6, .32, 1.6] };
+const handlesOf = k => k.ease === 'bezier' && k.bz ? k.bz : BEZ_OF[k.ease || 'easeInOut'] || BEZ_OF.linear;
+// "cubic-bezier(.2, .8, .2, 1)", as an agent or a person may write it
+const parseBezier = e => { const m = typeof e === 'string' && e.replace(/\s+/g, '').match(/^cubic-bezier\(([-\d.]+),([-\d.]+),([-\d.]+),([-\d.]+)\)$/i);
+  if (!m) return null; const v = m.slice(1).map(Number); return v.every(isFinite) ? [Math.max(0, Math.min(1, v[0])), v[1], Math.max(0, Math.min(1, v[2])), v[3]] : null; };
+function curveSVG(name, w = 34, h = 22, fn = null) {
+  const f = fn || EASES[name] || EASES.easeInOut, pts = [];
   for (let i = 0; i <= 24; i++) { const t = i / 24; pts.push(`${(t * w).toFixed(1)},${(h - 4 - f(t) * (h - 8)).toFixed(1)}`); }
   return `<svg class="curve" viewBox="0 -2 ${w} ${h + 4}" width="${w}" height="${h}"><polyline points="${pts.join(' ')}"/></svg>`;
 }
@@ -181,7 +209,7 @@ function val(L, prop, t) {
   if (t <= ks[0].t) return ks[0].v;
   for (let i = 0; i < ks.length - 1; i++) {
     const a = ks[i], b = ks[i + 1];
-    if (t <= b.t) return lerp(a.v, b.v, (EASES[a.ease] || EASES.easeInOut)((t - a.t) / (b.t - a.t || 1)));
+    if (t <= b.t) return lerp(a.v, b.v, easeFn(a)((t - a.t) / (b.t - a.t || 1)));
   }
   return ks[ks.length - 1].v;
 }
@@ -189,9 +217,10 @@ const near = (a, b) => Math.abs(a - b) < 0.005;
 function setKey(L, prop, t, v, ease) {
   if (fixed(L, prop)) return;
   t = Math.max(0, Math.min(S.dur, Math.round(t * 1000) / 1000)); v = keyValue(prop, v);
-  const ks = (L.keys[prop] ||= []);
-  const k = ks.find(k => near(k.t, t));
-  if (k) { k.v = v; if (ease) k.ease = ease; } else ks.push({ t, v, ease: ease || 'easeInOut' });
+  const ks = (L.keys[prop] ||= []), bz = parseBezier(ease); if (bz) ease = 'bezier';
+  let k = ks.find(k => near(k.t, t));
+  if (k) { k.v = v; if (ease) k.ease = ease; } else ks.push(k = { t, v, ease: ease || 'easeInOut' });
+  if (bz) k.bz = bz;
   ks.sort((a, b) => a.t - b.t);
 }
 // width and height stay in proportion when a layer's aspect ratio is locked (images and videos start locked)
@@ -890,6 +919,7 @@ const ICON = {
   center: ic('<rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><rect x="6" y="6" width="4" height="4" rx=".6"/>'),
   guides: ic('<rect x="2" y="3" width="12" height="10" rx="1"/><rect x="4.5" y="5.2" width="7" height="5.6" stroke-dasharray="1.5 1.5"/>'),
   marker: ic('<path d="M4 2.5h8v7l-4 4-4-4z"/>'),
+  graph: ic('<path d="M2 13.5h12M2 2.5v11"/><path d="M3.5 11.5C6 11.5 6 4 8.5 4s3 3 5 3"/>'),
   blade: ic('<path d="M8 1.5v13"/><path d="M3 5l3 3-3 3M13 5l-3 3 3 3"/>'),
   magnet: ic('<path d="M3.5 2.5v5a4.5 4.5 0 0 0 9 0v-5M3.5 5.5h3M9.5 5.5h3M6.5 2.5v5a1.5 1.5 0 0 0 3 0v-5"/>'),
   minus: ic('<path d="M3.5 8h9"/>'),
@@ -1759,6 +1789,7 @@ function renderTracks() {
   rl.appendChild(endH);
   const pastEnd = document.createElement('div'); pastEnd.className = 'pastend'; pastEnd.style.left = nmW() + t2x(S.dur) + 'px'; C.appendChild(pastEnd);
   if (!S.layers.length && !hasAudio()) C.insertAdjacentHTML('beforeend', '<div class="empty">Add a layer to start animating.</div>');
+  if (graphOn) { renderGraph(C, R); head.style.height = '0px'; head.style.height = C.scrollHeight + 'px'; placeHead(); updateEaseButton(); renderZoom(); return; }
   // layers, top of the stack first
   for (const L of [...S.layers].reverse()) {
     const keyed = Object.keys(L.keys).filter(p => L.keys[p]?.length), open = openRows.has(L.id) && keyed.length;
@@ -1809,6 +1840,140 @@ function renderTracks() {
   head.style.height = '0px'; head.style.height = C.scrollHeight + 'px';
   placeHead(); updateEaseButton(); renderZoom();
 }
+// ---------- graph editor ----------
+// The selected layer's animated numbers as curves over the timeline's own time axis: drag a key to move it in time
+// and value, drag its handles to shape the curve into the next key (it becomes a custom curve), double-click a curve
+// to add a key. Each curve is drawn to fit its own range, so a position and an opacity can be read together; pick a
+// property on the left to see only its curve.
+let graphOn = false, graphFocus = null, graphSel = null, graphCv = null, graphDrag = null;
+const GRAPH_COLORS = ['#ff5c8a', '#4cd97b', '#4c8dff', '#ffb020', '#b48cff', '#3fd0d0', '#ff7a45', '#e8e8e8'];
+const graphProps = L => Object.keys(L.keys).filter(p => L.keys[p]?.length && !COLORS.includes(p) && L.keys[p].every(k => isFinite(+k.v)));
+function setGraph(on) {
+  graphOn = on; $('#graphBtn').classList.toggle('on', on); graphSel = null; renderTracks();
+  if (on && !cur()) status('Select a layer to see its animation curves');
+}
+function renderGraph(C, R) {
+  const L = cur(), props = L ? graphProps(L) : [];
+  if (graphFocus && !props.includes(graphFocus)) graphFocus = null;
+  if (graphSel && !L?.keys[graphSel.prop]?.includes(graphSel.key)) graphSel = null;   // deleted, or undone
+  const row = rowEl('graph-row', '', L?.id), nm = row.querySelector('.tnm'), ln = row.querySelector('.tln');
+  row.style.height = Math.max(200, tlEl().clientHeight - R.offsetHeight - 1) + 'px';
+  nm.innerHTML = props.length ? `<div class="gprops">${props.map((p, i) => `<button class="gprop${graphFocus === p ? ' on' : ''}${graphFocus && graphFocus !== p ? ' dim' : ''}" data-gp="${p}" title="Show only this curve; click again for all"><i style="background:${GRAPH_COLORS[i % GRAPH_COLORS.length]}"></i>${esc(LABEL[p] || p)}</button>`).join('')}</div>`
+    : `<p class="gnote">${L ? `${esc(L.name)} has no animated numbers yet. Add keyframes, then shape them here.` : 'Select a layer to see its animation curves.'}</p>`;
+  nm.addEventListener('click', e => { const b = e.target.closest('[data-gp]'); if (!b) return; graphFocus = graphFocus === b.dataset.gp ? null : b.dataset.gp; graphSel = null; renderTracks(); });
+  graphCv = document.createElement('canvas'); graphCv.className = 'graph'; ln.appendChild(graphCv); C.appendChild(row);
+  graphCv.addEventListener('pointerdown', graphPress);
+  drawGraph();
+}
+// each curve's range, from its keys and the curve between them (an overshoot included), with room above and below
+function graphRange(L, p) {
+  const ks = L.keys[p]; let lo = Infinity, hi = -Infinity;
+  const t0 = ks[0].t, t1 = ks.at(-1).t, n = Math.max(2, Math.min(400, Math.round((t1 - t0) * 60)));
+  for (let i = 0; i <= n; i++) { const v = +val(L, p, t0 + (t1 - t0) * i / n); lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  for (const k of ks) { lo = Math.min(lo, +k.v); hi = Math.max(hi, +k.v); }
+  if (hi - lo < 1e-6) { const d = Math.max(1, Math.abs(hi) * .1); lo -= d; hi += d; }
+  return [lo, hi];
+}
+const GPAD = 22;
+function graphGeom() {
+  const L = cur(), H = graphCv.clientHeight, props = L ? graphProps(L) : [], shown = graphFocus ? [graphFocus] : props;
+  const ranges = Object.fromEntries(shown.map(p => [p, graphDrag?.prop === p && graphDrag.range ? graphDrag.range : graphRange(L, p)]));
+  const y = (p, v) => GPAD + (1 - (v - ranges[p][0]) / (ranges[p][1] - ranges[p][0])) * (H - GPAD * 2);
+  const v = (p, yy) => ranges[p][0] + (1 - (yy - GPAD) / (H - GPAD * 2)) * (ranges[p][1] - ranges[p][0]);
+  return { L, H, props, shown, ranges, y, v };
+}
+function drawGraph() {
+  if (!graphCv?.isConnected) return;
+  const W = laneW(), H = graphCv.parentElement.parentElement.clientHeight - 1, dpr = devicePixelRatio || 1;
+  graphCv.style.width = W + 'px'; graphCv.style.height = H + 'px'; graphCv.width = Math.round(W * dpr); graphCv.height = Math.round(H * dpr);
+  const c = graphCv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, H);
+  const G = graphGeom(); if (!G.L) return;
+  c.strokeStyle = 'rgba(255,255,255,.06)'; c.lineWidth = 1; c.beginPath();
+  for (let i = 0; i <= 4; i++) { const yy = Math.round(GPAD + i * (H - GPAD * 2) / 4) + .5; c.moveTo(0, yy); c.lineTo(W, yy); } c.stroke();
+  // the layer's own time, lighter
+  c.fillStyle = 'rgba(255,255,255,.025)'; c.fillRect(t2x(lin(G.L)), 0, t2x(lout(G.L)) - t2x(lin(G.L)), H);
+  for (const p of G.shown) {
+    const col = GRAPH_COLORS[G.props.indexOf(p) % GRAPH_COLORS.length], ks = G.L.keys[p];
+    c.strokeStyle = col; c.lineWidth = 2; c.beginPath();
+    for (let x = PAD; x <= t2x(S.dur) + 1; x += 2) { const yy = G.y(p, +val(G.L, p, x2t(x))); x === PAD ? c.moveTo(x, yy) : c.lineTo(x, yy); }
+    c.stroke();
+    // the range, at the top and the bottom, for the curve on its own
+    if (G.shown.length === 1) { c.fillStyle = 'rgba(255,255,255,.4)'; c.font = '10px ui-monospace, Menlo, monospace';
+      c.fillText(fmt(G.ranges[p][1]), PAD + 4, GPAD - 6); c.fillText(fmt(G.ranges[p][0]), PAD + 4, H - GPAD + 14); }
+    ks.forEach((k, i) => {
+      const x = t2x(k.t), yy = G.y(p, +k.v), on = graphSel && graphSel.key === k;
+      // the picked key's handles: the curve out of it and the curve into it
+      if (on) for (const [a, b, which] of [[k, ks[i + 1], 0], [ks[i - 1], k, 1]]) {
+        if (!a || !b || Math.abs(+b.v - +a.v) < 1e-9) continue;
+        const bz = handlesOf(a), hx = which ? bz[2] : bz[0], hy = which ? bz[3] : bz[1];
+        const px = t2x(a.t + hx * (b.t - a.t)), py = G.y(p, +a.v + hy * (+b.v - +a.v)), ox = which ? t2x(b.t) : t2x(a.t), oy = G.y(p, which ? +b.v : +a.v);
+        c.strokeStyle = 'rgba(255,255,255,.55)'; c.lineWidth = 1; c.beginPath(); c.moveTo(ox, oy); c.lineTo(px, py); c.stroke();
+        c.beginPath(); c.arc(px, py, 4.5, 0, PI * 2); c.fillStyle = '#111'; c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.stroke();
+      }
+      c.save(); c.translate(x, yy); c.rotate(PI / 4); c.fillStyle = on ? '#fff' : col; c.strokeStyle = '#111'; c.lineWidth = 1.5;
+      c.fillRect(-4.5, -4.5, 9, 9); c.strokeRect(-4.5, -4.5, 9, 9); c.restore();
+    });
+  }
+  if (graphSel && G.shown.includes(graphSel.prop)) { const k = graphSel.key; c.fillStyle = '#fff'; c.font = '11px ui-monospace, Menlo, monospace';
+    c.fillText(`${LABEL[graphSel.prop] || graphSel.prop} ${fmt(+k.v)} at ${fmtTime(k.t)}`, t2x(k.t) + 10, G.y(graphSel.prop, +k.v) - 10); }
+}
+const gxy = e => { const r = graphCv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+function graphHit(x, y) {
+  const G = graphGeom(); if (!G.L) return null;
+  // the picked key's handles first, then any key
+  if (graphSel && G.shown.includes(graphSel.prop)) { const ks = G.L.keys[graphSel.prop], i = ks.indexOf(graphSel.key), p = graphSel.prop;
+    for (const [a, b, which] of [[ks[i], ks[i + 1], 0], [ks[i - 1], ks[i], 1]]) {
+      if (!a || !b || Math.abs(+b.v - +a.v) < 1e-9) continue; const bz = handlesOf(a);
+      const hx = t2x(a.t + (which ? bz[2] : bz[0]) * (b.t - a.t)), hy = G.y(p, +a.v + (which ? bz[3] : bz[1]) * (+b.v - +a.v));
+      if (Math.hypot(hx - x, hy - y) < 8) return { kind: 'handle', prop: p, a, b, which, G };
+    } }
+  for (const p of [...G.shown].reverse()) for (const k of G.L.keys[p]) if (Math.hypot(t2x(k.t) - x, G.y(p, +k.v) - y) < 8) return { kind: 'key', prop: p, key: k, G };
+  return null;
+}
+let graphLast = null;
+function graphPress(e) {
+  if (e.button) return; const [x, y] = gxy(e), hit = graphHit(x, y), L = cur();
+  // a second press in the same spot soon after (the timeline redraws between them, so no dblclick comes)
+  const again = graphLast && performance.now() - graphLast.at < 400 && Math.hypot(e.clientX - graphLast.x, e.clientY - graphLast.y) < 5;
+  graphLast = { at: performance.now(), x: e.clientX, y: e.clientY };
+  if (again && !hit) { graphLast = null; return graphAdd(e); }
+  if (!hit) { graphSel = null; selKey = null; selKeys = []; drawGraph(); updateEaseButton(); return scrubFrom(e, graphCv.parentElement); }
+  e.preventDefault(); if (playing) togglePlay();
+  if (hit.kind === 'key') { graphSel = { prop: hit.prop, key: hit.key }; selKey = { id: L.id, t: hit.key.t, prop: hit.prop }; selKeys = []; updateEaseButton(); }
+  if (fixed(L, hit.prop)) { drawGraph(); return status(`${L.name}: its ${FIX_NAME[FIX_OF[hit.prop]].toLowerCase()} is locked`); }
+  graphDrag = { ...hit, range: hit.G.ranges[hit.prop], x0: x, y0: y, t0: hit.key?.t, v0: +hit.key?.v, moved: false };
+  const mv = ev => {
+    const d = graphDrag, [mx, my] = gxy(ev), G = graphGeom(); if (!d.moved && Math.hypot(mx - d.x0, my - d.y0) < 3) return; d.moved = true;
+    if (d.kind === 'key') {
+      const ks = L.keys[d.prop], i = ks.indexOf(d.key); let nx = mx, ny = my;
+      if (ev.shiftKey) { if (Math.abs(mx - d.x0) > Math.abs(my - d.y0)) ny = d.y0; else nx = d.x0; }
+      // in time between its neighbours, a frame either side; in value, anywhere
+      const lo = i ? ks[i - 1].t + 1 / FPS : 0, hi = i < ks.length - 1 ? ks[i + 1].t - 1 / FPS : S.dur;
+      d.key.t = Math.max(lo, Math.min(hi, ev.altKey ? x2t(nx) : frame(x2t(nx))));
+      const v = G.v(d.prop, ny), step = STEP[d.prop] || 1; d.key.v = Math.round(v / step) * step;
+      if (step < 1) d.key.v = +d.key.v.toFixed(3);
+      selKey = { id: L.id, t: d.key.t, prop: d.prop };
+    } else {
+      const span = d.b.t - d.a.t, dv = +d.b.v - +d.a.v;
+      const fx = Math.max(0, Math.min(1, (x2t(mx) - d.a.t) / (span || 1))), fy = Math.max(-3, Math.min(4, (G.v(d.prop, my) - +d.a.v) / dv));
+      const bz = handlesOf(d.a).map(v => +(+v).toFixed(3)); if (d.which) { bz[2] = +fx.toFixed(3); bz[3] = +fy.toFixed(3); } else { bz[0] = +fx.toFixed(3); bz[1] = +fy.toFixed(3); }
+      d.a.ease = 'bezier'; d.a.bz = bz;
+    }
+    render(); drawGraph(); renderPropsValues(); updateEaseButton();
+  };
+  const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); const d = graphDrag; graphDrag = null;
+    if (d?.moved) { commit(); refresh(); if (d.kind === 'handle') status('Custom curve: ' + `cubic-bezier(${d.a.bz.join(', ')})`); } else drawGraph(); };
+  addEventListener('pointermove', mv); addEventListener('pointerup', up); drawGraph();
+}
+// double-click on a curve: a key there, on the curve, so nothing moves until it is dragged
+function graphAdd(e) {
+  const [x, y] = gxy(e), G = graphGeom(); if (!G.L) return; const t = frame(x2t(x));
+  let best = null, bd = 10;
+  for (const p of G.shown) { const d = Math.abs(G.y(p, +val(G.L, p, t)) - y); if (d < bd) { bd = d; best = p; } }
+  if (!best) return status('Double-click on a curve to add a key to it');
+  setKey(G.L, best, t, val(G.L, best, t)); graphSel = { prop: best, key: G.L.keys[best].find(k => near(k.t, t)) };
+  selKey = { id: G.L.id, t, prop: best }; commit(); refresh(); status(`Added a ${LABEL[best] || best} key at ${fmtTime(t)}`);
+}
 const fmtRuler = (t, step) => step < 1 ? (Number.isInteger(+t.toFixed(4)) ? `${Math.round(t)}s` : `${Math.floor(t)}:${String(Math.round((t % 1) * FPS)).padStart(2, '0')}`) : `${+t.toFixed(2)}s`;
 function placeHead() {
   $('#head').style.transform = `translateX(${nmW() + t2x(time)}px)`; $('#tc').textContent = fmtTime(time);
@@ -1842,6 +2007,7 @@ $('.zoom').addEventListener('pointerdown', e => { const tr = $('.ztrack');
 tlEl().addEventListener('wheel', e => { if (!(e.ctrlKey || e.metaKey || e.altKey)) return; e.preventDefault();
   setZoom(zoom * Math.exp(-e.deltaY * .01), e.clientX - tlEl().getBoundingClientRect().left); }, { passive: false });
 $('#rec').onclick = () => setRecording(!recording);
+$('#graphBtn').onclick = () => setGraph(!graphOn);
 $('#snap').onclick = () => { snapOn = !snapOn; $('#snap').classList.toggle('on', snapOn); status('Snapping ' + (snapOn ? 'on' : 'off')); };
 
 // markers
@@ -1900,7 +2066,7 @@ function updateEaseButton() {
   const [L, ks] = has ? groups[0] : [];
   $('#keyinfo').textContent = !has ? '' : groups.length > 1 ? `${groups.length} keyframes on ${new Set(groups.map(g => g[0].id)).size} layer${new Set(groups.map(g => g[0].id)).size > 1 ? 's' : ''}`
     : `${L.name} · ${selKey.prop ? LABEL[selKey.prop] : ks.length + ' keys'} · ${fmtTime(selKey.t)}`;
-  b.innerHTML = has ? `${curveSVG(e, 20, 13)}<span>${mixed ? 'Mixed' : easeName(e)}</span>${ICON.chev}` : `<span>No keyframe selected</span>${ICON.chev}`;
+  b.innerHTML = has ? `${curveSVG(e, 20, 13, easeFn(all[0]))}<span>${mixed ? 'Mixed' : easeName(e)}</span>${ICON.chev}` : `<span>No keyframe selected</span>${ICON.chev}`;
 }
 $('#ease').onclick = e => { const groups = keyGroups(); if (!groups.length) return;
   UI.menu(e.currentTarget, EASE_ITEMS, groups[0][1][0].ease, v => { keyGroups().forEach(g => g[1].forEach(k => k.ease = v)); refresh(); status('Easing set to ' + easeName(v)); }, it => curveSVG(it.value)); };
@@ -2812,6 +2978,7 @@ const COMMANDS = [
   ['Align', 'Nudge 1 px (Shift: 10 px)', 'arrowleft|arrowright|arrowup|arrowdown', null],
   // Keyframes
   ['Keyframes', 'Record changes as animation', 'alt+r', () => setRecording(!recording)],
+  ['Keyframes', 'Graph editor', 'g', () => setGraph(!graphOn)],
   ['Keyframes', 'Key every property here', 'k', withL(L => { for (const p of PROPS[L.type]) if (ANIM.includes(p)) setKey(L, p, time, val(L, p, time)); refresh(); status('Keyed every property at ' + fmtTime(time)); })],
   ['Keyframes', 'Remove keyframes here', 'shift+k', () => removeKeysHere()],
   ['Keyframes', 'Previous keyframe', 'j|alt+,', () => jumpKey(-1)],
@@ -3516,11 +3683,11 @@ const LIVE = (() => {
     if (!L) throw new Error(`No layer ${JSON.stringify(a.id ?? a.name)}. Call get_project for ids.`); return L; };
   const checkProp = (L, p) => { if (p === 'name' || PROPS[L.type].includes(p)) return;
     throw new Error(`${L.type} layers have no "${p}". Valid: ${PROPS[L.type].join(', ')}`); };
-  const easeOK = e => { if (e && !EASE_ITEMS.some(i => i.value === e)) throw new Error(`Unknown easing "${e}". Valid: ${EASE_ITEMS.map(i => i.value).join(', ')}`); return e; };
+  const easeOK = e => { if (e && !EASE_ITEMS.some(i => i.value === e) && !parseBezier(e)) throw new Error(`Unknown easing "${e}". Valid: ${EASE_ITEMS.map(i => i.value).join(', ')}`); return e; };
   const layerInfo = (L, full) => {
     const props = {}; for (const p of PROPS[L.type]) props[p] = round(L.keys[p]?.length ? val(L, p, time) : L.p[p]);
     if (L.p.asset) props.asset = S.assets[L.p.asset]?.name;
-    const keyframes = {}; for (const [p, ks] of Object.entries(L.keys)) if (ks.length) keyframes[p] = full ? ks.map(k => ({ t: round(k.t), v: round(k.v), ease: k.ease || 'easeInOut' })) : ks.length;
+    const keyframes = {}; for (const [p, ks] of Object.entries(L.keys)) if (ks.length) keyframes[p] = full ? ks.map(k => ({ t: round(k.t), v: round(k.v), ease: k.ease === 'bezier' && k.bz ? `cubic-bezier(${k.bz.map(round).join(', ')})` : k.ease || 'easeInOut' })) : ks.length;
     return { id: L.id, name: L.name, type: L.type, in: round(lin(L)), out: round(lout(L)), hidden: !!L.hidden, locked: !!L.locked,
       locked_position: !!L.fix?.pos, locked_width: !!L.fix?.w, locked_height: !!L.fix?.h,
       blend: L.blend || 'normal', [full ? 'props' : 'props_at_playhead']: props, keyframes };

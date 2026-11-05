@@ -166,7 +166,8 @@ async def update_layer(layer: str, props: dict | None = None, at_time: float | N
 @mcp.tool()
 async def set_keyframes(layer: str, prop: str, keys: list[dict], replace: bool = False) -> dict:
     """Animate one property with keyframes, e.g. prop "y", keys [{"t": 0, "v": 600, "ease": "expoOut"}, {"t": 0.8, "v": 400}].
-    The ease on a key shapes the motion towards the next key. `replace` clears that property's existing keys first."""
+    The ease on a key shapes the motion towards the next key: a named one, or a custom curve as
+    "cubic-bezier(x1, y1, x2, y2)" (as in CSS; y may go past 0 and 1 to overshoot). `replace` clears that property's existing keys first."""
     return await acall("set_keyframes", {"id": layer, "prop": prop, "keys": keys, "replace": replace})
 
 

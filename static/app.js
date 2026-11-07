@@ -108,13 +108,17 @@ const PROPS = {
   model:   [...COMMON, ...DEPTH, 'w', 'h', 'lightAngle'],
   figure:  [...COMMON, 'w', 'h', 'fill', 'stroke', 'strokeWidth', 'side', 'limb', 'caps', ...Figure.JOINTS, ...PHYS],
   camera:  ['x', 'y', 'orbit', 'tilt', 'dolly', 'zoom', 'rotation'],
+  // a whole place to film (world3d.js): the 3D shapes and models above it stand in it
+  world:   ['opacity', ...ADJUST, ...FINISH, ...World.FIELDS],
 };
+ANIM.push(...World.NUMBERS, ...World.COLORS);
 const GROUPS = [['Transform', ['x', 'y', 'w', 'h', 'd', 'rotation', 'scale', 'sx', 'sy']],
   ['3D', ['three', 'shape', 'rotX', 'rotY', 'z', 'material', 'lightAngle']], ['Camera', ['orbit', 'tilt', 'dolly', 'zoom']],
   ['Style', ['fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', 'radius', 'points', 'sweep', 'opacity']],
   ['Text', ['text', 'font', 'weight', 'size', 'lineh', 'italic', 'align', 'tcase', 'spacing', 'reveal']], ['Pose', ['side', 'limb', 'caps', ...Figure.JOINTS]], ['Physics', PHYS],
   ['Clip', CLIP], ['Effects', ['blur', 'shadow', 'rgb']], ['Adjust', ADJUST], ['Green screen', KEYP], ['Mask', MASK],
   ['Grade', Grade.GRADE], ['Curves', ['curves']], ['Vignette and LUT', LOOKP]];
+GROUPS.splice(1, 0, ...World.GROUPS);
 const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', scale: 'Scale', sx: 'Stretch X', sy: 'Stretch Y',
   opacity: 'Opacity', radius: 'Corners', fill: 'Fill', grad: 'Gradient', fill2: 'Fill 2', mid1: 'Via', mid2: 'Via 2', mid3: 'Via 3', gradAngle: 'Angle°', gradMorph: 'To radial %', stroke: 'Stroke', strokeWidth: 'Stroke W', blur: 'Blur', shadow: 'Shadow', rgb: 'RGB split',
   size: 'Font size', text: 'Text', points: 'Points', weight: 'Weight', reveal: 'Reveal', sweep: 'Sweep°', spacing: 'Tracking',
@@ -131,7 +135,8 @@ const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', sca
   gravity: 'Gravity', walls: 'Walls', drag: 'Air drag' };
 // a camera's position is the point it looks at, and its rotation turns the whole view
 const CAMERA_LABEL = { x: 'Look at X', y: 'Look at Y', rotation: 'Roll°' };
-const STEP = { gradMorph: 1, opacity: .05, scale: .05, sx: .05, sy: .05, reveal: .05, zoom: .05, expo: .05, gamma: .05 };
+Object.assign(LABEL, World.LABELS);
+const STEP = { gradMorph: 1, opacity: .05, scale: .05, sx: .05, sy: .05, reveal: .05, zoom: .05, expo: .05, gamma: .05, ...World.STEP };
 const PALETTE = ['#7c5cff', '#ff5c8a', '#20c997', '#ffb020', '#3fa9ff', '#ff7a45'];
 const DEFAULTS = { rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0, rgb: 0,
   size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, font: 'Inter', italic: false, align: 'center', tcase: 'none', lineh: 110,
@@ -153,7 +158,7 @@ const GRADS = [['none', 'None'], ['linear', 'Linear'], ['radial', 'Radial']];
 // Between Fill and Fill 2 a gradient can run through up to three more colours (Via), evenly spaced:
 // #fff -> #abc -> #fff is a Fill, one Via and a Fill 2. An empty Via is not a stop.
 const MIDS = ['mid1', 'mid2', 'mid3'];
-const COLORS = ['fill', 'fill2', ...MIDS, 'stroke', 'keyColor'];
+const COLORS = ['fill', 'fill2', ...MIDS, 'stroke', 'keyColor', ...World.COLORS];
 function fillOf(c, o, w, h) {
   if ((o.grad !== 'linear' && o.grad !== 'radial') || !isColor(o.fill2)) return o.fill;
   const m = Math.max(0, Math.min(1, (+o.gradMorph || 0) / 100)), round = o.grad === 'radial' ? 1 - m : m;
@@ -183,7 +188,8 @@ function makeLayer(type, p = {}, name) {
     p: { ...DEFAULTS, x: S.w / 2, y: S.h / 2, fill, ...(type === 'arc' ? { strokeWidth: 24, stroke: fill } : {}), ...p }, keys: {} };
   S.layers.push(L); return L;
 }
-const NEW_LAYER = { figure: { w: 210, h: 460, fill: '#e8c39e' }, adjust: () => ({ w: S.w, h: S.h, name: 'Adjustment', fill: '#8b8b98' }) };
+const NEW_LAYER = { figure: { w: 210, h: 460, fill: '#e8c39e' }, adjust: () => ({ w: S.w, h: S.h, name: 'Adjustment', fill: '#8b8b98' }),
+  world: () => ({ ...World.DEFAULTS, objects: [], w: S.w, h: S.h, name: '3D world', fill: '#d08a3c' }) };
 function newLayer(type) { const N = NEW_LAYER[type], { name, ...p } = (typeof N === 'function' ? N() : N) || {}; const L = makeLayer(type, p, name); sel = L.id; selKey = null; selKeys = []; freshLayer = L.id; refresh(); }
 
 // ---------- keyframes ----------
@@ -351,6 +357,8 @@ function filterOf(o, k = 1) {
 }
 function drawLayer(c, L, t) {
   if (L.type === 'camera') return;
+  // a 3D shape or model standing in a 3D world is drawn by the world
+  if (World.worldOf(L, t)) return;
   const o = state(L, t);
   if (L.id === editingId) o.reveal = 1;
   const tr = transitionAt(L, t), fx = tr ? shapeTransition(o, tr, L, t) : null;
@@ -358,7 +366,7 @@ function drawLayer(c, L, t) {
   c.save();
   c.globalAlpha = Math.min(1, o.opacity);
   // a 3D layer is placed by the 3D view, which is laid over the whole canvas; effects apply to what it drew
-  const deep = R3D.wants(L);
+  const deep = R3D.wants(L) || L.type === 'world';
   if (!deep) { c.translate(o.x, o.y); c.rotate(o.rotation * PI / 180); c.scale(o.scale * o.sx, o.scale * o.sy); }
   { const f = filterOf(o); if (f) c.filter = f; }
   if (o.shadow > 0) { c.shadowColor = 'rgba(0,0,0,.45)'; c.shadowBlur = o.shadow; c.shadowOffsetY = o.shadow / 3; }
@@ -366,7 +374,8 @@ function drawLayer(c, L, t) {
   if (fx?.wipe && !deep) { const { p, dx, dy, w, h } = fx.wipe; c.beginPath();
     if (dx) c.rect(dx < 0 ? -w / 2 : w / 2 - w * p, -h / 2, w * p, h); else c.rect(-w / 2, dy < 0 ? -h / 2 : h / 2 - h * p, w, h * p);
     c.clip(); }
-  if (deep) R3D.draw(c, L, o, t, drawContent); else drawContent(c, L, o, t);
+  if (L.type === 'world') { if (!World.draw(c, L, o, t)) { c.fillStyle = '#20232b'; c.fillRect(0, 0, S.w, S.h); } }
+  else if (deep) R3D.draw(c, L, o, t, drawContent); else drawContent(c, L, o, t);
   // a dip covers the layer with black or white, all of it at the dip's middle
   if (fx?.dip && fx.dip.a > 0 && !deep) { c.filter = 'none'; c.shadowColor = 'transparent'; c.globalAlpha = Math.min(1, fx.dip.a * 1.4) * Math.min(1, o.opacity);
     c.fillStyle = fx.dip.color; c.fillRect(-fx.dip.w / 2, -fx.dip.h / 2, fx.dip.w, fx.dip.h); }
@@ -374,7 +383,7 @@ function drawLayer(c, L, t) {
 }
 // what a layer draws, centred on 0,0 at its own size: the layer, before it is moved, turned or scaled
 function drawContent(c, L, o, t) {
-  if (L.type === 'adjust') return;
+  if (L.type === 'adjust' || L.type === 'world') return;
   if (L.type === 'shape3d' || L.type === 'model') return placeholder3d(c, L, o);
   if (L.type === 'figure') return Figure.draw(c, o);
   c.fillStyle = o.fill; c.strokeStyle = o.stroke; c.lineWidth = o.strokeWidth; c.lineJoin = 'round'; c.lineCap = 'round';
@@ -938,6 +947,7 @@ const ICON = {
   image: ic('<rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="6" cy="6.5" r="1.2"/><path d="M2.5 12l3.5-3.5 2.5 2.5 2-2 3 3"/>'),
   upload: ic('<path d="M8 11V2.5M5 5.5l3-3 3 3M2.5 10v3.5h11V10"/>'),
   cube: ic('<path d="M8 1.8 13.5 5v6L8 14.2 2.5 11V5z"/><path d="M2.5 5 8 8.2 13.5 5M8 8.2v6"/>'),
+  world: ic('<circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 1.8 2.6 4 2.6 6S10 12.2 8 14c-2-1.8-2.6-4-2.6-6S6 3.8 8 2"/>'),
   model: ic('<path d="M8 1.8 13.5 5v6L8 14.2 2.5 11V5z"/><path d="M2.5 5 8 8.2 13.5 5M8 8.2v6"/><circle cx="8" cy="8.2" r="1.3" fill="currentColor"/>'),
   camera: ic('<rect x="1.5" y="4.5" width="9" height="7" rx="1.5"/><path d="M10.5 7.2l4-2v5.6l-4-2"/>'),
 };
@@ -1078,6 +1088,8 @@ function renderProps() {
       const ks = keys.filter(k => list.includes(k)); if (!ks.length) continue;
       h += `<div class="sec"><div class="sech">${g}</div><div class="grid">`;
       if (g === 'Adjust') h += `<div class="row wide"><label>Look</label><button class="selectbtn" data-menu="look"><span>Apply a look…</span>${ICON.chev}</button></div>`;
+      if (g === 'World' && L.type === 'world') { const n = Array.isArray(L.p.objects) ? L.p.objects.length : 0;
+        h += `<div class="row wide"><label>Scene</label><button class="selectbtn" data-menu="worldscene"><span>${n ? `${n} prop${n > 1 ? 's' : ''} · start from…` : 'Start from a scene…'}</span>${ICON.chev}</button></div>`; }
       for (const k of ks) {
         if ((k === 'fill2' || k === 'gradAngle' || MIDS.includes(k)) && (o.grad || 'none') === 'none') continue;
         if (MIDS.includes(k) && !isColor(o[k]) && !L.keys[k]?.length) continue;
@@ -1099,7 +1111,8 @@ function renderProps() {
         if (k === 'lutMix' && !o.lut) continue;
         if (k === 'vigSize' && !(o.vig > 0) && !L.keys.vig?.length) continue;
         if (k === 'curves') { h += curvesHTML(L); continue; }
-        if (k === 'mpts') continue;
+        if (k === 'mpts' || k === 'objects') continue;
+        if (L.type === 'world' && World.FIELDS.includes(k) && !World.shows(k, o, !!L.keys[k]?.length)) continue;
         const anim = ANIM.includes(k), here = L.keys[k]?.some(x => near(x.t, time)), keyed = L.keys[k]?.length,
           v = Physics.SCENE.includes(k) ? S[k] ?? SCENE_DEFAULTS[k] : o[k];
         const fx = FIX_OF[k], isFixed = fixed(L, k);
@@ -1118,12 +1131,13 @@ function renderProps() {
         else if (k === 'align') field = `<button class="selectbtn" data-menu="align"><span>${(TEXT_ALIGNS.find(a => a[0] === v) || TEXT_ALIGNS[1])[1]}</span>${ICON.chev}</button>`;
         else if (k === 'tcase') field = `<button class="selectbtn" data-menu="tcase"><span>${(TEXT_CASES.find(a => a[0] === v) || TEXT_CASES[0])[1]}</span>${ICON.chev}</button>`;
         else if (k === 'three') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="three" title="${v ? 'Make it flat again' : 'Turn it in 3D, push it back, and let a camera move around it'}"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
+        else if (k === 'sky' || k === 'ground') field = `<button class="selectbtn" data-menu="${k}"><span>${((k === 'sky' ? World.SKIES : World.GROUNDS).find(x => x[0] === v) || ['', v])[1]}</span>${ICON.chev}</button>`;
         else if (k === 'shape') field = `<button class="selectbtn" data-menu="shape"><span>${R3D.SHAPES.find(x => x[0] === v)?.[1] || v}</span>${ICON.chev}</button>`;
         else if (k === 'material') field = `<button class="selectbtn" data-menu="material"><span>${R3D.MATERIALS.find(x => x[0] === v)?.[1] || v}</span>${ICON.chev}</button>`;
         else if (k === 'phys') field = `<button class="selectbtn" data-menu="phys"><span>${(Physics.KINDS.find(x => x[0] === (v || 'none')) || Physics.KINDS[0])[1]}</span>${ICON.chev}</button>`;
         else if (k === 'walls') field = `<button class="selectbtn" data-menu="walls"><span>${(Physics.WALLS.find(x => x[0] === v) || Physics.WALLS[0])[1]}</span>${ICON.chev}</button>`;
         else field = `<input data-p="${k}" value="${fmt(v)}" inputmode="decimal" spellcheck="false"${isFixed ? ' disabled' : ''}>`;
-        const wide = ['fill', 'fill2', ...MIDS, 'grad', 'stroke', 'text', 'weight', 'font', 'italic', 'three', 'shape', 'material', 'phys', 'walls', 'mask', 'matte', 'lut', 'keyColor', 'chroma', 'minv'].includes(k) ? ' wide' : '';
+        const wide = ['fill', 'fill2', ...MIDS, 'grad', 'stroke', 'text', 'weight', 'font', 'italic', 'three', 'shape', 'material', 'phys', 'walls', 'sky', 'ground', ...World.COLORS, 'mask', 'matte', 'lut', 'keyColor', 'chroma', 'minv'].includes(k) ? ' wide' : '';
         // Keeping the proportions means nothing once either side is locked.
         const lock = k === 'w' && list.includes('h') && !L.fix?.w && !L.fix?.h ? `<button class="ib aspect ${aspectLocked(L) ? 'on' : ''}" data-cmd="aspect" title="${aspectLocked(L) ? 'Aspect ratio locked: click to unlock' : 'Lock aspect ratio'}">${aspectLocked(L) ? ICON.link : ICON.unlink}</button>` : '';
         const drop = MIDS.includes(k) ? `<button class="ib" data-cmd="delstop" data-k="${k}" title="Take this colour out of the gradient">${ICON.trash}</button>` : '';
@@ -1334,6 +1348,10 @@ Pn.addEventListener('click', e => {
   else if (t.dataset.cmd === 'three') { L.p.three = !L.p.three; refresh(); status(L.p.three ? `${L.name} is 3D: turn it with Rotate X and Y, push it back with Depth` : `${L.name} is flat again`); }
   else if (t.dataset.menu === 'shape')
     UI.menu(t, R3D.SHAPES.map(([value, label]) => ({ value, label })), L.p.shape, v => { L.p.shape = v; if (v === 'text') R3D.loadFont(); refresh(); });
+  else if (t.dataset.menu === 'sky' || t.dataset.menu === 'ground') { const k = t.dataset.menu;
+    UI.menu(t, (k === 'sky' ? World.SKIES : World.GROUNDS).map(([value, label]) => ({ value, label })), L.p[k], v => { L.p[k] = v; refresh(); }); }
+  else if (t.dataset.menu === 'worldscene')
+    UI.menu(t, Object.entries(World.PRESETS).map(([value, P]) => ({ value, label: P.label, hint: P.hint })), null, v => applyWorld(L, v));
   else if (t.dataset.menu === 'material')
     UI.menu(t, R3D.MATERIALS.map(([value, label]) => ({ value, label })), L.p.material, v => { L.p.material = v; refresh(); });
   else if (t.dataset.fix) toggleFix(L, t.dataset.fix);
@@ -2650,9 +2668,28 @@ $('#help').onclick = e => UI.menu(e.currentTarget, [{ value: 'tutorial', label: 
   { value: 'palette', label: 'Search commands', hint: isMac ? '⌘P' : 'Ctrl P' }], null, v => v === 'tutorial' ? Tutorial.resume() : v === 'keys' ? cheatSheet() : palette());
 // 3D: the solid shapes, a model from a file, and the camera that films them
 $('#add3d').onclick = e => UI.menu(e.currentTarget, [...R3D.SHAPES.map(([value, label]) => ({ value, label, group: 'Shapes' })),
-  { value: 'model', label: 'Import a model…', hint: '.glb .gltf .obj', group: 'Model' }, { value: 'camera', label: 'Camera', group: 'Camera' }], null,
-  v => v === 'model' ? modelInput.click() : v === 'camera' ? addCamera() : add3d(v),
-  it => it.value === 'camera' ? ICON.camera : it.value === 'model' ? ICON.model : ICON.cube);
+  { value: 'model', label: 'Import a model…', hint: '.glb .gltf .obj', group: 'Model' }, { value: 'camera', label: 'Camera', group: 'Camera' },
+  ...Object.entries(World.PRESETS).map(([v, P]) => ({ value: 'world:' + v, label: P.label, hint: P.hint, group: 'World' })),
+  { value: 'world:', label: 'Empty world', hint: 'Sky, ocean and sun to build on', group: 'World' }], null,
+  v => v === 'model' ? modelInput.click() : v === 'camera' ? addCamera() : v.startsWith('world:') ? addWorld(v.slice(6)) : add3d(v),
+  it => it.value.startsWith('world:') ? ICON.world : it.value === 'camera' ? ICON.camera : it.value === 'model' ? ICON.model : ICON.cube);
+// A 3D world goes at the bottom, under everything: 3D shapes and models added after it stand in it.
+function addWorld(preset) {
+  const L = makeLayer('world', NEW_LAYER.world(), '3D world'); S.layers.splice(S.layers.indexOf(L), 1); S.layers.unshift(L);
+  if (preset) applyWorld(L, preset, false);
+  sel = L.id; freshLayer = L.id; refresh();
+  status(`Added ${L.name}: 3D shapes and models above it stand in it. Move through it with Travel and Look around, or add a camera`);
+  return L;
+}
+// a scene to start from: its settings and props, and the slow camera move it is keyed with
+function applyWorld(L, name, announce = true) {
+  const P = World.PRESETS[name]; if (!P) return;
+  for (const k of World.FIELDS) delete L.keys[k];
+  Object.assign(L.p, structuredClone(P.p)); L.name = P.label;
+  for (const [k, ks] of Object.entries(P.keys?.(S.dur) || {})) for (const [t, v, ease] of ks) setKey(L, k, t, v, ease || 'easeInOut');
+  if (P.camera) { const C = S.layers.find(x => x.type === 'camera') || addCamera(true); Object.assign(C.p, P.camera(S.h)); }
+  if (announce) { refresh(); status(`${L.name}: ${P.hint}`); }
+}
 
 function refresh(full = true, record = true) {
   render(); placeHead();
@@ -3370,11 +3407,13 @@ async function exportModelFile(L) {
     status(`Saved ${a.download} (${Math.max(1, Math.round(blob.size / 1024))} KB)`);
   } catch (e) { status(`Could not export ${L.name}: ${e.message || e}`); }
 }
-function addCamera() {
-  if (S.layers.some(L => L.type === 'camera')) status('There is a camera already: the top one is the one that films');
+function addCamera(quiet = false) {
+  if (!quiet && S.layers.some(L => L.type === 'camera')) status('There is a camera already: the top one is the one that films');
   const L = makeLayer('camera', {}, 'Camera'); L.p.x = S.w / 2; L.p.y = S.h / 2;
-  if (!S.layers.some(M => R3D.is3d(M))) status('Camera added. It films 3D layers: turn a layer to 3D, or add a 3D shape');
+  if (quiet) return L;
+  if (!S.layers.some(M => R3D.is3d(M) || M.type === 'world')) status('Camera added. It films 3D layers: turn a layer to 3D, or add a 3D shape');
   sel = L.id; freshLayer = L.id; refresh();
+  return L;
 }
 function addImageLayer(id, x = S.w / 2, y = S.h / 2) {
   if (S.assets[id]?.kind === 'model') return addModelLayer(id, x, y);
@@ -3763,6 +3802,9 @@ const LIVE = (() => {
     list_capabilities: () => ({
       layer_types: Object.fromEntries(Object.entries(PROPS).filter(([t]) => !['image', 'video', 'model'].includes(t)).map(([t, ps]) => [t, ps])),
       shapes_3d: R3D.SHAPES.map(s => s[0]), materials_3d: R3D.MATERIALS.map(m => m[0]),
+      worlds: { scenes: Object.fromEntries(Object.entries(World.PRESETS).map(([k, P]) => [k, P.hint])), skies: World.SKIES.map(s => s[0]),
+        grounds: World.GROUNDS.map(g => g[0]), prop_parts: World.PARTS, finishes: World.FINISHES,
+        prop_shape: '{type, at:[x,y,z] m (y up, z towards the camera, from the spot on the ground it looks at), turn:[x,y,z]°, size:[w,h,d] m, finish, color, glow, spin:[x,y,z]°/s, bob m, children:[...]}; cylinder/cone size [diameter, height]; truss: bays, rod, taper; label: text, color, background; box: round' },
       easings: EASE_ITEMS.map(i => i.value), presets: Object.fromEntries(Object.entries(PRESETS).map(([g, it]) => [g, Object.keys(it)])),
       blend_modes: BLENDS.map(b => b[0] === 'source-over' ? 'normal' : b[0]), looks: Object.keys(LOOKS),
     }),
@@ -3790,6 +3832,14 @@ const LIVE = (() => {
       for (const [p, v] of Object.entries(scene)) S[p] = p === 'walls' ? String(v) : +v;
       if (a.in != null) L.in = +a.in; if (a.out != null) L.out = +a.out;
       sel = L.id; return done(`added ${L.type} "${L.name}"`, { id: L.id });
+    },
+    add_world: a => {
+      if (a.scene && !World.PRESETS[a.scene]) throw new Error(`scene must be one of ${Object.keys(World.PRESETS).join(', ')}`);
+      const props = a.props || {}; for (const p in props) if (!PROPS.world.includes(p)) throw new Error(`world layers have no "${p}"`);
+      if (props.objects != null && !Array.isArray(props.objects)) throw new Error('objects must be a list of props');
+      const L = addWorld(a.scene || ''); if (a.name) L.name = String(a.name);
+      for (const [p, v] of Object.entries(props)) { delete L.keys[p]; L.p[p] = keyValue(p, v); }
+      return done(`added the 3D world "${L.name}"`, { id: L.id });
     },
     add_model: async a => {
       const format = R3D.modelFormat(a.file || ''); if (!format) throw new Error('the file must be .glb, .gltf or .obj');

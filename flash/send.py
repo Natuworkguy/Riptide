@@ -181,7 +181,36 @@ def send(path: Path, name: str = "", x=None, y=None, shown_as: str = "") -> str:
     return f"Added {shown_as} to Riptide as {what} (layer {answer.get('id')}), in the project open there."
 
 
+SCENES = ("wave", "rig", "studio", "desert", "night")
+
+
+def world(scene: str = "", name: str = "", props=None) -> str:
+    """Build a 3D world in the project open in Riptide. What happened, in a line."""
+
+    scene = (scene or "").strip().lower()
+    if scene and scene not in SCENES:
+        raise SendError(f"No scene called {scene}: there is {', '.join(SCENES)}, or none for an empty world.")
+    if props is not None and not isinstance(props, dict):
+        raise SendError("props must be an object of the world's settings.")
+    open_riptide()
+    answer = ask("/api/live/op", {"op": "add_world", "args": {"scene": scene, "name": name or None, "props": props or {}},
+                                  "timeout": 60}, timeout=70)
+    if answer.get("ok") is False:
+        raise SendError(answer.get("error") or "Riptide would not make it.")
+    return (f"Added a 3D world{f' from the {scene} scene' if scene else ''} to Riptide (layer {answer.get('id')}), at the "
+            "bottom of the project open there: 3D shapes and models above it stand in it.")
+
+
 def main(argv: list) -> int:
+    if argv[:1] == ["--world"]:
+        try:
+            asked = json.load(sys.stdin) if not sys.stdin.isatty() else {}
+            print(world(str(asked.get("scene") or ""), str(asked.get("name") or ""), asked.get("props")))
+        except SendError as why:
+            print(f"Error: {why}")
+        except (urllib.error.URLError, OSError) as why:
+            print(f"Error: Could not reach Riptide at {riptide_url()}: {why}")
+        return 0
     mode = argv[0] if argv[:1] in (["--command"], ["--button"]) else "--tool"
     try:
         if mode == "--command":

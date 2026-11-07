@@ -211,7 +211,8 @@ const R3D = (() => {
     else if (L.type === 'model') { const m = models.get(L.p.asset); [w, h, d] = m && !m.error ? modelSize(o, m) : [Math.abs(o.w), Math.abs(o.h), 0]; }
     else { const b = bounds(L, t); w = b.w; h = b.h; d = 0; }
     const obj = new T.Object3D(); place(obj, o); obj.scale.set(o.scale * o.sx, o.scale * o.sy, o.scale); obj.updateMatrixWorld();
-    const cam = cameraAt(t), out = [];
+    // inside a 3D world, the world's camera films it
+    const cam = R3D.worldCamera?.(L, t) || cameraAt(t), out = [];
     for (const x of [-.5, .5]) for (const y of [-.5, .5]) for (const z of d ? [-.5, .5] : [0]) {
       const v = new T.Vector3(x * w, y * h, z * d).applyMatrix4(obj.matrixWorld).project(cam);
       if (v.z < 1) out.push([(v.x + 1) / 2 * S.w, (1 - v.y) / 2 * S.h]);
@@ -265,5 +266,7 @@ const R3D = (() => {
   const forget = id => { const m = models.get(id); m?.group?.traverse(o => { o.geometry?.dispose?.(); }); models.delete(id); };
 
   return { SHAPES, MATERIALS, MODEL_TYPES, modelFormat, ok, is3d, solid, wants, draw, hull, inside, isFlat, ready, forget, cameraLayer, model, loadFont, exportModel,
-    get available() { return !!T; } };
+    get available() { return !!T; },
+    // for 3D worlds (world3d.js), which put shapes and models into a world of their own
+    _: { object, cameraState, CAMERA0, deg } };
 })();

@@ -145,6 +145,41 @@ async def add_layer(type: Literal["rect", "ellipse", "polygon", "star", "arc", "
 
 
 @mcp.tool()
+async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", ""] = "", name: str | None = None,
+                    props: dict | None = None) -> dict:
+    """Add a 3D world at the bottom of the layers: a whole place to film, with a sky, a sun that casts shadows,
+    the ground, the air, props, and a lens. 3D shapes and models above it stand inside it, lit and shadowed by
+    it. `scene` starts from a ready-made one, keyed with a slow camera move: "wave" (a breaking wave at golden
+    hour), "rig" (a worn film camera on a jib in a hazy wheat field, shallow focus), "studio" (a soft-lit floor
+    for your shapes and models), "desert" (dunes and a monolith at dusk), "night" (moonlit sea); "" is an empty
+    world. `props` then changes any of its settings (all the numbers and colours animate, with update_layer or
+    set_keyframes like any layer's):
+
+    sky "sunset" | "day" | "dusk" | "haze" | "overcast" | "night" | "studio"; sunEl (degrees up), sunAz (degrees
+    round: 0 is straight ahead of the camera, behind what it looks at), sunPower (%), clouds (%), wind (m/s:
+    clouds, plants, dust and the sea move with it). ground "ocean" | "field" | "desert" | "floor" | "none",
+    groundColor. The ocean: water (colour), waves (metres), chop (%), and a breaking wave: swell (its height, m;
+    0 for none), curl (0 standing up to 1 thrown over and landing; key it to make the wave break), waveDist (m
+    ahead) and waveAngle (degrees turned). A field: plants (colour), grass (%), grassH (m). fog and dust (0 to
+    100). The camera: eye (its height above the ground, m), heading (degrees looked round), pitch (degrees up),
+    travel (m moved forwards), lens (mm). A camera layer also moves it: orbit, tilt, dolly (pixels) and zoom.
+    The lens: dof (depth of field, 0 off), focus (m from the camera; 0 is the point it looks at), exposure
+    (stops), bloom, grain, fringe (colour fringing at the edges) and ao (contact shadows), 0 to 100. The layer's
+    own grade, vignette and LUT then finish it.
+
+    objects is a list of props, in metres, built from parts: {"type": "box" | "cylinder" | "sphere" | "cone" |
+    "torus" | "capsule" | "truss" | "label" | "group", "at": [x, y, z] (y up, z towards the camera, from the spot
+    on the ground the camera looks at), "turn": [x, y, z] degrees, "size": [w, h, d], "finish": "worn-metal" |
+    "leatherette" | "aluminium" | "chrome" | "steel" | "rubber" | "plastic" | "paint" | "glass" | "lens" | "wood" |
+    "concrete" | "rust" | "gold" | "glow", "color", "glow" (brightness), "spin": [x, y, z] degrees a second,
+    "bob" (m), "children": [...] placed from it}. A cylinder or cone's size is [diameter, height]; a box takes
+    "round" (corner radius, m); a truss (a lattice tower or beam) takes "bays", "rod" (m) and "taper" (0 to 1);
+    a label is a flat screen with "text" (lines split by \n), "color" and "background". See the result with
+    see_frame."""
+    return await acall("add_world", {"scene": scene, "name": name, "props": props or {}})
+
+
+@mcp.tool()
 async def update_layer(layer: str, props: dict | None = None, at_time: float | None = None, keyframe: bool = False,
                  ease: str | None = None, name: str | None = None, start: float | None = None, end: float | None = None,
                  hidden: bool | None = None, locked: bool | None = None, blend: str | None = None,

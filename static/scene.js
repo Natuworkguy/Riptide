@@ -8,6 +8,7 @@ const SceneEd = (() => {
   const r3 = v => Math.round(v * 1000) / 1000;
   let L = null, wrap = null, canvas = null, g2 = null, cam = null, orbit = null, gizmo = null, grid = null, box = null;
   let selId = null, view = 'free', dirty = true, raf = 0, playing = false, lastT = 0, holding = false, B = null;
+  const ghost = { keys: new Set(), look: null, speed: 1 };   // the ghost view: fly the viewport camera, WASD/QE and drag to look
   const extras = [];          // what later modules add to the header (the library, the render mode)
   const ADD = [['box', 'Box', { size: [.5, .5, .5] }], ['rbox', 'Rounded box', { type: 'box', size: [.5, .5, .5], round: .05 }],
     ['cylinder', 'Cylinder', { size: [.4, .6, 1] }], ['sphere', 'Sphere', { size: [.5, .5, .5] }], ['cone', 'Cone', { size: [.4, .6, 1] }],
@@ -32,7 +33,7 @@ const SceneEd = (() => {
     wrap.innerHTML = `<header><b class="ttl">Scene</b><span class="nm"></span>
       <div class="seg tools"><button data-tool="translate" title="Move  G / W">Move</button><button data-tool="rotate" title="Turn  R / E">Turn</button><button data-tool="scale" title="Scale  S">Scale</button></div>
       <button class="tb small" data-act="add">+ Add</button><span class="extras"></span>
-      <div class="seg views"><button data-view="free" title="Fly round the scene">Free</button><button data-view="film" title="Look through the film camera">Film camera</button></div>
+      <div class="seg views"><button data-view="free" title="Fly round the scene">Free</button><button data-view="ghost" title="Fly through the scene  V">Ghost</button><button data-view="film" title="Look through the film camera">Film camera</button></div>
       <span class="sp"></span><button class="tb primary" data-act="done">Done</button></header>
       <aside class="outl"><div class="hd">Scene</div><div class="tree"></div></aside>
       <main class="vp"><canvas></canvas><div class="hint">Drag to orbit · right-drag to pan · scroll to zoom · click a prop to pick it</div></main>
@@ -54,16 +55,25 @@ const SceneEd = (() => {
     wrap.querySelector('.insp').addEventListener('change', onInsp);
     wrap.querySelector('.insp').addEventListener('input', e => { if (e.target.type === 'color' || e.target.type === 'range') onInsp(e, false); });
     let down = null;
-    canvas.addEventListener('pointerdown', e => { down = [e.clientX, e.clientY]; });
-    canvas.addEventListener('pointerup', e => { if (down && Math.hypot(e.clientX - down[0], e.clientY - down[1]) < 4 && !gizmo.dragging && gizmo.axis == null) pick(e); down = null; });
+    canvas.addEventListener('pointerdown', e => { down = [e.clientX, e.clientY];
+      if (view === 'ghost') { ghost.look = [e.clientX, e.clientY]; canvas.setPointerCapture(e.pointerId); } });
+    canvas.addEventListener('pointermove', e => { if (view !== 'ghost' || !ghost.look) return;
+      const dx = e.clientX - ghost.look[0], dy = e.clientY - ghost.look[1]; ghost.look = [e.clientX, e.clientY];
+      const eu = new T.Euler().setFromQuaternion(cam.quaternion, 'YXZ');
+      eu.y -= dx * .004; eu.x = Math.max(-1.55, Math.min(1.55, eu.x - dy * .004)); eu.z = 0; cam.quaternion.setFromEuler(eu); dirty = true; });
+    canvas.addEventListener('wheel', e => { if (view !== 'ghost') return; e.preventDefault(); e.stopImmediatePropagation();
+      ghost.speed = Math.max(.1, Math.min(20, ghost.speed * (e.deltaY < 0 ? 1.2 : 1 / 1.2))); hint(); }, { capture: true, passive: false });
+    canvas.addEventListener('pointerup', e => { ghost.look = null; if (view === 'ghost') { down = null; return; } if (down && Math.hypot(e.clientX - down[0], e.clientY - down[1]) < 4 && !gizmo.dragging && gizmo.axis == null) pick(e); down = null; });
     addEventListener('keydown', onKey, true);
+    addEventListener('keyup', e => { ghost.keys.delete(e.code); }, true);
+    addEventListener('blur', () => ghost.keys.clear());
     new ResizeObserver(() => { dirty = true; }).observe(wrap.querySelector('.vp'));
   }
 
   function open(layer) {
     if (!World.gl()) return status('3D worlds need WebGL, which this browser does not have');
     if (!wrap) build();
-    L = layer; World.ensureIds(objs()); selId = null; view = 'free'; wrap.hidden = false;
+    L = layer; World.ensureIds(objs()); selId = null; view = 'free'; orbit.enabled = true; ghost.keys.clear(); ghost.look = null; wrap.hidden = false; hint();
     // start where the film camera stands, looking where it looks
     const film = World.camera(time, state(L, time)); cam.position.copy(film.position); cam.fov = film.fov; orbit.target.copy(film.userData.target); orbit.update();
     wrap.querySelector('.nm').textContent = L.name;
@@ -76,6 +86,7 @@ const SceneEd = (() => {
   function loop() {
     raf = requestAnimationFrame(loop);
     if (!L || wrap.hidden) return;
+    if (view === 'ghost') fly();
     if (playing) { const now = performance.now(); time += (now - lastT) / 1000; lastT = now; if (time > S.dur) time = loop_ ? 0 : (stopPlay(), S.dur); footer(); dirty = true; }
     const vp = wrap.querySelector('.vp'), w = vp.clientWidth, h = vp.clientHeight, pr = Math.min(2, devicePixelRatio || 1);
     if (canvas.width !== Math.round(w * pr) || canvas.height !== Math.round(h * pr)) { canvas.width = Math.round(w * pr); canvas.height = Math.round(h * pr); dirty = true; }
@@ -85,6 +96,31 @@ const SceneEd = (() => {
     draw(w, h, pr);
   }
   const loop_ = true;
+  // ----- the ghost view: a viewing aid only; it moves the viewport's own camera, never the film camera -----
+  let flyT = 0;
+  function fly() {
+    const now = performance.now(), dt = Math.min(.1, (now - (flyT || now)) / 1000); flyT = now;
+    const K = ghost.keys, v = new T.Vector3((K.has('KeyD') ? 1 : 0) - (K.has('KeyA') ? 1 : 0), (K.has('KeyE') ? 1 : 0) - (K.has('KeyQ') ? 1 : 0),
+      (K.has('KeyS') ? 1 : 0) - (K.has('KeyW') ? 1 : 0));
+    if (!v.lengthSq()) return;
+    const fast = K.has('ShiftLeft') || K.has('ShiftRight') ? 4 : 1;
+    v.normalize().multiplyScalar(4 * M * ghost.speed * fast * dt);
+    const up = v.y; v.y = 0; v.applyQuaternion(cam.quaternion); v.y += up;   // forward follows the look, Q/E go straight down/up
+    cam.position.add(v); dirty = true;
+  }
+  function setView(v) {
+    if (v === view) return;
+    if (view === 'ghost') {   // hand back to the orbit, round a point just ahead of where the ghost stopped
+      const d = Math.max(5 * M, cam.position.distanceTo(orbit.target));
+      orbit.target.copy(cam.position).add(new T.Vector3(0, 0, -1).applyQuaternion(cam.quaternion).multiplyScalar(d)); orbit.update();
+    }
+    view = v; ghost.keys.clear(); ghost.look = null; flyT = 0;
+    orbit.enabled = view === 'free'; if (view !== 'free') gizmo.detach();
+    hint(); tools(); dirty = true;
+  }
+  function hint() { wrap.querySelector('.vp .hint').textContent = view === 'ghost'
+    ? `Ghost view · WASD to fly · Q/E down/up · drag to look · Shift for speed · scroll to change speed (${ghost.speed.toFixed(1)}×) · Esc to leave`
+    : 'Drag to orbit · right-drag to pan · scroll to zoom · click a prop to pick it'; }
   function draw(w, h, pr) {
     const o = state(L, time), staged = World.stage(L, o, time); B = staged.B; B.hold = holding;
     const R = World.renderer, film = view === 'film', W = canvas.width, H = canvas.height;
@@ -92,9 +128,10 @@ const SceneEd = (() => {
     if (film) camera = staged.cam; else { cam.aspect = W / H; cam.updateProjectionMatrix(); }
     // what is picked: the gizmo on it and a box round it, in the free view
     const node = selId ? findNode(selId) : null;
-    if (node && gizmo.object !== node) gizmo.attach(node); else if (!node && gizmo.object) gizmo.detach();
+    if (view === 'ghost') { if (gizmo.object) gizmo.detach(); }
+    else if (node && gizmo.object !== node) gizmo.attach(node); else if (!node && gizmo.object) gizmo.detach();
     const helpers = [];
-    if (!film) { grid.position.set(0, staged.ground + 1, 0); helpers.push(grid); if (node) { box.setFromObject(node); helpers.push(box); helpers.push(gizmo.getHelper()); } }
+    if (!film) { grid.position.set(0, staged.ground + 1, 0); helpers.push(grid); if (node) { box.setFromObject(node); helpers.push(box); if (view !== 'ghost') helpers.push(gizmo.getHelper()); } }
     for (const x of helpers) B.scene.add(x);
     // the frame: as filmed (in the film view, or with a mode such as path tracing), else lit plainly and fast
     const fw = film ? Math.round(Math.min(W, H * S.w / S.h)) : W, fh = film ? Math.round(fw * S.h / S.w) : H;
@@ -107,7 +144,7 @@ const SceneEd = (() => {
   }
   function findNode(id) { let hit = null; B?.props?.traverse(n => { if (!hit && n.userData.partId === id && !n.isMesh) hit = n; }); return hit; }
   function pick(e) {
-    if (!B || view === 'film') return;
+    if (!B || view !== 'free') return;
     const r = canvas.getBoundingClientRect(), ray = new T.Raycaster();
     ray.setFromCamera(new T.Vector2((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1), cam);
     const hits = ray.intersectObject(B.props, true);
@@ -228,7 +265,7 @@ const SceneEd = (() => {
   function onClick(e) {
     const b = e.target.closest('button, .row'); if (!b || !wrap.contains(b)) return;
     if (b.dataset.tool) { gizmo.setMode(b.dataset.tool); tools(); return; }
-    if (b.dataset.view) { view = b.dataset.view; tools(); dirty = true; return; }
+    if (b.dataset.view) { setView(b.dataset.view); return; }
     if (b.dataset.eye) { const f = World.findPart(objs(), b.dataset.eye); if (f) { f.P.hidden = !f.P.hidden; if (!f.P.hidden) delete f.P.hidden; renderTree(); dirty = true; refresh(); } return; }
     if (b.dataset.key) { const P = sel(); if (!P) return; const k = b.dataset.key, t = Math.round(time * 1000) / 1000;
       P.keys ||= {}; const ks = (P.keys[k] ||= []), at = ks.findIndex(x => Math.abs(x.t - t) < .005);
@@ -247,7 +284,10 @@ const SceneEd = (() => {
     if (!wrap || wrap.hidden) return;
     if (e.target.closest?.('input, textarea, select')) { if (e.key === 'Escape') e.target.blur(); return; }
     const k = e.key.toLowerCase(), mod = e.metaKey || e.ctrlKey; let used = true;
-    if (k === 'escape') { if (selId) select(null); else close(); }
+    if (view === 'ghost' && !mod && /^(Key[WASDQE]|Shift(Left|Right))$/.test(e.code)) { ghost.keys.add(e.code); e.preventDefault(); e.stopPropagation(); return; }
+    if (k === 'escape' && view === 'ghost') setView('free');
+    else if (k === 'v' && !mod) setView(view === 'ghost' ? 'free' : 'ghost');
+    else if (k === 'escape') { if (selId) select(null); else close(); }
     else if ((k === 'g' || k === 'w') && !mod) gizmo.setMode('translate');
     else if ((k === 'r' || k === 'e') && !mod) gizmo.setMode('rotate');
     else if (k === 's' && !mod) gizmo.setMode('scale');

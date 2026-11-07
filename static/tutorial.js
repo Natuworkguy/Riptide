@@ -87,7 +87,10 @@ const Tutorial = (() => {
         <li><b>Dolly</b> moves it closer (or back, below 0); <b>Zoom</b> narrows the lens; <b>Roll°</b> turns the view.</li>
         <li>Animate them for fly-throughs, or use the camera presets: Orbit around, Push in, Pull back, Crane up.</li>
       </ul>
-      <p>With several cameras, the top visible one films; trim their bars to cut between them.</p>`,
+      <p>With several cameras, the top visible one films; trim their bars to cut between them.</p>
+      <p>In a 3D world's <b>Edit scene</b>, pick <b>Ghost</b> (or press <b>V</b>) to fly through it: <b>WASD</b> to move,
+      <b>Q</b>/<b>E</b> down and up, drag to look, <b>Shift</b> to go faster, scroll to change speed, <b>Esc</b> to leave. It only
+      moves your view, never the film camera or the render.</p>`,
       try: [['Add a camera', () => addCamera()]] },
     { id: 'image', title: 'Image mode', body: `
       <p>Switch to <b>Image</b> in the header to edit a picture: the timeline goes away, and an image dropped on an empty

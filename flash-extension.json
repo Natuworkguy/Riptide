@@ -31,7 +31,7 @@
   ],
   "ui": {
     "buttons": [
-      {"id": "send", "label": "Send to Riptide", "icon": "cube", "where": ["message", "header"],
+      {"id": "send", "label": "Send to Riptide", "icon": "cube", "where": ["model"],
        "run": ["python", "./flash/send.py", "--button"]}
     ]
   },

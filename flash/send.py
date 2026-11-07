@@ -5,8 +5,8 @@ Flash runs this three ways (see flash-extension.json at the top of this reposito
 - the send_to_riptide tool, with {"path", "name", "x", "y"} as JSON on stdin;
 - /riptide [path], with what follows the command as arguments: a file, or nothing for the newest picture or model
   shown in the open chat;
-- the Send to Riptide button, with {"button", "text", "chat"} as JSON on stdin: the newest picture or model in that
-  chat.
+- the Send to Riptide button in the bar of a 3D model Flash shows, with {"button", "text", "chat", "file"} as JSON on
+  stdin: that model (or, from a Flash too old to say which, the newest picture or model in that chat).
 
 Riptide must be running with its editor open in a browser: the layer is added there, live, and can be undone. When it
 is not, this starts it (the installed riptide command, or the address in a browser) and waits for the editor.
@@ -197,7 +197,8 @@ def main(argv: list) -> int:
         asked = json.load(sys.stdin) if not sys.stdin.isatty() else {}
         if mode == "--button":
             chat = str(asked.get("chat") or "")
-            found = newest_in_chat(chat)
+            # The model whose bar it was pressed in.
+            found = Path(str(asked["file"])) if asked.get("file") else newest_in_chat(chat)
             print(json.dumps({"say": send(found, shown_as=name_in_chat(chat, found))}))
             return 0
         if not asked.get("path"):

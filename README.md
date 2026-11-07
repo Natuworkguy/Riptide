@@ -74,8 +74,8 @@ layers in the project open there, to animate or put in a video.
     flash install github@Natuworkguy/Riptide
 
 It adds a `send_to_riptide` tool (just ask: *put that chair in Riptide*), a `/riptide [path]` command (the newest
-picture or model Flash showed, when no path is given), and a **Send to Riptide** button under replies and by the
-chat's title in Flash's web UI. Pictures (.png, .jpg, .webp, .gif, .svg) become image layers and models (.glb, .gltf,
+picture or model Flash showed, when no path is given), and a **Send to Riptide** button (the cube icon) in the bar of
+any 3D model you open in Flash's web UI. Pictures (.png, .jpg, .webp, .gif, .svg) become image layers and models (.glb, .gltf,
 .obj) 3D layers. When Riptide is not open, it starts it (with the installed `riptide` command) and waits for the
 editor. Its address, and whether to open it, are in the extension's settings. Agents can do the same through MCP with
 `add_image` and `add_model`.

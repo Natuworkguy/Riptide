@@ -90,7 +90,10 @@ const Tutorial = (() => {
       <p>With several cameras, the top visible one films; trim their bars to cut between them.</p>
       <p>In a 3D world's <b>Edit scene</b>, pick <b>Ghost</b> (or press <b>V</b>) to fly through it: <b>WASD</b> to move,
       <b>Q</b>/<b>E</b> down and up, drag to look, <b>Shift</b> to go faster, scroll to change speed, <b>Esc</b> to leave. It only
-      moves your view, never the film camera or the render.</p>`,
+      moves your view, never the film camera or the render.</p>
+      <p>The outliner also lists the world's <b>3D layers</b> (3D shapes and models above it): pick and move them there like props.
+      With <b>Snap</b> on, what you move drops onto the ground or onto the top of what it is over. On a wheat field,
+      <b>Sway m/s</b> sets how the wheat moves and <b>Loop sway</b> makes it loop perfectly over the video.</p>`,
       try: [['Add a camera', () => addCamera()]] },
     { id: 'image', title: 'Image mode', body: `
       <p>Switch to <b>Image</b> in the header to edit a picture: the timeline goes away, and an image dropped on an empty

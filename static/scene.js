@@ -21,7 +21,13 @@ const SceneEd = (() => {
     ['group', 'Empty group', { type: 'group', children: [] }]];
 
   const objs = () => (L.p.objects ||= []);
-  const found = () => selId ? World.findPart(objs(), selId) : null;
+  // the 3D shapes and models above the world, up to the next world: layers of their own, picked as 'L:' + their id
+  const isLay = id => typeof id === 'string' && id.startsWith('L:');
+  const layers3d = () => { const out = []; for (let j = S.layers.indexOf(L) + 1; j < S.layers.length; j++) { const x = S.layers[j];
+    if (x.type === 'world') break; if (x.type === 'shape3d' || x.type === 'model') out.push(x); } return out; };
+  const selLayer = () => isLay(selId) ? S.layers.find(x => x.id === selId.slice(2)) || null : null;
+  let gnd = 0, snap = true;
+  const found = () => selId && !isLay(selId) ? World.findPart(objs(), selId) : null;
   const sel = () => found()?.P || null;
   const nameOf = P => P.name || (P.type === 'light' ? `${P.light === 'spot' ? 'Spot' : 'Point'} light` : P.type === 'truss' ? 'Lattice' : P.type === 'label' ? 'Screen'
     : (P.type || 'group')[0].toUpperCase() + (P.type || 'group').slice(1));
@@ -33,6 +39,7 @@ const SceneEd = (() => {
     wrap.innerHTML = `<header><b class="ttl">Scene</b><span class="nm"></span>
       <div class="seg tools"><button data-tool="translate" title="Move  G / W">Move</button><button data-tool="rotate" title="Turn  R / E">Turn</button><button data-tool="scale" title="Scale  S">Scale</button></div>
       <button class="tb small" data-act="add">+ Add</button><span class="extras"></span>
+      <div class="seg"><button data-act="snap" class="on" title="Drop what you move onto the ground, or onto the top of what it is over">Snap</button></div>
       <div class="seg views"><button data-view="free" title="Fly round the scene">Free</button><button data-view="ghost" title="Fly through the scene  V">Ghost</button><button data-view="film" title="Look through the film camera">Film camera</button></div>
       <span class="sp"></span><button class="tb primary" data-act="done">Done</button></header>
       <aside class="outl"><div class="hd">Scene</div><div class="tree"></div></aside>
@@ -45,7 +52,7 @@ const SceneEd = (() => {
     orbit = new T.OrbitControls(cam, canvas); orbit.enableDamping = false; orbit.addEventListener('change', () => { dirty = true; });
     gizmo = new T.TransformControls(cam, canvas); gizmo.setSize(.9);
     gizmo.addEventListener('dragging-changed', e => { orbit.enabled = !e.value; holding = e.value; if (B) B.hold = e.value;
-      if (!e.value) { writeBack(); refresh(); renderInsp(); } });
+      if (!e.value) { if (snap && gizmo.mode === 'translate') drop(); writeBack(); refresh(); renderInsp(); } });
     gizmo.addEventListener('objectChange', () => { writeBack(); dirty = true; renderInsp(true); });
     gizmo.addEventListener('change', () => { dirty = true; });
     grid = new T.GridHelper(40 * M, 40, 0x6f7480, 0x3a3d45); grid.material.transparent = true; grid.material.opacity = .45;
@@ -122,7 +129,7 @@ const SceneEd = (() => {
     ? `Ghost view · WASD to fly · Q/E down/up · drag to look · Shift for speed · scroll to change speed (${ghost.speed.toFixed(1)}×) · Esc to leave`
     : 'Drag to orbit · right-drag to pan · scroll to zoom · click a prop to pick it'; }
   function draw(w, h, pr) {
-    const o = state(L, time), staged = World.stage(L, o, time); B = staged.B; B.hold = holding;
+    const o = state(L, time), staged = World.stage(L, o, time); B = staged.B; B.hold = holding; gnd = staged.ground;
     const R = World.renderer, film = view === 'film', W = canvas.width, H = canvas.height;
     let camera = cam;
     if (film) camera = staged.cam; else { cam.aspect = W / H; cam.updateProjectionMatrix(); }
@@ -142,14 +149,32 @@ const SceneEd = (() => {
     g2.fillStyle = '#0d0e11'; g2.fillRect(0, 0, W, H);
     g2.drawImage(R.domElement, (W - fw) / 2, (H - fh) / 2, fw, fh);
   }
-  function findNode(id) { let hit = null; B?.props?.traverse(n => { if (!hit && n.userData.partId === id && !n.isMesh) hit = n; }); return hit; }
+  function findNode(id) { if (isLay(id)) return B?.members?.find(n => n.userData.layerId === id.slice(2)) || null;
+    let hit = null; B?.props?.traverse(n => { if (!hit && n.userData.partId === id && !n.isMesh) hit = n; }); return hit; }
+  // snapping: what was moved comes down (or up) onto the highest surface under it, else the ground; lights stay where they are
+  function drop() {
+    const n = gizmo.object; if (!n || !B || sel()?.type === 'light') return;
+    n.updateMatrixWorld(true);
+    const b3 = new T.Box3().setFromObject(n); if (b3.isEmpty()) return;
+    const mine = new Set(); n.traverse(x => mine.add(x));
+    const others = [...(B.props ? [B.props] : []), ...(B.members || [])], ray = new T.Raycaster(), c = b3.getCenter(new T.Vector3()), sz = b3.getSize(new T.Vector3());
+    let top = gnd;
+    // the middle and four points in from the corners, cast down from halfway up it
+    for (const [fx, fz] of [[0, 0], [-.35, -.35], [.35, -.35], [-.35, .35], [.35, .35]]) {
+      ray.set(new T.Vector3(c.x + fx * sz.x, b3.min.y + sz.y / 2, c.z + fz * sz.z), new T.Vector3(0, -1, 0));
+      const hit = ray.intersectObjects(others, true).find(h => !mine.has(h.object) && h.object.visible);
+      if (hit && hit.point.y > top) top = hit.point.y;
+    }
+    n.position.y += top - b3.min.y; n.updateMatrixWorld(true);
+  }
   function pick(e) {
     if (!B || view !== 'free') return;
     const r = canvas.getBoundingClientRect(), ray = new T.Raycaster();
     ray.setFromCamera(new T.Vector2((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1), cam);
-    const hits = ray.intersectObject(B.props, true);
+    const hits = ray.intersectObjects([B.props, ...(B.members || [])], true);
     let id = null;
-    for (const h of hits) { let n = h.object; while (n && !n.userData.partId) n = n.parent; if (n) { id = n.userData.partId; break; } }
+    for (const h of hits) { let n = h.object; while (n && !n.userData.partId && !n.userData.layerId) n = n.parent;
+      if (n) { id = n.userData.layerId ? 'L:' + n.userData.layerId : n.userData.partId; break; } }
     // Alt picks the group a part is in
     if (id && e.altKey) { const f = World.findPart(objs(), id); if (f?.parent) id = f.parent.id; }
     select(id);
@@ -163,7 +188,18 @@ const SceneEd = (() => {
       if (k) k.v = v; else { ks.push({ t, v, ease: 'easeInOut' }); ks.sort((a, b) => a.t - b.t); } }
     else P[prop] = v;
   }
+  // a 3D layer's own place, turn and scale (in the editor's pixels and degrees), keyed at the playhead if it is keyed
+  function layerVals(n) {
+    const e = new T.Euler().setFromQuaternion(n.quaternion, 'XYZ');
+    return { x: r3(n.position.x + S.w / 2), y: r3(S.h / 2 - n.position.y), z: r3(-n.position.z),
+      rotX: r3(-rad(e.x)), rotY: r3(rad(e.y)), rotation: r3(-rad(e.z)), scale: r3(n.scale.z) };
+  }
+  function setLayer(Y, vals) {
+    for (const [k, v] of Object.entries(vals)) { if (fixed(Y, k)) continue;
+      if (Y.keys[k]?.length) setKey(Y, k, time, v, 'easeInOut'); else Y.p[k] = v; }
+  }
   function writeBack() {
+    const Y = selLayer(); if (Y) { if (gizmo.object) setLayer(Y, layerVals(gizmo.object)); return; }
     const P = sel(), n = gizmo.object; if (!P || !n) return;
     setVal(P, 'at', [r3(n.position.x / M), r3(n.position.y / M), r3(n.position.z / M)]);
     const e = new T.Euler().setFromQuaternion(n.quaternion, 'YXZ');
@@ -179,6 +215,10 @@ const SceneEd = (() => {
       <span class="ty">${P.type === 'light' ? '☀' : P.type === 'group' ? '▾' : '◆'}</span><span class="n">${esc(nameOf(P))}</span>${P.keys && Object.values(P.keys).some(k => k?.length) ? '<i class="kd" title="Keyframed"></i>' : ''}
       <button class="eye" data-eye="${P.id}" title="${P.hidden ? 'Show' : 'Hide'}  H">${P.hidden ? '○' : '●'}</button></div>`); walk(P.children, depth + 1); } };
     walk(objs(), 0);
+    const lays = layers3d();
+    if (lays.length) { rows.push('<div class="hd">3D layers</div>');
+      for (const Y of lays) rows.push(`<div class="row${'L:' + Y.id === selId ? ' on' : ''}${Y.hidden ? ' off' : ''}" data-id="L:${Y.id}" style="padding-left:10px" title="A layer of its own: its shape and look are in its Design panel">
+        <span class="ty">${Y.type === 'model' ? '▣' : '◇'}</span><span class="n">${esc(Y.name)}</span>${Object.values(Y.keys || {}).some(k => k?.length) ? '<i class="kd" title="Keyframed"></i>' : ''}</div>`); }
     wrap.querySelector('.tree').innerHTML = rows.join('') || '<div class="empty">No props yet. Add one from + Add.</div>';
   }
 
@@ -192,8 +232,32 @@ const SceneEd = (() => {
       if (prop === 'turn') { const e = new T.Euler().setFromQuaternion(n.quaternion, 'YXZ'); return [rad(e.x), rad(e.y), rad(e.z)]; }
       if (prop === 'scale') return [n.scale.x, n.scale.y, n.scale.z]; }
     return base; }
+  // a 3D layer, in metres from the world's centre and its ground like the props; it is turned and scaled in the editor's own terms
+  function layerInsp(el, Y, valuesOnly) {
+    const n = findNode('L:' + Y.id), o = state(Y, time);
+    const at = n ? [n.position.x / M, (n.position.y - gnd) / M, n.position.z / M] : [(o.x - S.w / 2) / M, (S.h / 2 - o.y - gnd) / M, -(+o.z || 0) / M];
+    const turn = [+o.rotX || 0, +o.rotY || 0, +o.rotation || 0], v = n ? layerVals(n) : null;
+    if (v) { turn[0] = v.rotX; turn[1] = v.rotY; turn[2] = v.rotation; }
+    const sc = v ? v.scale : +o.scale || 1;
+    if (valuesOnly && el.dataset.for === 'L:' + Y.id) { for (const i of el.querySelectorAll('input[data-k][data-i]')) if (document.activeElement !== i)
+      i.value = r3(i.dataset.k === 'at' ? at[+i.dataset.i] : i.dataset.k === 'turn' ? turn[+i.dataset.i] : sc); return; }
+    el.dataset.for = 'L:' + Y.id;
+    const nokey = s => s.replace(/<button class="key[^>]*>◆<\/button>/, '');
+    el.innerHTML = `<div class="hd">${esc(Y.name)}</div>` + nokey(vec('at', at, 'Position m', .01)) + nokey(vec('turn', turn, 'Turn ° (X, Y, Z)', 1))
+      + num('scale', r3(sc), .01, 'Scale') + `<p class="note">A ${Y.type === 'model' ? 'model' : '3D shape'} layer in this world. Its shape, size, look and keyframes are in its Design panel.</p>`;
+  }
+  function onLayerInsp(Y, i) {
+    const k = i.dataset.k, v = +i.value; if (!isFinite(v)) return;
+    const vals = {};
+    if (k === 'scale') vals.scale = v;
+    else if (k === 'at') { const j = +i.dataset.i; if (j === 0) vals.x = r3(v * M + S.w / 2); else if (j === 1) vals.y = r3(S.h / 2 - (v * M + gnd)); else vals.z = r3(-v * M); }
+    else if (k === 'turn') vals[['rotX', 'rotY', 'rotation'][+i.dataset.i]] = v;
+    else return;
+    setLayer(Y, vals); dirty = true; refresh();
+  }
   function renderInsp(valuesOnly = false) {
-    const el = wrap.querySelector('.insp'), P = sel();
+    const el = wrap.querySelector('.insp'), P = sel(), Y = selLayer();
+    if (Y) return layerInsp(el, Y, valuesOnly);
     if (valuesOnly && P && el.dataset.for === P.id) { for (const i of el.querySelectorAll('input[data-k][data-i]')) if (document.activeElement !== i) {
       const k = i.dataset.k, v = k === 'at' ? cur(P, 'at', P.at || [0, 0, 0]) : k === 'turn' ? cur(P, 'turn', P.turn || [0, 0, 0]) : k === 'scale' ? cur(P, 'scale', [].concat(P.scale ?? 1)) : null;
       if (v) i.value = r3(k === 'scale' && v.length === 1 ? v[0] : v[+i.dataset.i]); } return; }
@@ -226,7 +290,8 @@ const SceneEd = (() => {
     el.innerHTML = h;
   }
   function onInsp(e, record = true) {
-    const i = e.target, k = i.dataset.k, P = sel(); if (!k || !P) return;
+    const i = e.target, k = i.dataset.k, Y = selLayer(); if (Y && k) { if (record) onLayerInsp(Y, i); return; }
+    const P = sel(); if (!k || !P) return;
     let v = i.type === 'number' ? +i.value : i.value;
     if (i.dataset.i != null) { const idx = +i.dataset.i;
       const base = k === 'at' ? cur(P, 'at', P.at || [0, 0, 0]) : k === 'turn' ? cur(P, 'turn', P.turn || [0, 0, 0]) : k === 'scale' ? [].concat(cur(P, 'scale', P.scale ?? 1)) : (P[k] || [0, 0, 0]);
@@ -254,6 +319,7 @@ const SceneEd = (() => {
     if (a === 'add') return UI.menu(btn, ADD.map(([value, label]) => ({ value, label })), null, add);
     if (a === 'done') return close();
     if (a === 'play') return playing ? stopPlay() : startPlay();
+    if (a === 'snap') { snap = !snap; btn?.classList.toggle('on', snap); return; }
     if (!f) return;
     if (a === 'dup') { const c = clone(f.P); if (Array.isArray(c.at)) c.at = [c.at[0] + .3, c.at[1], c.at[2]]; f.list.splice(f.list.indexOf(f.P) + 1, 0, c); World.ensureIds(objs()); selId = c.id; }
     if (a === 'del') { f.list.splice(f.list.indexOf(f.P), 1); selId = null; gizmo.detach(); }

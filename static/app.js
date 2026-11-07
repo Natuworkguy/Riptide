@@ -110,6 +110,8 @@ const PROPS = {
   camera:  ['x', 'y', 'orbit', 'tilt', 'dolly', 'zoom', 'rotation'],
   // a whole place to film (world3d.js): the 3D shapes and models above it stand in it
   world:   ['opacity', ...ADJUST, ...FINISH, ...World.FIELDS],
+  // a group (see groupOf): draws nothing itself, and moves, turns, scales and fades its layers with its box
+  group:   ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy', 'opacity'],
 };
 ANIM.push(...World.NUMBERS, ...World.COLORS);
 const GROUPS = [['Transform', ['x', 'y', 'w', 'h', 'd', 'rotation', 'scale', 'sx', 'sy']],
@@ -372,7 +374,10 @@ function drawLayer(c, L, t) {
   const tr = transitionAt(L, t), fx = tr ? shapeTransition(o, tr, L, t) : null;
   if (o.opacity <= 0) return;
   c.save();
-  c.globalAlpha = Math.min(1, o.opacity);
+  // a layer in a group is moved, turned, scaled and faded with it, and hidden while it is
+  const G = groupOf(L); let ga = 1;
+  if (G) { if (!visibleAt(G, t)) { c.restore(); return; } ga = Math.max(0, Math.min(1, state(G, t).opacity)); groupTransform(c, G, t); }
+  c.globalAlpha = Math.min(1, o.opacity) * ga;
   // a 3D layer is placed by the 3D view, which is laid over the whole canvas; effects apply to what it drew
   const deep = R3D.wants(L) || L.type === 'world';
   if (!deep) { c.translate(o.x, o.y); c.rotate(o.rotation * PI / 180); c.scale(o.scale * o.sx, o.scale * o.sy); }
@@ -391,7 +396,7 @@ function drawLayer(c, L, t) {
 }
 // what a layer draws, centred on 0,0 at its own size: the layer, before it is moved, turned or scaled
 function drawContent(c, L, o, t) {
-  if (L.type === 'adjust' || L.type === 'world') return;
+  if (L.type === 'adjust' || L.type === 'world' || L.type === 'group') return;
   if (L.type === 'shape3d' || L.type === 'model') return placeholder3d(c, L, o);
   if (L.type === 'figure') return Figure.draw(c, o);
   c.fillStyle = o.fill; c.strokeStyle = o.stroke; c.lineWidth = o.strokeWidth; c.lineJoin = 'round'; c.lineCap = 'round';
@@ -589,7 +594,7 @@ function render(showUI = true) {
     ctx.save(); ctx.strokeStyle = '#4c8dff'; ctx.lineWidth = k;
     for (const M of SL) { if (!visibleAt(M, time)) continue; const hm = hull3d(M, time); if (hm) { outline3d(ctx, hm); continue; }
       if (M.type === 'camera') { cameraMark(ctx, M, k); continue; } const { o, w, h } = bounds(M, time);
-      ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(o.rotation * PI / 180);
+      ctx.save(); if (groupOf(M)) groupTransform(ctx, groupOf(M), time); ctx.translate(o.x, o.y); ctx.rotate(o.rotation * PI / 180);
       const bw = w * Math.abs(o.scale * o.sx), bh = h * Math.abs(o.scale * o.sy); ctx.strokeRect(-bw / 2, -bh / 2, bw, bh); ctx.restore(); }
     const vis = SL.filter(M => visibleAt(M, time));
     if (vis.length) { const u = unionBox(vis); ctx.setLineDash([5 * k, 4 * k]); ctx.strokeRect(u.x - u.ex - 4 * k, u.y - u.ey - 4 * k, u.ex * 2 + 8 * k, u.ey * 2 + 8 * k); }
@@ -601,7 +606,7 @@ function render(showUI = true) {
   else if (showUI && SL.length === 1 && L && visibleAt(L, time)) {
     const { o, w, h } = bounds(L, time);
     const sx = o.scale * o.sx, sy = o.scale * o.sy;
-    ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(o.rotation * PI / 180);
+    ctx.save(); if (groupOf(L)) groupTransform(ctx, groupOf(L), time); ctx.translate(o.x, o.y); ctx.rotate(o.rotation * PI / 180);
     const bw = w * Math.abs(sx), bh = h * Math.abs(sy);
     ctx.strokeStyle = '#4c8dff'; ctx.lineWidth = 1 * k; ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
     if (L.type !== 'text' && !(L.fix?.w && L.fix?.h)) { const s = 7 * k; ctx.fillStyle = '#fff'; ctx.lineWidth = 1 * k;
@@ -651,9 +656,65 @@ function unionBox(ls) {
   return { x: (l + r) / 2, y: (t + btm) / 2, ex: (r - l) / 2, ey: (btm - t) / 2 };
 }
 
+// ---------- groups ----------
+// A group is a layer of its own (type 'group', drawn as nothing) with its layers just under it in the stack, each
+// with L.parent = the group's id. The group's box starts round its layers; moving, turning, scaling, resizing or
+// fading the box (or keyframing it) does the same to them, about where the box first stood (p.ax, p.ay, p.w0, p.h0).
+// Groups do not nest. 3D layers drawn by the 3D view do not follow their group yet.
+const groupOf = L => L.parent != null ? S.layers.find(g => g.id === L.parent && g.type === 'group') || null : null;
+const groupKids = G => S.layers.filter(l => l.parent === G.id);
+function groupScale(G, t) { const o = state(G, t);
+  return { o, kx: o.scale * o.sx * (o.w / (G.p.w0 || o.w || 1)), ky: o.scale * o.sy * (o.h / (G.p.h0 || o.h || 1)), a: o.rotation * PI / 180 }; }
+function groupTransform(c, G, t) { const { o, kx, ky, a } = groupScale(G, t);
+  c.translate(o.x, o.y); c.rotate(a); c.scale(kx, ky); c.translate(-G.p.ax, -G.p.ay); }
+// a point inside the group (where its layers think they are) to where it shows on the canvas, and back
+function toGroup(G, t, x, y) { const { o, kx, ky, a } = groupScale(G, t), dx = (x - G.p.ax) * kx, dy = (y - G.p.ay) * ky;
+  return [o.x + dx * Math.cos(a) - dy * Math.sin(a), o.y + dx * Math.sin(a) + dy * Math.cos(a)]; }
+function fromGroup(G, t, x, y) { const { o, kx, ky, a } = groupScale(G, t), dx = x - o.x, dy = y - o.y;
+  return [G.p.ax + (dx * Math.cos(a) + dy * Math.sin(a)) / (kx || 1), G.p.ay + (-dx * Math.sin(a) + dy * Math.cos(a)) / (ky || 1)]; }
+// keeps every group's layers together just under it, forgets links to groups that are gone, drops empty groups
+function tidyGroups() {
+  for (const L of S.layers) if (L.parent != null && !groupOf(L)) delete L.parent;
+  const out = [];
+  for (const L of S.layers) {
+    if (L.type === 'group') { const kids = groupKids(L); if (kids.length) out.push(...kids, L); }
+    else if (L.parent == null) out.push(L);
+  }
+  S.layers = out;
+}
+function groupSelection() {
+  const ls = selLayers(); if (!ls.length) return;
+  if (ls.some(L => L.type === 'group' || L.parent != null)) return status('Groups cannot go inside groups yet');
+  const u = unionBox(ls), top = Math.max(...ls.map(L => S.layers.indexOf(L)));
+  const G = makeLayer('group', { x: u.x, y: u.y, w: Math.max(1, u.ex * 2), h: Math.max(1, u.ey * 2), ax: u.x, ay: u.y,
+    w0: Math.max(1, u.ex * 2), h0: Math.max(1, u.ey * 2), fill: '#8b8b98' }, 'Group');
+  G.name = 'Group ' + G.id; S.layers.pop(); S.layers.splice(top + 1, 0, G);
+  for (const L of ls) L.parent = G.id;
+  tidyGroups(); setSelection([G.id]); freshLayer = G.id; refresh(); status(`Grouped ${ls.length} layer${ls.length > 1 ? 's' : ''}`);
+}
+// ungrouping leaves each layer where the group shows it now: the group's move, turn and scale at the playhead are
+// put into the layer (its keyframes too); the group's own keyframes are not kept
+function ungroup() {
+  const gs = [...new Set(selLayers().map(L => L.type === 'group' ? L : groupOf(L)).filter(Boolean))]; if (!gs.length) return;
+  const ids = [];
+  for (const G of gs) {
+    const { kx, ky, a } = groupScale(G, time), deg = a * 180 / PI;
+    for (const L of groupKids(G)) {
+      const xs = (L.keys.x || []).map(k => toGroup(G, time, k.v, val(L, 'y', k.t))[0]), ys = (L.keys.y || []).map(k => toGroup(G, time, val(L, 'x', k.t), k.v)[1]);
+      [L.p.x, L.p.y] = toGroup(G, time, L.p.x, L.p.y);
+      (L.keys.x || []).forEach((k, i) => k.v = xs[i]); (L.keys.y || []).forEach((k, i) => k.v = ys[i]);
+      L.p.rotation += deg; (L.keys.rotation || []).forEach(k => k.v += deg);
+      L.p.sx *= kx; L.p.sy *= ky; (L.keys.sx || []).forEach(k => k.v *= kx); (L.keys.sy || []).forEach(k => k.v *= ky);
+      L.p.opacity *= state(G, time).opacity; delete L.parent; ids.push(L.id);
+    }
+  }
+  S.layers = S.layers.filter(L => !gs.includes(L)); tidyGroups(); setSelection(ids); refresh(); status(gs.length > 1 ? `Ungrouped ${gs.length} groups` : 'Ungrouped ' + gs[0].name);
+}
+
 // ---------- canvas interaction ----------
 function toCanvas(e) { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * S.w / r.width, (e.clientY - r.top) * S.h / r.height]; }
 function local(L, px, py) {
+  if (groupOf(L)) [px, py] = fromGroup(groupOf(L), time, px, py);
   const o = state(L, time), a = -o.rotation * PI / 180, dx = px - o.x, dy = py - o.y;
   return [(dx * Math.cos(a) - dy * Math.sin(a)) / (o.scale * o.sx || 1), (dx * Math.sin(a) + dy * Math.cos(a)) / (o.scale * o.sy || 1)];
 }
@@ -669,14 +730,20 @@ function jointAt(L, px, py, k) {
 const marqueeEl = Object.assign(document.createElement('div'), { className: 'marquee' });
 function hitLayer(px, py) {
   for (let i = S.layers.length - 1; i >= 0; i--) {
-    const L = S.layers[i]; if (!visibleAt(L, time) || L.locked || L.type === 'camera') continue;
+    const L = S.layers[i]; if (!visibleAt(L, time) || L.locked || L.type === 'camera' || L.type === 'group') continue;
+    const G = groupOf(L); if (G && (!visibleAt(G, time) || G.locked)) continue;
     // an adjustment layer covers what is under it, and a matte is not drawn: picked on the canvas only once selected
     if ((L.type === 'adjust' || isMatte(i)) && L.id !== sel) continue;
-    const hull = hull3d(L, time); if (hull) { if (R3D.inside(hull, px, py)) return L; continue; }
+    const hull = hull3d(L, time); if (hull) { if (R3D.inside(hull, px, py)) return pickInGroup(L); continue; }
     const { w, h } = bounds(L, time), [lx, ly] = local(L, px, py);
-    if (Math.abs(lx) <= w / 2 && Math.abs(ly) <= h / 2) return L;
+    if (Math.abs(lx) <= w / 2 && Math.abs(ly) <= h / 2) return pickInGroup(L);
   }
   return null;
+}
+// clicking a layer in a group picks the group, unless the layer or one beside it in the group is already selected
+function pickInGroup(L) {
+  const G = groupOf(L); if (!G) return L;
+  const ss = selIds(); return S.layers.some(l => ss.has(l.id) && l.parent === G.id) ? L : G;
 }
 // The resize handle under a point, as [hx, hy]: -1, 0 or 1 across and down, so [0, -1] is the top edge. Corners
 // first, then anywhere along an edge.
@@ -912,6 +979,7 @@ const ICON = {
   dup: ic('<rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/>'),
   key: '<svg class="ico" viewBox="0 0 16 16"><path d="M8 2.5 13.5 8 8 13.5 2.5 8z" fill="currentColor"/></svg>',
   keyOff: ic('<path d="M8 3 13 8 8 13 3 8z"/>'),
+  group: ic('<rect x="2" y="2" width="12" height="12" rx="2" stroke-dasharray="2 2"/><rect x="5" y="5" width="6" height="6" rx="1"/>'),
   chev: ic('<path d="M4.5 6.5 8 10l3.5-3.5"/>'),
   play: '<svg class="ico" viewBox="0 0 16 16"><path d="M5 3.2v9.6c0 .4.5.7.8.4l7-4.8a.5.5 0 0 0 0-.8l-7-4.8c-.3-.3-.8 0-.8.4z" fill="currentColor"/></svg>',
   pause: '<svg class="ico" viewBox="0 0 16 16"><rect x="4" y="3" width="3" height="10" rx="1" fill="currentColor"/><rect x="9" y="3" width="3" height="10" rx="1" fill="currentColor"/></svg>',
@@ -987,8 +1055,9 @@ function renderLayers() {
   const list = $('#layerList');
   if (!S.layers.length) { list.innerHTML = '<div class="empty">No layers yet.<br>Add a shape from the toolbar.</div>'; return; }
   const ss = selIds();
-  list.innerHTML = [...S.layers].reverse().map(L => `
-    <div class="layer ${ss.has(L.id) ? 'sel' : ''} ${L.hidden ? 'off' : ''} ${L.id === freshLayer ? 'fresh' : ''}" data-id="${L.id}" draggable="true">
+  list.innerHTML = [...S.layers].reverse().filter(L => !groupOf(L)?.closed).map(L => `
+    <div class="layer ${ss.has(L.id) ? 'sel' : ''} ${L.hidden ? 'off' : ''} ${L.id === freshLayer ? 'fresh' : ''} ${groupOf(L) ? 'child' : ''}" data-id="${L.id}" draggable="true">
+      ${L.type === 'group' ? `<button class="ib fold ${L.closed ? '' : 'open'}" data-act="fold" title="${L.closed ? 'Expand' : 'Collapse'}">${ICON.chev}</button>` : ''}
       <span class="lt" style="color:${iconColor(L)}">${ICON[L.type]}</span>
       <span class="ln">${esc(L.name)}</span>
       ${Object.keys(L.keys).length ? '<span class="lk" title="Animated">' + ICON.key + '</span>' : ''}
@@ -1001,6 +1070,7 @@ $('#layerList').addEventListener('click', e => {
   const row = e.target.closest('.layer'); if (!row) return;
   const L = S.layers.find(l => l.id === +row.dataset.id), act = e.target.closest('[data-act]')?.dataset.act;
   if (act === 'vis') L.hidden = !L.hidden; else if (act === 'lock') L.locked = !L.locked;
+  else if (act === 'fold') L.closed = !L.closed;
   else if (e.metaKey || e.ctrlKey) { const ids = [...selIds()], on = ids.includes(L.id); setSelection(on ? ids.filter(i => i !== L.id) : [...ids, L.id], on ? sel : L.id); }
   else if (e.shiftKey && cur()) { const order = [...S.layers].reverse().map(l => l.id), a = order.indexOf(sel), b = order.indexOf(L.id);
     setSelection(order.slice(Math.min(a, b), Math.max(a, b) + 1), sel); }
@@ -1019,7 +1089,10 @@ $('#layerList').addEventListener('drop', e => {
   if (!dragRow) return; e.preventDefault(); const to = +e.target.closest('.layer')?.dataset.id; if (!dragRow || !to || to === dragRow) return;
   const from = S.layers.findIndex(l => l.id === dragRow), L = S.layers.splice(from, 1)[0];
   S.layers.splice(S.layers.findIndex(l => l.id === to) + (from > S.layers.findIndex(l => l.id === to) ? 1 : 0), 0, L);
-  dragRow = null; refresh();
+  // dropped among a group's layers it joins that group; dropped anywhere else it leaves its group
+  const T = S.layers.find(l => l.id === to);
+  if (L.type !== 'group') { if (T.parent != null) L.parent = T.parent; else delete L.parent; }
+  dragRow = null; tidyGroups(); refresh();
 });
 function duplicate() {
   const ls = selLayers(); if (!ls.length) return; const copies = [];
@@ -1027,10 +1100,13 @@ function duplicate() {
     const c = JSON.parse(JSON.stringify(L)); c.id = uid++; c.name = L.name + ' copy'; c.p.x += 40; c.p.y += 40;
     for (const k of ['x', 'y']) (c.keys[k] || []).forEach(q => q.v += 40);
     S.layers.splice(S.layers.indexOf(L) + 1, 0, c); copies.push(c.id);
+    // a group's copy gets copies of its layers (moved with the copied box, so left where they were)
+    if (L.type === 'group') for (const K of groupKids(L)) { const k = JSON.parse(JSON.stringify(K)); k.id = uid++; k.parent = c.id; S.layers.push(k); }
   }
-  setSelection(copies); freshLayer = copies.at(-1); refresh(); status(ls.length > 1 ? `Duplicated ${ls.length} layers` : 'Duplicated ' + ls[0].name);
+  tidyGroups(); setSelection(copies); freshLayer = copies.at(-1); refresh(); status(ls.length > 1 ? `Duplicated ${ls.length} layers` : 'Duplicated ' + ls[0].name);
 }
-function removeLayer() { const ls = selLayers(); if (!ls.length) return; S.layers = S.layers.filter(l => !ls.includes(l)); setSelection([]); refresh();
+function removeLayer() { const ls = selLayers(); if (!ls.length) return; const gone = new Set(ls.filter(l => l.type === 'group').map(l => l.id));
+  S.layers = S.layers.filter(l => !ls.includes(l) && !gone.has(l.parent)); tidyGroups(); setSelection([]); refresh();
   status(ls.length > 1 ? `Deleted ${ls.length} layers` : 'Deleted ' + ls[0].name); }
 
 // ---------- properties panel ----------
@@ -1135,7 +1211,7 @@ function renderProps() {
         else if (k === 'font') field = `<button class="selectbtn" data-menu="font"><span style="font-family:${esc(Fonts.stack(v))}">${esc(v || 'Inter')}</span>${ICON.chev}</button>`;
         else if (k === 'mask' || k === 'matte' || k === 'lut') field = `<button class="selectbtn" data-menu="${k}"><span>${esc(k === 'lut' ? v || 'None' : ((k === 'mask' ? MASK_KINDS : TRACK_MATTES).find(x => x[0] === (v || 'none')) || ['', 'None'])[1])}</span>${ICON.chev}</button>`;
         else if (k === 'minv' || k === 'chroma') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="${k}"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
-        else if (k === 'reverse' || k === 'mute') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="${k}"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
+        else if (k === 'reverse' || k === 'mute' || k === 'swayLoop') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="${k}"${k === 'swayLoop' ? ' title="Fit the sway to the video, so its last frame meets its first"' : ''}><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
         else if (k === 'italic') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="italic"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
         else if (k === 'align') field = `<button class="selectbtn" data-menu="align"><span>${(TEXT_ALIGNS.find(a => a[0] === v) || TEXT_ALIGNS[1])[1]}</span>${ICON.chev}</button>`;
         else if (k === 'tcase') field = `<button class="selectbtn" data-menu="tcase"><span>${(TEXT_CASES.find(a => a[0] === v) || TEXT_CASES[0])[1]}</span>${ICON.chev}</button>`;
@@ -1354,6 +1430,7 @@ Pn.addEventListener('click', e => {
       if (v === '__load') return lutPicker.click();
       L.p.lut = v; refresh(); });
   else if (t.dataset.cmd === 'reverse' || t.dataset.cmd === 'mute') { L.p[t.dataset.cmd] = !L.p[t.dataset.cmd]; DUCKENV.clear(); refresh(); }
+  else if (t.dataset.cmd === 'swayLoop') { L.p.swayLoop = !L.p.swayLoop; refresh(); }
   else if (t.dataset.cmd === 'three') { L.p.three = !L.p.three; refresh(); status(L.p.three ? `${L.name} is 3D: turn it with Rotate X and Y, push it back with Depth` : `${L.name} is flat again`); }
   else if (t.dataset.menu === 'shape')
     UI.menu(t, R3D.SHAPES.map(([value, label]) => ({ value, label })), L.p.shape, v => { L.p.shape = v; if (v === 'text') R3D.loadFont(); refresh(); });
@@ -1832,6 +1909,7 @@ function renderTracks() {
   if (graphOn) { renderGraph(C, R); head.style.height = '0px'; head.style.height = C.scrollHeight + 'px'; placeHead(); updateEaseButton(); renderZoom(); return; }
   // layers, top of the stack first
   for (const L of [...S.layers].reverse()) {
+    if (groupOf(L)?.closed) continue;
     const keyed = Object.keys(L.keys).filter(p => L.keys[p]?.length), open = openRows.has(L.id) && keyed.length;
     const row = rowEl('layer-row' + (selIds().has(L.id) ? ' sel' : '') + (L.hidden ? ' off' : ''),
       `<button class="twirl ${keyed.length ? '' : 'none'} ${open ? 'open' : ''}" title="Show keyframed properties"></button><span class="lt" style="color:${iconColor(L)}">${ICON[L.type]}</span><span class="ln">${esc(L.name)}</span>`, L.id);
@@ -3035,6 +3113,8 @@ const COMMANDS = [
   ['Edit', 'Cut layer', 'mod+x', () => { copyLayer(); removeLayer(); }],
   ['Edit', 'Paste layer', 'mod+v', () => pasteLayer()],
   ['Edit', 'Duplicate layer', 'mod+d', () => duplicate()],
+  ['Edit', 'Group selected layers', 'mod+g', () => groupSelection()],
+  ['Edit', 'Ungroup', 'mod+shift+g', () => ungroup()],
   ['Edit', 'Delete layer, keyframe or audio clip', 'delete|backspace', () => { if (selKey) $('#delKey').click(); else if (selClip && !cur()) deleteClip(); else removeLayer(); }],
   ['Edit', 'Rename layer', 'f2', withL(renameLayer)],
   ['Edit', 'Edit text', 'enter', withL(L => L.type === 'text' ? editText(L) : null)],
@@ -3668,6 +3748,8 @@ function layerItems(L) {
     { label: 'Copy', icon: ICON.dup, kbd: '⌘C', act: copyLayer },
     { label: 'Paste', kbd: '⌘V', disabled: !clip, act: pasteLayer },
     { label: 'Duplicate', kbd: '⌘D', act: duplicate },
+    { label: 'Group', kbd: '⌘G', disabled: L.type === 'group' || L.parent != null, act: groupSelection },
+    ...(L.type === 'group' || L.parent != null ? [{ label: 'Ungroup', kbd: '⇧⌘G', act: ungroup }] : []),
     { label: 'Rename…', act: () => renameLayer(L) },
     '-',
     { label: 'Animate', icon: ICON.play2, sub: Object.entries(PRESETS).map(([g, items]) => ({ label: g, sub: Object.keys(items).map(n => ({ label: n, kbd: presetMeta(items[n], L), act: () => applyPreset(L, n) })) })) },
@@ -3815,7 +3897,7 @@ const LIVE = (() => {
     get_project: () => summary(),
     get_layer: a => layerInfo(findL(a), true),
     list_capabilities: () => ({
-      layer_types: Object.fromEntries(Object.entries(PROPS).filter(([t]) => !['image', 'video', 'model'].includes(t)).map(([t, ps]) => [t, ps])),
+      layer_types: Object.fromEntries(Object.entries(PROPS).filter(([t]) => !['image', 'video', 'model', 'group'].includes(t)).map(([t, ps]) => [t, ps])),
       shapes_3d: R3D.SHAPES.map(s => s[0]), materials_3d: R3D.MATERIALS.map(m => m[0]),
       worlds: { scenes: Object.fromEntries(Object.entries(World.PRESETS).map(([k, P]) => [k, P.hint])), skies: World.SKIES.map(s => s[0]),
         grounds: World.GROUNDS.map(g => g[0]), prop_parts: World.PARTS, finishes: World.FINISHES,
@@ -3838,7 +3920,7 @@ const LIVE = (() => {
       return { ok: true, times: ts.map(round), png: sh.toDataURL('image/png') };
     },
     add_layer: a => {
-      if (!PROPS[a.type] || ['image', 'video', 'model'].includes(a.type)) throw new Error(`type must be one of ${Object.keys(PROPS).filter(t => !['image', 'video', 'model'].includes(t)).join(', ')}`);
+      if (!PROPS[a.type] || ['image', 'video', 'model', 'group'].includes(a.type)) throw new Error(`type must be one of ${Object.keys(PROPS).filter(t => !['image', 'video', 'model', 'group'].includes(t)).join(', ')}`);
       const props = a.props || {}; for (const p in props) if (!PROPS[a.type].includes(p)) throw new Error(`${a.type} layers have no "${p}"`);
       const scene = Object.fromEntries(Object.entries(props).filter(([p]) => Physics.SCENE.includes(p)));
       for (const p in scene) delete props[p];

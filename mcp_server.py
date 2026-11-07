@@ -227,7 +227,9 @@ async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "
     clouds, plants, dust and the sea move with it). ground "ocean" | "field" | "desert" | "floor" | "none",
     groundColor. The ocean: water (colour), waves (metres), chop (%), and a breaking wave: swell (its height, m;
     0 for none), curl (0 standing up to 1 thrown over and landing; key it to make the wave break), waveDist (m
-    ahead) and waveAngle (degrees turned). A field: plants (colour), grass (%), grassH (m). fog and dust (0 to
+    ahead) and waveAngle (degrees turned). A field: plants (colour), grass (%), grassH (m), sway (how hard
+    the wheat sways, as wind m/s; 3 in the rig scene) and swayLoop (true fits the sway to the duration so it loops
+    seamlessly). fog and dust (0 to
     100). The camera: eye (its height above the ground, m), heading (degrees looked round), pitch (degrees up),
     travel (m moved forwards), lens (mm). A camera layer also moves it: orbit, tilt, dolly (pixels) and zoom.
     The lens: dof (depth of field, 0 off), focus (m from the camera; 0 is the point it looks at), exposure

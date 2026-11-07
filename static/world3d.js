@@ -23,20 +23,20 @@ const World = (() => {
     studio: { zen: '#25272d', hor: '#5b5d66', sun: '#ffffff', lit: '#000000', shade: '#000000', disk: 0, power: 1.8 },
   };
   const FIELDS = ['sky', 'sunEl', 'sunAz', 'sunPower', 'clouds', 'wind',
-    'ground', 'groundColor', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH',
+    'ground', 'groundColor', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH', 'sway', 'swayLoop',
     'fog', 'dust', 'eye', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao', 'objects'];
   const DEFAULTS = { sky: 'sunset', sunEl: 8, sunAz: 10, sunPower: 100, clouds: 45, wind: 4, ground: 'ocean', groundColor: '#8a6a45',
-    water: '#0b4a46', waves: .6, chop: 50, swell: 0, curl: .5, waveDist: 45, waveAngle: -20, plants: '#c09a48', grass: 60, grassH: .9,
+    water: '#0b4a46', waves: .6, chop: 50, swell: 0, curl: .5, waveDist: 45, waveAngle: -20, plants: '#c09a48', grass: 60, grassH: .9, sway: 3, swayLoop: false,
     fog: 8, dust: 0, eye: 1.7, heading: 0, pitch: 0, travel: 0, lens: 35, focus: 0, dof: 0, exposure: 0, bloom: 30, grain: 15, fringe: 10, ao: 0 };
   const LABELS = { sky: 'Sky', sunEl: 'Sun height°', sunAz: 'Sun around°', sunPower: 'Sun %', clouds: 'Clouds %', wind: 'Wind m/s',
     ground: 'Ground', groundColor: 'Ground colour', water: 'Water', waves: 'Waves m', chop: 'Chop %', swell: 'Breaker m', curl: 'Curl',
-    waveDist: 'Breaker at m', waveAngle: 'Breaker turn°', plants: 'Plants', grass: 'Plants %', grassH: 'Plant height m',
+    waveDist: 'Breaker at m', waveAngle: 'Breaker turn°', plants: 'Plants', grass: 'Plants %', grassH: 'Plant height m', sway: 'Sway m/s', swayLoop: 'Loop sway',
     fog: 'Fog', dust: 'Dust', eye: 'Eye height m', heading: 'Look around°', pitch: 'Look up°', travel: 'Travel m', lens: 'Lens mm',
     focus: 'Focus m', dof: 'Depth of field', exposure: 'Exposure', bloom: 'Bloom', grain: 'Grain', fringe: 'Fringe', ao: 'Contact shade' };
   const COLORS = ['groundColor', 'water', 'plants'];
-  const NUMBERS = FIELDS.filter(k => !['sky', 'ground', 'objects', ...COLORS].includes(k));
+  const NUMBERS = FIELDS.filter(k => !['sky', 'ground', 'objects', 'swayLoop', ...COLORS].includes(k));
   const GROUPS = [['World', ['sky', 'sunEl', 'sunAz', 'sunPower', 'clouds', 'wind', 'fog', 'dust']],
-    ['Ground', ['ground', 'groundColor', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH']],
+    ['Ground', ['ground', 'groundColor', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH', 'sway', 'swayLoop']],
     ['Lens', ['eye', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao']]];
   const STEP = { waves: .05, curl: .01, grassH: .05, eye: .05, exposure: .05 };
   const deg = v => (+v || 0) * Math.PI / 180;
@@ -46,7 +46,7 @@ const World = (() => {
   function shows(k, o, keyed) {
     if (['water', 'waves', 'chop', 'swell'].includes(k)) return o.ground === 'ocean';
     if (['curl', 'waveDist', 'waveAngle'].includes(k)) return o.ground === 'ocean' && (o.swell > 0 || keyed);
-    if (['plants', 'grass', 'grassH'].includes(k)) return o.ground === 'field';
+    if (['plants', 'grass', 'grassH', 'sway', 'swayLoop'].includes(k)) return o.ground === 'field';
     if (k === 'groundColor') return o.ground !== 'ocean' && o.ground !== 'none';
     if (k === 'clouds') return o.sky !== 'studio';
     if (k === 'focus') return o.dof > 0 || keyed;
@@ -449,11 +449,12 @@ const World = (() => {
     for (let i = 0; i < segs; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
     blade.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); blade.setIndex(idx); blade.computeVertexNormals();
     const mat = new T.MeshStandardMaterial({ color: 0xffffff, roughness: .75, side: T.DoubleSide });
-    const uniforms = { uTime: { value: 0 }, uWind: { value: 4 } };
+    // uF1/uF2 are the two sway speeds (radians a second): 1.7 and 3.1, or the nearest that repeat exactly over the video
+    const uniforms = { uTime: { value: 0 }, uWind: { value: 4 }, uF1: { value: 1.7 }, uF2: { value: 3.1 } };
     mat.onBeforeCompile = sh => { Object.assign(sh.uniforms, uniforms);
-      sh.vertexShader = 'uniform float uTime, uWind;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      sh.vertexShader = 'uniform float uTime, uWind, uF1, uF2;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
         vec4 ip = instanceMatrix * vec4(0., 0., 0., 1.);
-        float sway = (sin(uTime * 1.7 + ip.x * .013 + ip.z * .009) * .6 + sin(uTime * 3.1 + ip.x * .05) * .25) * uWind * .018 * position.y * position.y;
+        float sway = (sin(uTime * uF1 + ip.x * .013 + ip.z * .009) * .6 + sin(uTime * uF2 + ip.x * .05) * .25) * uWind * .018 * position.y * position.y;
         transformed.x += sway; transformed.z += sway * .4;`); };
     const mesh = new T.InstancedMesh(blade, mat, count), rand = rng(seed), m4 = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), c = lin(color), cc = new T.Color();
     for (let i = 0; i < count; i++) {
@@ -617,7 +618,11 @@ const World = (() => {
     if (B.land) B.land.position.set(0, ground, 0);
     const count = o.ground === 'field' ? Math.round(clamp(+o.grass, 0, 100) * 900) : 0;
     const wheat = rebuild(B, 'wheat', count ? [count, (+o.grassH).toFixed(2), o.plants].join('|') : null, () => fieldMesh(count, Math.max(.05, +o.grassH || .9), o.plants));
-    if (wheat) { wheat.position.set(0, ground, 0); wheat.userData.uniforms.uTime.value = t; wheat.userData.uniforms.uWind.value = +o.wind || 0; }
+    if (wheat) { const u = wheat.userData.uniforms; wheat.position.set(0, ground, 0); u.uTime.value = t;
+      // the wheat's own sway (worlds from before it follow the wind); looped, each speed is a whole number of swings over the video
+      u.uWind.value = Math.max(0, +(o.sway ?? o.wind) || 0);
+      const fit = f => { const d = Math.max(.1, +S.dur || 1), n = Math.max(1, Math.round(f * d / (2 * Math.PI))); return 2 * Math.PI * n / d; };
+      u.uF1.value = o.swayLoop ? fit(1.7) : 1.7; u.uF2.value = o.swayLoop ? fit(3.1) : 3.1; }
     // a breaking wave
     const swell = o.ground === 'ocean' ? Math.max(0, +o.swell || 0) : 0;
     const br = rebuild(B, 'breaker', swell > 0 ? 'breaker' : null, () => breakerMesh(U));
@@ -634,10 +639,14 @@ const World = (() => {
       B.props = buildProps(o.objects, t); B.propsKey = pkey; B.scene.add(B.props); }
     B.props.position.set(0, ground, 0);
     // the 3D shapes and models above it
-    for (const m of B.members || []) { B.scene.remove(m); m.userData.dispose?.(); }
-    B.members = [];
-    for (const M2 of members(L, t)) { const os = state(M2, t), obj = R().object(M2, os, t, k, drawContent); if (!obj) continue;
-      obj.traverse(x => { if (x.isMesh) { x.castShadow = x.receiveShadow = true; } }); B.scene.add(obj); B.members.push(obj); }
+    // (kept as they are while the scene editor's gizmo holds one, so it is not swapped from under it)
+    if (!(B.hold === true && B.members?.length)) {
+      for (const m of B.members || []) { B.scene.remove(m); m.userData.dispose?.(); }
+      B.members = [];
+      for (const M2 of members(L, t)) { const os = state(M2, t), obj = R().object(M2, os, t, k, drawContent); if (!obj) continue;
+        obj.userData.layerId = M2.id;
+        obj.traverse(x => { if (x.isMesh) { x.castShadow = x.receiveShadow = true; } }); B.scene.add(obj); B.members.push(obj); }
+    }
     Rr.toneMappingExposure = Math.pow(2, +o.exposure || 0);
     return { B, cam, ground };
   }
@@ -708,7 +717,7 @@ const World = (() => {
         exposure: 0, bloom: 40, grain: 22, fringe: 18, ao: 0, objects: [] },
       keys: d => ({ curl: [[0, .3, 'sineInOut'], [d, .95]], travel: [[0, 0, 'linear'], [d, 4]], heading: [[0, -2, 'sineInOut'], [d, 4]] }) },
     rig: { label: 'Camera rig in a field', hint: 'Worn metal, haze, dust, shallow focus',
-      p: { sky: 'haze', sunEl: 26, sunAz: 120, sunPower: 90, clouds: 20, wind: 3, ground: 'field', groundColor: '#8c6c48', plants: '#b39545', grass: 70, grassH: .85,
+      p: { sky: 'haze', sunEl: 26, sunAz: 120, sunPower: 90, clouds: 20, wind: 3, ground: 'field', groundColor: '#8c6c48', plants: '#b39545', grass: 70, grassH: .85, sway: 3,
         fog: 45, dust: 60, eye: 1.4, heading: -43, pitch: -2, travel: 0, lens: 45, focus: 0, dof: 70, exposure: .1, bloom: 30, grain: 30, fringe: 25, ao: 60, objects: rig() },
       camera: h => ({ dolly: Math.round(h / 2 / (12 / 45) - 135), tilt: 5 }),
       keys: d => ({ heading: [[0, -50, 'sineInOut'], [d, -36]] }) },

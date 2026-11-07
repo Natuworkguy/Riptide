@@ -341,7 +341,7 @@ const World = (() => {
   // ----- props: built from parts, in metres -----
   // {type, at: [x, y, z], turn: [x, y, z]°, size: [w, h, d], finish, color, children: [...]}, y up and z towards the
   // camera, from the spot on the ground the camera looks at
-  const PARTS = ['box', 'cylinder', 'sphere', 'cone', 'torus', 'capsule', 'truss', 'label', 'group'];
+  const PARTS = ['box', 'cylinder', 'sphere', 'cone', 'torus', 'capsule', 'truss', 'label', 'light', 'group'];
   const geomCache = new Map();
   const cyl = (r0, r1, h, n = 48) => new T.CylinderGeometry(r0, r1, h, n, 1);
   function truss(w, h, d, bays, rod, taper) {
@@ -381,22 +381,61 @@ const World = (() => {
     geomCache.set(key, g); return g;
   }
   const labelMats = new Map();
+  // A prop's transform at T: its keyframes where it has them ({at: [{t, v, ease}], turn: …, scale: …}), else its value.
+  function keyed(P, prop, t, base) {
+    const ks = P.keys?.[prop]; if (!Array.isArray(ks) || !ks.length) return base;
+    const mix = (a, b, f) => Array.isArray(a) ? a.map((x, i) => (+x || 0) + ((+b?.[i] || 0) - (+x || 0)) * f) : (+a || 0) + ((+b || 0) - (+a || 0)) * f;
+    if (t <= ks[0].t) return ks[0].v;
+    for (let i = 0; i < ks.length - 1; i++) { const a = ks[i], b = ks[i + 1];
+      if (t <= b.t) return mix(a.v, b.v, (typeof easeFn === 'function' ? easeFn(a) : x => x)((t - a.t) / (b.t - a.t || 1))); }
+    return ks[ks.length - 1].v;
+  }
+  const scale3 = v => Array.isArray(v) ? [0, 1, 2].map(i => +v[i] || 1) : [+v || 1, +v || 1, +v || 1];
+  // the lights a prop can be
+  function lightOf(P) {
+    const c = lin(P.color || '#ffffff'), power = Math.max(0, +P.power || 100);
+    let l;
+    if (P.light === 'spot') { l = new T.SpotLight(c, power * 40, 0, deg(clamp(+P.angle || 35, 1, 89)), clamp((+P.soft ?? 40) / 100, 0, 1), 2);
+      l.target.position.set(0, 0, 1); l.add(l.target); }
+    else l = new T.PointLight(c, power * 40, 0, 2);
+    l.castShadow = P.shadows !== false; l.shadow.mapSize.set(1024, 1024); l.shadow.bias = -.0005; l.shadow.radius = 3;
+    const bulb = new T.Mesh(new T.SphereGeometry(.03, 16, 8), new T.MeshBasicMaterial({ color: c })); bulb.scale.setScalar(M); bulb.userData.bulb = true; l.add(bulb);
+    return l;
+  }
   function buildPart(P, t) {
-    if (!P || typeof P !== 'object') return null;
-    const node = new T.Group(), at = P.at || [0, 0, 0], turn = P.turn || [0, 0, 0], spin = P.spin || [0, 0, 0];
+    if (!P || typeof P !== 'object' || P.hidden) return null;
+    const node = new T.Group(), at = keyed(P, 'at', t, P.at || [0, 0, 0]), turn = keyed(P, 'turn', t, P.turn || [0, 0, 0]), spin = P.spin || [0, 0, 0];
     node.position.set((+at[0] || 0) * M, ((+at[1] || 0) + (+P.bob || 0) * Math.sin(t * 2.1 + (+at[0] || 0))) * M, (+at[2] || 0) * M);
     node.rotation.set(deg((+turn[0] || 0) + (+spin[0] || 0) * t), deg((+turn[1] || 0) + (+spin[1] || 0) * t), deg((+turn[2] || 0) + (+spin[2] || 0) * t), 'YXZ');
-    node.scale.setScalar(+P.scale || 1);
-    if (P.type && P.type !== 'group' && PARTS.includes(P.type)) {
+    node.scale.set(...scale3(keyed(P, 'scale', t, P.scale ?? 1)));
+    node.userData.partId = P.id;
+    if (P.type === 'light') node.add(lightOf(P));
+    else if (P.type && P.type !== 'group' && (PARTS.includes(P.type) || custom[P.type])) {
       let mat;
       if (P.type === 'label') { const key = `${P.text}|${P.color}|${P.background}`;
         mat = labelMats.get(key) || new T.MeshBasicMaterial({ map: labelTexture(P.text, P.color, P.background) }); labelMats.set(key, mat); }
       else mat = finish(P.finish, P.color, P.glow);
-      const mesh = new T.Mesh(partGeometry(P), mat); mesh.scale.setScalar(M); mesh.castShadow = mesh.receiveShadow = P.type !== 'label'; node.add(mesh);
+      const g = custom[P.type] ? custom[P.type](P) : partGeometry(P);
+      if (g?.isObject3D) { g.traverse(x => { if (x.isMesh) { x.castShadow = x.receiveShadow = true; x.userData.partId = P.id; } }); node.add(g); }
+      else if (g) { const mesh = new T.Mesh(g, mat); mesh.scale.setScalar(M); mesh.castShadow = mesh.receiveShadow = P.type !== 'label'; mesh.userData.partId = P.id; node.add(mesh); }
     }
     for (const C of Array.isArray(P.children) ? P.children : []) { const k = buildPart(C, t); if (k) node.add(k); }
     return node;
   }
+  // other parts, added by later modules: a mesh of one's own, a model from the library (type -> make(P))
+  const custom = {};
+  // Props keep the ids they are picked by: every prop without one gets one.
+  function ensureIds(list) {
+    let n = 0;
+    const walk = arr => { for (const P of Array.isArray(arr) ? arr : []) { if (P && typeof P === 'object') { if (!P.id) P.id = 'p' + Date.now().toString(36) + (n++).toString(36) + Math.random().toString(36).slice(2, 5); walk(P.children); } } };
+    walk(list); return list;
+  }
+  function findPart(list, id, parent = null) {
+    for (const P of Array.isArray(list) ? list : []) { if (P?.id === id) return { P, list, parent };
+      const f = findPart(P?.children, id, P); if (f) return f; }
+    return null;
+  }
+  const animated = list => JSON.stringify(list || []).match(/"(keys|spin|bob)"/);
   function buildProps(list, t) {
     const root = new T.Group();
     for (const P of Array.isArray(list) ? list : []) { const n = buildPart(P, t); if (n) root.add(n); }
@@ -551,11 +590,9 @@ const World = (() => {
     return B.env;
   }
 
-  function draw(c, L, o, t) {
-    const Rr = gl(); if (!Rr) return false;
-    const k = c.getTransform().a || 1, W = Math.max(1, Math.min(8192, Math.round(S.w * k))), H = Math.max(1, Math.min(8192, Math.round(S.h * k)));
-    if (Rr.domElement.width !== W || Rr.domElement.height !== H) Rr.setSize(W, H, false);
-    const B = worldFor(L), U = B.uniforms, pal = PALETTE[o.sky] || PALETTE.sunset, cam = camera(t, o), ground = -(+o.eye || 1.7) * M;
+  // Set the world up as it is at T: its sky, light, ground, props and the 3D layers in it. What films it is separate.
+  function stage(L, o, t, k = 1) {
+    const Rr = renderer, B = worldFor(L), U = B.uniforms, pal = PALETTE[o.sky] || PALETTE.sunset, cam = camera(t, o), ground = -(+o.eye || 1.7) * M;
     const sun = sunDir(o), elev = clamp(sun.y * 4 + .15, 0, 1);
     // the sky
     U.uSunDir.value.copy(sun); U.uZen.value.copy(lin(pal.zen)); U.uHor.value.copy(lin(pal.hor)); U.uSun.value.copy(lin(pal.sun)).multiplyScalar(pal.power * (o.sunPower ?? 100) / 100);
@@ -591,14 +628,32 @@ const World = (() => {
     const motes = Math.round(clamp(+o.dust || 0, 0, 100) * 40), dust = rebuild(B, 'dust', motes ? motes : null, () => dustPoints(motes));
     if (dust) { const u = dust.material.uniforms; u.uTime.value = t; u.uWind.value = +o.wind || 0; u.uCenter.value.set(stage.x, ground, stage.z);
       u.uCol.value.copy(lin(pal.sun)).multiplyScalar(.6 * elev + .1); u.uSize.value = 1.4; }
-    // props: built again each frame, so the ones that spin or bob move with time
-    if (B.props) { B.scene.remove(B.props); }
-    B.props = buildProps(o.objects, t); B.props.position.set(0, ground, 0); B.scene.add(B.props);
+    // props: built again when they change, or every frame when they move with time; not while one is held
+    const pkey = JSON.stringify(o.objects || []) + (animated(o.objects) ? '@' + t : '');
+    if (B.propsKey !== pkey && B.hold !== true) { if (B.props) B.scene.remove(B.props);
+      B.props = buildProps(o.objects, t); B.propsKey = pkey; B.scene.add(B.props); }
+    B.props.position.set(0, ground, 0);
     // the 3D shapes and models above it
-    const mem = [];
+    for (const m of B.members || []) { B.scene.remove(m); m.userData.dispose?.(); }
+    B.members = [];
     for (const M2 of members(L, t)) { const os = state(M2, t), obj = R().object(M2, os, t, k, drawContent); if (!obj) continue;
-      obj.traverse(x => { if (x.isMesh) { x.castShadow = x.receiveShadow = true; } }); B.scene.add(obj); mem.push(obj); }
-    // shoot it
+      obj.traverse(x => { if (x.isMesh) { x.castShadow = x.receiveShadow = true; } }); B.scene.add(obj); B.members.push(obj); }
+    Rr.toneMappingExposure = Math.pow(2, +o.exposure || 0);
+    return { B, cam, ground };
+  }
+  function draw(c, L, o, t) {
+    const Rr = gl(); if (!Rr) return false;
+    const k = c.getTransform().a || 1, W = Math.max(1, Math.min(8192, Math.round(S.w * k))), H = Math.max(1, Math.min(8192, Math.round(S.h * k)));
+    if (Rr.domElement.width !== W || Rr.domElement.height !== H) Rr.setSize(W, H, false);
+    const { B, cam } = stage(L, o, t, k);
+    if (World.finalRender?.(L, o, t, B, cam, W, H)) { c.drawImage(Rr.domElement, 0, 0, S.w, S.h); return true; }
+    shoot(B, cam, o, t, W, H);
+    c.drawImage(Rr.domElement, 0, 0, S.w, S.h);
+    return true;
+  }
+  // film the staged world through its lens, into the renderer's canvas
+  function shoot(B, cam, o, t, W, H) {
+    const Rr = renderer;
     Rr.toneMappingExposure = Math.pow(2, +o.exposure || 0);
     const P = lens(W, H, B.scene, cam);
     P.ao.enabled = o.ao > 0; if (P.ao.enabled) { P.ao.blendIntensity = clamp(o.ao / 100, 0, 1); P.ao.updateGtaoMaterial?.({ radius: 60, distanceExponent: 1, thickness: 40, scale: 1 }); }
@@ -608,9 +663,6 @@ const World = (() => {
     P.bloom.enabled = o.bloom > 0; P.bloom.strength = clamp(o.bloom / 100, 0, 3) * .6; P.bloom.radius = .55; P.bloom.threshold = 1.1;
     const fu = P.film.uniforms; fu.uTime.value = t; fu.uGrain.value = clamp(o.grain / 100, 0, 2); fu.uFringe.value = clamp(o.fringe / 100, 0, 3); fu.uAspect.value = W / H;
     composer.render();
-    for (const m of mem) { B.scene.remove(m); m.userData.dispose?.(); }
-    c.drawImage(Rr.domElement, 0, 0, S.w, S.h);
-    return true;
   }
   // the camera that films a 3D layer standing in a world, for where it lands on the canvas
   R3D.worldCamera = (L, t) => { const W = worldOf(L, t); return W ? camera(t, state(W, t)) : null; };
@@ -674,6 +726,8 @@ const World = (() => {
       keys: d => ({ heading: [[0, -4, 'sineInOut'], [d, 4]] }) },
   };
 
-  return { SKIES, GROUNDS, FIELDS, DEFAULTS, LABELS, COLORS, NUMBERS, GROUPS, STEP, PRESETS, PARTS, FINISHES: Object.keys(FINISHES),
-    shows, draw, worldOf, camera, get available() { return !!T; } };
+  const World = { SKIES, GROUNDS, FIELDS, DEFAULTS, LABELS, COLORS, NUMBERS, GROUPS, STEP, PRESETS, PARTS, FINISHES: Object.keys(FINISHES), FINISH_LOOKS: FINISHES,
+    shows, draw, stage, shoot, worldOf, camera, gl, ensureIds, findPart, finish, custom, M, lin, deg,
+    get renderer() { return renderer; }, get available() { return !!T; }, finalRender: null };
+  return World;
 })();

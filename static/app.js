@@ -1089,7 +1089,8 @@ function renderProps() {
       h += `<div class="sec"><div class="sech">${g}</div><div class="grid">`;
       if (g === 'Adjust') h += `<div class="row wide"><label>Look</label><button class="selectbtn" data-menu="look"><span>Apply a look…</span>${ICON.chev}</button></div>`;
       if (g === 'World' && L.type === 'world') { const n = Array.isArray(L.p.objects) ? L.p.objects.length : 0;
-        h += `<div class="row wide"><label>Scene</label><button class="selectbtn" data-menu="worldscene"><span>${n ? `${n} prop${n > 1 ? 's' : ''} · start from…` : 'Start from a scene…'}</span>${ICON.chev}</button></div>`; }
+        h += `<div class="row wide"><label>Scene</label><button class="selectbtn" data-menu="worldscene"><span>${n ? `${n} prop${n > 1 ? 's' : ''} · start from…` : 'Start from a scene…'}</span>${ICON.chev}</button></div>`;
+        h += `<div class="btnrow wide"><button class="tb small" data-cmd="editscene" title="Build the scene: add, move, turn and change props, and fly round it">Edit scene${n ? ` · ${n} prop${n > 1 ? 's' : ''}` : ''}</button></div>`; }
       for (const k of ks) {
         if ((k === 'fill2' || k === 'gradAngle' || MIDS.includes(k)) && (o.grad || 'none') === 'none') continue;
         if (MIDS.includes(k) && !isColor(o[k]) && !L.keys[k]?.length) continue;
@@ -1350,6 +1351,7 @@ Pn.addEventListener('click', e => {
     UI.menu(t, R3D.SHAPES.map(([value, label]) => ({ value, label })), L.p.shape, v => { L.p.shape = v; if (v === 'text') R3D.loadFont(); refresh(); });
   else if (t.dataset.menu === 'sky' || t.dataset.menu === 'ground') { const k = t.dataset.menu;
     UI.menu(t, (k === 'sky' ? World.SKIES : World.GROUNDS).map(([value, label]) => ({ value, label })), L.p[k], v => { L.p[k] = v; refresh(); }); }
+  else if (t.dataset.cmd === 'editscene') SceneEd.open(L);
   else if (t.dataset.menu === 'worldscene')
     UI.menu(t, Object.entries(World.PRESETS).map(([value, P]) => ({ value, label: P.label, hint: P.hint })), null, v => applyWorld(L, v));
   else if (t.dataset.menu === 'material')

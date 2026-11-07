@@ -175,6 +175,8 @@ async def add_layer(type: Literal["rect", "ellipse", "polygon", "star", "arc", "
     Text also takes "font" (a font's name: Inter, Arial, Georgia, or a library font such as Montserrat, Bebas Neue, Playfair
     Display, Pacifico, JetBrains Mono, fetched when used), "italic" (true/false), "align" ("left" | "center" | "right"),
     "tcase" ("none" | "upper" | "lower" | "title") and "lineh" (line height, % of the size, 110 by default).
+Text "retype" is a second text to change to: with it set, apply the "Retype" preset to type the text, backspace
+to the part both share, then type the rest of the new one (reveal 0-1 types, 1-2 erases, 2-3 types the new text).
 
     3D: "shape3d" is a lit solid, {"shape": "cube" | "sphere" | "cylinder" | "cone" | "torus" | "text", "w": 300, "h": 300,
     "d": 300 (thickness), "rotX": -20, "rotY": 30, "material": "matte" | "glossy" | "metal", "fill": "#4c8dff",
@@ -293,7 +295,7 @@ async def delete_keyframes(layer: str, prop: str | None = None, at_time: float |
 
 @mcp.tool()
 async def apply_preset(layer: str, preset: str, at_time: float | None = None) -> dict:
-    """Apply a ready-made animation (e.g. "Pop in", "Rise", "Blur in", "Typewriter", "Float", "Fade out") starting at `at_time`."""
+    """Apply a ready-made animation (e.g. "Pop in", "Rise", "Blur in", "Typewriter", "Retype", "Float", "Fade out") starting at `at_time`."""
     return await acall("apply_preset", {"id": layer, "preset": preset, "time": at_time})
 
 

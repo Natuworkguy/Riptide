@@ -99,7 +99,7 @@ const PROPS = {
   polygon: [...FLAT, 'w', 'h', 'points', 'radius', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
   arc:     [...FLAT, 'w', 'h', 'sweep', 'stroke', 'strokeWidth', ...PHYS],
   wave:    [...FLAT, 'w', 'h', 'reveal', 'stroke', 'strokeWidth', ...PHYS],
-  text:    [...FLAT, 'text', 'font', 'size', 'weight', 'italic', 'align', 'tcase', 'lineh', 'spacing', 'reveal', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
+  text:    [...FLAT, 'text', 'font', 'size', 'weight', 'italic', 'align', 'tcase', 'lineh', 'spacing', 'reveal', 'retype', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
   image:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...KEYP, ...PHYS],
   video:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...CLIP, ...KEYP, ...PHYS],
   // an adjustment layer: draws nothing itself, and grades, blurs and adjusts everything under it, within its box
@@ -115,13 +115,13 @@ ANIM.push(...World.NUMBERS, ...World.COLORS);
 const GROUPS = [['Transform', ['x', 'y', 'w', 'h', 'd', 'rotation', 'scale', 'sx', 'sy']],
   ['3D', ['three', 'shape', 'rotX', 'rotY', 'z', 'material', 'lightAngle']], ['Camera', ['orbit', 'tilt', 'dolly', 'zoom']],
   ['Style', ['fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', 'radius', 'points', 'sweep', 'opacity']],
-  ['Text', ['text', 'font', 'weight', 'size', 'lineh', 'italic', 'align', 'tcase', 'spacing', 'reveal']], ['Pose', ['side', 'limb', 'caps', ...Figure.JOINTS]], ['Physics', PHYS],
+  ['Text', ['text', 'font', 'weight', 'size', 'lineh', 'italic', 'align', 'tcase', 'spacing', 'reveal', 'retype']], ['Pose', ['side', 'limb', 'caps', ...Figure.JOINTS]], ['Physics', PHYS],
   ['Clip', CLIP], ['Effects', ['blur', 'shadow', 'rgb']], ['Adjust', ADJUST], ['Green screen', KEYP], ['Mask', MASK],
   ['Grade', Grade.GRADE], ['Curves', ['curves']], ['Vignette and LUT', LOOKP]];
 GROUPS.splice(1, 0, ...World.GROUPS);
 const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', scale: 'Scale', sx: 'Stretch X', sy: 'Stretch Y',
   opacity: 'Opacity', radius: 'Corners', fill: 'Fill', grad: 'Gradient', fill2: 'Fill 2', mid1: 'Via', mid2: 'Via 2', mid3: 'Via 3', gradAngle: 'Angle°', gradMorph: 'To radial %', stroke: 'Stroke', strokeWidth: 'Stroke W', blur: 'Blur', shadow: 'Shadow', rgb: 'RGB split',
-  size: 'Font size', text: 'Text', points: 'Points', weight: 'Weight', reveal: 'Reveal', sweep: 'Sweep°', spacing: 'Tracking',
+  size: 'Font size', text: 'Text', points: 'Points', weight: 'Weight', reveal: 'Reveal', retype: 'Retype to', sweep: 'Sweep°', spacing: 'Tracking',
   font: 'Font', italic: 'Italic', align: 'Align', tcase: 'Case', lineh: 'Leading',
   mask: 'Mask', matte: 'Track matte', mx: 'Mask X', my: 'Mask Y', mw: 'Mask W', mh: 'Mask H', mround: 'Corners', feather: 'Feather',
   minv: 'Invert', chroma: 'Key out', keyColor: 'Key colour', keyTol: 'Tolerance', keySoft: 'Softness', spill: 'Spill %',
@@ -139,7 +139,7 @@ Object.assign(LABEL, World.LABELS);
 const STEP = { gradMorph: 1, opacity: .05, scale: .05, sx: .05, sy: .05, reveal: .05, zoom: .05, expo: .05, gamma: .05, ...World.STEP };
 const PALETTE = ['#7c5cff', '#ff5c8a', '#20c997', '#ffb020', '#3fa9ff', '#ff7a45'];
 const DEFAULTS = { rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0, rgb: 0,
-  size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, font: 'Inter', italic: false, align: 'center', tcase: 'none', lineh: 110,
+  size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, retype: '', font: 'Inter', italic: false, align: 'center', tcase: 'none', lineh: 110,
   speed: 100, reverse: false, vol: 100, mute: false, afadeIn: 0, afadeOut: 0,
   mask: 'none', matte: 'none', mx: 0, my: 0, mw: 0, mh: 0, mround: 0, feather: 0, minv: false,
   chroma: false, keyColor: '#00b140', keyTol: 30, keySoft: 15, spill: 50, ...Grade.NEUTRAL, vig: 0, vigSize: 60, lut: '', lutMix: 100, sweep: 270, points: 5, w: 300, h: 300,
@@ -305,7 +305,15 @@ function caseText(o) {
   if (o.tcase === 'title') return s.toLowerCase().replace(/(^|[\s\-"'(])(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
   return s;
 }
-function textOf(o) { const s = caseText(o); return s.slice(0, Math.round(s.length * Math.max(0, Math.min(1, o.reveal)))); }
+function textOf(o) {
+  const s = caseText(o), r = Math.max(0, o.reveal);
+  if (!o.retype || r <= 1) return s.slice(0, Math.round(s.length * Math.min(1, r)));
+  // with Retype to set, reveal goes on past 1: 1 to 2 backspaces to the part both texts share, 2 to 3 types the new text
+  const t = caseText({ ...o, text: o.retype }); let n = 0;
+  while (n < s.length && n < t.length && s[n] === t[n]) n++;
+  if (r <= 2) return s.slice(0, Math.round(s.length - (s.length - n) * (r - 1)));
+  return t.slice(0, Math.round(n + (t.length - n) * Math.min(1, r - 2)));
+}
 // its font, asked for from the library the first time (the text redraws when it arrives)
 function setFont(c, o) { Fonts.ensure(o.font, o.weight, o.italic); c.font = Fonts.css(o); if ('letterSpacing' in c) c.letterSpacing = o.spacing + 'px'; }
 const lineH = o => o.size * (o.lineh ?? 110) / 100;
@@ -392,11 +400,11 @@ function drawContent(c, L, o, t) {
     const full = caseText(o).split('\n'), shown = textOf(o).split('\n'), lh = lineH(o), y0 = -(full.length - 1) * lh / 2;
     const widest = Math.max(10, ...full.map(s => c.measureText(s).width));
     c.fillStyle = fillOf(c, o, widest, lh * full.length);
-    // each line is anchored where its full text sits, so a typewriter reveal does not shift it; lines line up
-    // on the left, the middle or the right of the block
+    // lines line up on the left, the middle or the right of the block; left and right ones are anchored where their
+    // full text sits, so a typewriter reveal does not shift them, while centred ones centre on what is shown so far
     shown.forEach((ln, i) => {
       const w = c.measureText(full[i] || '').width;
-      const x = o.align === 'left' ? -widest / 2 : o.align === 'right' ? widest / 2 - w : -w / 2;
+      const x = o.align === 'left' ? -widest / 2 : o.align === 'right' ? widest / 2 - w : -c.measureText(ln).width / 2;
       if (o.strokeWidth > 0) c.strokeText(ln, x, y0 + i * lh);
       c.fillText(ln, x, y0 + i * lh);
     });
@@ -1122,7 +1130,7 @@ function renderProps() {
         if (k === 'grad') field = `<button class="selectbtn" data-menu="grad"><span>${(GRADS.find(g => g[0] === (v || 'none')) || GRADS[0])[1]}</span>${ICON.chev}</button>`;
         else if (COLORS.includes(k)) { const linked = !L.keys[k]?.length && varName(L.p[k]);
           field = `<button class="swatch${linked ? ' linked' : ''}" data-color="${k}"><i style="background:${v}"></i><span>${linked ? '--' + linked : v.toUpperCase()}</span></button>`; }
-        else if (k === 'text') field = `<textarea data-p="text" rows="2" spellcheck="false">${esc(v)}</textarea>`;
+        else if (k === 'text' || k === 'retype') field = `<textarea data-p="${k}" rows="2" spellcheck="false">${esc(v)}</textarea>`;
         else if (k === 'weight') field = `<button class="selectbtn" data-menu="weight"><span>${WEIGHTS.find(w => w[0] == v)?.[1] || v}</span>${ICON.chev}</button>`;
         else if (k === 'font') field = `<button class="selectbtn" data-menu="font"><span style="font-family:${esc(Fonts.stack(v))}">${esc(v || 'Inter')}</span>${ICON.chev}</button>`;
         else if (k === 'mask' || k === 'matte' || k === 'lut') field = `<button class="selectbtn" data-menu="${k}"><span>${esc(k === 'lut' ? v || 'None' : ((k === 'mask' ? MASK_KINDS : TRACK_MATTES).find(x => x[0] === (v || 'none')) || ['', 'None'])[1])}</span>${ICON.chev}</button>`;
@@ -1297,7 +1305,7 @@ Pn.addEventListener('input', e => {
     render(); renderTracks(); return; }
   const k = e.target.dataset.p; if (!k) return;
   if (Physics.SCENE.includes(k)) { const v = parseFloat(e.target.value); if (isNaN(v)) return; S[k] = v; render(); return; }
-  if (k === 'text') setProp(L, k, e.target.value);
+  if (k === 'text' || k === 'retype') setProp(L, k, e.target.value);
   else { const v = parseFloat(e.target.value); if (isNaN(v)) return;
     if ((k === 'w' || k === 'h') && aspectLocked(L)) { const o = state(L, time), other = k === 'w' ? 'h' : 'w';
       if (o.w > 0 && o.h > 0 && v > 0) { setProp(L, other, Math.max(1, Math.round(v * o[other] / o[k]))); renderPropsValues(); } }
@@ -1429,6 +1437,11 @@ const PRESETS = {
     'Elastic': (a, o) => { a('scale', 0, 0, 'elastic'); a('scale', 1.1, o.scale); },
     'Squash': (a, o) => { a('sx', 0, 1.6 * o.sx, 'spring'); a('sy', 0, .3 * o.sy, 'spring'); a('sx', .9, o.sx); a('sy', .9, o.sy); a('opacity', 0, 0); a('opacity', .15, o.opacity); },
     'Typewriter': (a, o, L) => { if (L.type !== 'text') return 'Text layers only'; a('reveal', 0, 0, 'linear'); a('reveal', Math.min(2.5, String(o.text).length * .055), 1); },
+    'Retype': (a, o, L) => { if (L.type !== 'text') return 'Text layers only'; if (!o.retype) return 'Set Retype to first';
+      const s = String(o.text), t = String(o.retype); let n = 0; while (n < s.length && n < t.length && s[n] === t[n]) n++;
+      const t1 = Math.min(2.5, s.length * .055), t2 = t1 + .7, t3 = t2 + Math.min(1.2, (s.length - n) * .04), t4 = t3 + .25;
+      a('reveal', 0, 0, 'linear'); a('reveal', t1, 1, 'linear'); a('reveal', t2, 1, 'linear'); a('reveal', t3, 2, 'linear'); a('reveal', t4, 2, 'linear');
+      a('reveal', t4 + Math.min(2.5, (t.length - n) * .055), 3); },
     'Draw on': (a, o, L) => { if (L.type === 'wave') { a('reveal', 0, 0, 'expoInOut'); a('reveal', 1.1, 1); return; }
     if (L.type !== 'arc') return 'Arc and wave layers only'; a('sweep', 0, 0, 'expoInOut'); a('sweep', 1.1, o.sweep); },
   },

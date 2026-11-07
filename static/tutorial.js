@@ -60,7 +60,7 @@ const Tutorial = (() => {
     { id: 'text', title: 'Text', body: `
       <p>Add text with ${k('T')}, then double-click it on the canvas (or press ${k('Enter')}) to type in place. Font size,
       weight, tracking and fill are in Design.</p>
-      <p><b>Reveal</b> shows part of the text: animate it from 0 to 1 for a typewriter, or use the Typewriter preset.</p>`,
+      <p><b>Reveal</b> shows part of the text: animate it from 0 to 1 for a typewriter, or use the Typewriter preset. Fill in <b>Retype to</b> and use the Retype preset to backspace and type a new ending.</p>`,
       try: [['Add text', () => newLayer('text')]] },
     { id: 'media', title: 'Images, video and audio', body: `
       <ul>

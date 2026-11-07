@@ -29,7 +29,9 @@ mcp = MCPServer(
     "riptide",
     instructions=(
         "Riptide is a keyframe motion-graphics editor running in the user's browser. Use get_project first to see the "
-        "canvas, duration and layers (ids, types, timing, which properties are keyframed). Use see_frames to look at "
+        "canvas, duration and layers (ids, types, timing, which properties are keyframed). Riptide can have several windows "
+        "open, each a project of its own: list_windows shows them, use_window picks one and open_window opens another; "
+        "tools work in the window used last until one is picked. Use see_frames to look at "
         "the animation (a contact sheet over time) and see_frame for one moment. Coordinates are canvas pixels with "
         "x,y at the layer's centre; times are seconds. Colours are hex strings. list_capabilities gives every layer "
         "type's properties, the easing names, presets and blend modes. All edits appear live and can be undone."
@@ -41,8 +43,32 @@ class RiptideError(ToolError):
     """Shown to the agent verbatim (other exceptions are masked as 'Error executing tool')."""
 
 
+# The Riptide window every tool works in: its id, set by use_window or open_window; None is the one last used.
+WINDOW: str | None = None
+
+
+def post(path: str, body: dict | None, timeout: float = 60) -> Any:
+    """What the Riptide server answers to BODY at PATH (a GET with no body)."""
+    data = None if body is None else json.dumps(body).encode()
+    req = urllib.request.Request(f"{RIPTIDE}{path}", data=data, headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout + 5) as r:
+            found = json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        try:
+            found = json.loads(e.read())
+        except Exception:
+            raise RiptideError(f"Riptide server error {e.code}") from None
+    except urllib.error.URLError:
+        raise RiptideError(f"Cannot reach the Riptide server at {RIPTIDE}. Start it with: .venv/bin/python server.py") from None
+    if isinstance(found, dict) and found.get("ok") is False:
+        raise RiptideError(found.get("error") or "The editor refused that change")
+    return found
+
+
 def call(op: str, args: dict | None = None, timeout: float = 60) -> Any:
-    body = json.dumps({"op": op, "args": {k: v for k, v in (args or {}).items() if v is not None}, "timeout": timeout}).encode()
+    body = json.dumps({"op": op, "args": {k: v for k, v in (args or {}).items() if v is not None}, "timeout": timeout,
+                       "window": WINDOW}).encode()
     req = urllib.request.Request(f"{RIPTIDE}/api/live/op", data=body, headers={"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=timeout + 5) as r:
@@ -66,6 +92,45 @@ async def acall(op: str, args: dict | None = None, timeout: float = 60) -> Any:
 
 def png(data_url: str) -> Image:
     return Image(data=base64.b64decode(data_url.split(",", 1)[1]), format="png")
+
+
+# ---------- windows ----------
+@mcp.tool()
+async def list_windows() -> dict:
+    """Every Riptide window open in the browser: its id, its project's name, and which was used last. Each window is
+    a project of its own. With no use_window, tools work in the one used last."""
+    found = await anyio.to_thread.run_sync(lambda: post("/api/live/status", None, 10))
+    return {"windows": found.get("windows", []), "working_in": WINDOW or "the window used last"}
+
+
+@mcp.tool()
+async def use_window(window: str | None = None) -> dict:
+    """Work in one Riptide window from now on: its id, or its project's name (or the start of it), from
+    list_windows. None goes back to whichever window was used last."""
+    global WINDOW
+    if window:
+        found = (await anyio.to_thread.run_sync(lambda: post("/api/live/status", None, 10))).get("windows", [])
+        wanted = window.strip().lower()
+        match = next((w for w in found if w["id"] == window), None) or next((w for w in found if w["name"].lower() == wanted), None) \
+            or next((w for w in found if w["name"].lower().startswith(wanted)), None)
+        if not match:
+            raise RiptideError(f"No window is called {window!r}. Open ones: " + ", ".join(f'"{w["name"]}" ({w["id"]})' for w in found))
+        WINDOW = match["id"]
+        return {"ok": True, "working_in": match}
+    WINDOW = None
+    return {"ok": True, "working_in": "the window used last"}
+
+
+@mcp.tool()
+async def open_window(name: str = "Untitled", width: int | None = None, height: int | None = None,
+                      duration: float | None = None, background: str | None = None) -> dict:
+    """Open another Riptide window in the browser with a new project of its own, and work in it from now on. The
+    windows already open keep their projects."""
+    global WINDOW
+    body = {"name": name, "width": width, "height": height, "duration": duration, "background": background}
+    found = await anyio.to_thread.run_sync(lambda: post("/api/live/open", {k: v for k, v in body.items() if v is not None}, 25))
+    WINDOW = found["window"]["id"]
+    return {"ok": True, "working_in": found["window"]}
 
 
 # ---------- seeing ----------

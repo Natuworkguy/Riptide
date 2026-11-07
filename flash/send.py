@@ -151,7 +151,34 @@ def open_riptide() -> None:
     raise SendError(f"Riptide did not open in {WAIT_SECONDS} seconds. Open {riptide_url()} and send it again.")
 
 
-def send(path: Path, name: str = "", x=None, y=None, shown_as: str = "") -> str:
+def target(window: str = "") -> str:
+    """The window to send to: WINDOW as given (an id or a project's name), a new window when it is "new", or ""
+    for the one used last. Opens Riptide first."""
+
+    window = (window or "").strip()
+    if window.lower() in ("new", "a new window", "new window"):
+        if not server_up():
+            open_riptide()
+        opened = ask("/api/live/open", {"name": "Untitled"}, timeout=30)
+        if opened.get("ok") is False:
+            raise SendError(opened.get("error") or "Riptide would not open another window.")
+        return opened["window"]["id"]
+    open_riptide()
+    return window
+
+
+def where(answer: dict) -> str:
+    """Which window it went to, when there is more than one to say it of."""
+
+    shown = answer.get("window") or {}
+    try:
+        count = int(ask("/api/live/status", timeout=2).get("tabs") or 0)
+    except (urllib.error.URLError, OSError, ValueError):
+        count = 0
+    return f' in the window with "{shown.get("name") or "Untitled"}"' if shown and count > 1 else ", in the project open there"
+
+
+def send(path: Path, name: str = "", x=None, y=None, shown_as: str = "", window: str = "") -> str:
     """Add PATH to the project open in Riptide. What happened, in a line."""
 
     path = Path(path).expanduser()
@@ -169,22 +196,22 @@ def send(path: Path, name: str = "", x=None, y=None, shown_as: str = "") -> str:
     shown_as = shown_as or path.name
     mime = (IMAGES if kind == "image" else MODELS)[suffix]
     src = f"data:{mime};base64," + base64.b64encode(path.read_bytes()).decode()
-    open_riptide()
+    window = target(window)
     args = {"src": src, "file": shown_as, "name": name or Path(shown_as).stem}
     if kind == "image" and x is not None and y is not None:
         args.update(x=x, y=y)
     answer = ask("/api/live/op", {"op": "add_image" if kind == "image" else "add_model", "args": args,
-                                  "timeout": 60}, timeout=70)
+                                  "timeout": 60, "window": window or None}, timeout=70)
     if answer.get("ok") is False:
         raise SendError(answer.get("error") or "Riptide would not take it.")
     what = "a 3D model layer" if kind == "model" else "an image layer"
-    return f"Added {shown_as} to Riptide as {what} (layer {answer.get('id')}), in the project open there."
+    return f"Added {shown_as} to Riptide as {what} (layer {answer.get('id')}){where(answer)}."
 
 
 SCENES = ("wave", "rig", "studio", "desert", "night")
 
 
-def world(scene: str = "", name: str = "", props=None) -> str:
+def world(scene: str = "", name: str = "", props=None, window: str = "") -> str:
     """Build a 3D world in the project open in Riptide. What happened, in a line."""
 
     scene = (scene or "").strip().lower()
@@ -192,20 +219,33 @@ def world(scene: str = "", name: str = "", props=None) -> str:
         raise SendError(f"No scene called {scene}: there is {', '.join(SCENES)}, or none for an empty world.")
     if props is not None and not isinstance(props, dict):
         raise SendError("props must be an object of the world's settings.")
-    open_riptide()
+    window = target(window)
     answer = ask("/api/live/op", {"op": "add_world", "args": {"scene": scene, "name": name or None, "props": props or {}},
-                                  "timeout": 60}, timeout=70)
+                                  "timeout": 60, "window": window or None}, timeout=70)
     if answer.get("ok") is False:
         raise SendError(answer.get("error") or "Riptide would not make it.")
-    return (f"Added a 3D world{f' from the {scene} scene' if scene else ''} to Riptide (layer {answer.get('id')}), at the "
-            "bottom of the project open there: 3D shapes and models above it stand in it.")
+    return (f"Added a 3D world{f' from the {scene} scene' if scene else ''} to Riptide (layer {answer.get('id')}){where(answer)}, "
+            "at the bottom: 3D shapes and models above it stand in it.")
+
+
+def windows() -> str:
+    try:
+        found = ask("/api/live/status", timeout=5).get("windows") or []
+    except (urllib.error.URLError, OSError, ValueError):
+        return f"Riptide is not running at {riptide_url()}."
+    if not found:
+        return "Riptide has no window open."
+    return "\n".join(f'"{w["name"]}" (window {w["id"]}){", used last" if w.get("last_used") else ""}' for w in found)
 
 
 def main(argv: list) -> int:
+    if argv[:1] == ["--windows"]:
+        print(windows())
+        return 0
     if argv[:1] == ["--world"]:
         try:
             asked = json.load(sys.stdin) if not sys.stdin.isatty() else {}
-            print(world(str(asked.get("scene") or ""), str(asked.get("name") or ""), asked.get("props")))
+            print(world(str(asked.get("scene") or ""), str(asked.get("name") or ""), asked.get("props"), str(asked.get("window") or "")))
         except SendError as why:
             print(f"Error: {why}")
         except (urllib.error.URLError, OSError) as why:
@@ -232,7 +272,8 @@ def main(argv: list) -> int:
             return 0
         if not asked.get("path"):
             raise SendError("Give the path of a picture or a 3D model.")
-        print(send(Path(str(asked["path"])), str(asked.get("name") or ""), asked.get("x"), asked.get("y")))
+        print(send(Path(str(asked["path"])), str(asked.get("name") or ""), asked.get("x"), asked.get("y"),
+                   window=str(asked.get("window") or "")))
         return 0
     except SendError as why:
         if mode == "--button":

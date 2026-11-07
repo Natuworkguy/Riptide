@@ -6,14 +6,15 @@
   "tools": [
     {
       "name": "send_to_riptide",
-      "description": "Add a picture (.png, .jpg, .webp, .gif, .svg) or a 3D model (.glb, .gltf, .obj) to the project open in Riptide, the user's motion graphics editor, as a layer they can animate. Opens Riptide first when it is not open.",
+      "description": "Add a picture (.png, .jpg, .webp, .gif, .svg) or a 3D model (.glb, .gltf, .obj) to a project open in Riptide, the user's motion graphics editor, as a layer they can animate: the window used last, or the one named in window. Opens Riptide first when it is not open.",
       "parameters": {
         "type": "object",
         "properties": {
           "path": {"type": "string", "description": "The picture or model file."},
           "name": {"type": "string", "description": "Optional name for the layer."},
           "x": {"type": "number", "description": "Optional: where a picture's centre goes, in canvas pixels."},
-          "y": {"type": "number", "description": "Optional, with x."}
+          "y": {"type": "number", "description": "Optional, with x."},
+          "window": {"type": "string", "description": "Optional: which Riptide window, each a project of its own: a project's name or a window id from riptide_windows, or \"new\" for a new window. Left out, the window used last."}
         },
         "required": ["path"]
       },
@@ -28,11 +29,19 @@
         "properties": {
           "scene": {"type": "string", "enum": ["wave", "rig", "studio", "desert", "night", ""], "description": "wave: a breaking wave at golden hour. rig: a worn film camera on a jib in a hazy wheat field, shallow focus. studio: a soft-lit floor for shapes and models. desert: dunes and a monolith at dusk. night: a moonlit sea. Empty for a bare world."},
           "name": {"type": "string", "description": "Optional name for the layer."},
+          "window": {"type": "string", "description": "Optional: which Riptide window, each a project of its own: a project's name or a window id from riptide_windows, or \"new\" for a new window. Left out, the window used last."},
           "props": {"type": "object", "description": "Settings to change, all animatable in Riptide: sky (sunset, day, dusk, haze, overcast, night, studio), sunEl and sunAz (degrees; sunAz 0 is behind what the camera looks at), sunPower, clouds (%), wind (m/s); ground (ocean, field, desert, floor, none), groundColor; water, waves (m), chop, swell (a breaking wave's height, m), curl (0 to 1, how far it has broken), waveDist, waveAngle; plants, grass (%), grassH (m); fog, dust (0 to 100); eye (camera height, m), heading, pitch (degrees), travel (m), lens (mm); dof, focus (m), exposure (stops), bloom, grain, fringe, ao (0 to 100); objects: a list of props in metres, {type: box|cylinder|sphere|cone|torus|capsule|truss|label|group, at: [x, y, z] (y up, z towards the camera), turn: [x, y, z] degrees, size: [w, h, d], finish: worn-metal|leatherette|aluminium|chrome|steel|rubber|plastic|paint|glass|lens|wood|concrete|rust|gold|glow, color, children: [...]}."}
         }
       },
       "run": ["python", "./flash/send.py", "--world"],
       "timeout": 90
+    },
+    {
+      "name": "riptide_windows",
+      "description": "The Riptide windows open in the browser, each a project of its own: their project names and ids, and which was used last. send_to_riptide and riptide_world take one of them as window.",
+      "parameters": {"type": "object", "properties": {}},
+      "run": ["python", "./flash/send.py", "--windows"],
+      "timeout": 15
     }
   ],
   "commands": [

@@ -3997,9 +3997,24 @@ const LIVE = (() => {
       projectName = a.name || 'Untitled'; fileHandle = null; sel = null; selKey = null; selKeys = []; time = 0; return done('started a new project'); },
   };
 
+  // This window, one of any number open: agents and Flash reach it by its id or its project's name, and otherwise
+  // reach the window last used. A window opened for them (?window=…) starts the project they asked for.
+  const here = new URLSearchParams(location.search), windowId = (here.get('window') || crypto.randomUUID().slice(0, 8)).slice(0, 64);
+  if (here.get('window')) {
+    if (here.has('name')) projectName = here.get('name') || 'Untitled';
+    if (here.has('name') || here.has('width')) setTimeout(() => ops.new_project({ name: here.get('name') || 'Untitled', width: here.get('width'),
+      height: here.get('height'), duration: here.get('duration'), background: here.get('background') || undefined }));
+  } else history.replaceState(null, '', `${location.pathname}?window=${windowId}${location.hash}`);
+  let saidName = null;
+  const hello = used => { if (!used && saidName === projectName) return; saidName = projectName;
+    fetch('/api/live/hello', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ window: windowId, name: projectName, used }) }).catch(() => {}); };
+  addEventListener('focus', () => hello(true));
+  let lastUsed = 0;
+  addEventListener('pointerdown', () => { if (Date.now() - lastUsed > 2000) { lastUsed = Date.now(); hello(true); } }, true);
+  setInterval(() => hello(false), 3000);
   let es = null, retry = 0;
   function connect() {
-    es = new EventSource('/api/live/events');
+    es = new EventSource(`/api/live/events?window=${encodeURIComponent(windowId)}&name=${encodeURIComponent(projectName)}`); saidName = projectName;
     es.onopen = () => { retry = 0; $('#live').classList.add('on'); $('#live').title = 'Live link on: agents connected through the Riptide MCP server can see and edit this project'; };
     es.onerror = () => {
       $('#live').classList.remove('on'); $('#live').title = 'Live link offline (is server.py running?)';

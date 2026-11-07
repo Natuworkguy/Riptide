@@ -81,6 +81,11 @@ any 3D model you open in Flash's web UI. Pictures (.png, .jpg, .webp, .gif, .svg
 editor. Its address, and whether to open it, are in the extension's settings. Agents can do the same through MCP with
 `add_image` and `add_model`.
 
+Riptide can have any number of windows open, each a project of its own. Flash and agents work in the window used
+last, or in one they name by its project or open themselves: `riptide_windows` in Flash and `list_windows`,
+`use_window` and `open_window` over MCP. Flash's `send_to_riptide` and `riptide_world` take a `window` (a project's
+name, or `new`).
+
 ## Tutorial
 Help in the header (or **F1**) opens a tutorial in 14 sections, from the first layer to 3D, the camera, exporting and working with an agent, with buttons that try each thing on the spot. It is offered once on a first visit.
 

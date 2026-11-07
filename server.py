@@ -9,7 +9,10 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
+import urllib.parse
 import uuid
+import webbrowser
 import zipfile
 from io import BytesIO
 from pathlib import Path
@@ -45,19 +48,55 @@ def index():
     return send_from_directory(STATIC, "index.html")
 
 
-# ---------- live bridge: lets the MCP server (mcp_server.py) drive the editor open in a browser ----------
-# The newest open tab subscribes to /api/live/events (Server-Sent Events). An agent's request comes in on
-# /api/live/op, is pushed to that tab, run against the live project there, and the tab posts the result back.
+# ---------- live bridge: lets the MCP server (mcp_server.py) drive the editors open in a browser ----------
+# Every open Riptide window subscribes to /api/live/events (Server-Sent Events), each with an id of its own and the
+# name of its project. An agent's request comes in on /api/live/op, is pushed to the window it names (by id or
+# project name), or else to the one last used, is run against the live project there, and the window posts the
+# result back. /api/live/open opens another window and answers with its id once it is ready.
 live_lock = threading.Lock()
-live_tabs: list[queue.Queue] = []           # newest last; ops go to the newest tab
+live_tabs: dict[str, dict] = {}              # window id -> {"q": Queue, "name", "opened", "used"}
 live_waiting: dict[str, dict] = {}           # op id -> {"event": Event, "result": ...}
+
+
+def _windows() -> list[dict]:
+    """The open windows, the one last used first."""
+
+    with live_lock:
+        found = [{"id": k, "name": t["name"], "used": t["used"], "opened": t["opened"]} for k, t in live_tabs.items()]
+    found.sort(key=lambda w: (w["used"], w["opened"]), reverse=True)
+    return found
+
+
+def _window_named(name: str | None) -> str | None:
+    """The window NAME means: its id, the name of its project, or nothing for the one last used."""
+
+    found = _windows()
+    if not found:
+        return None
+    if not name:
+        return found[0]["id"]
+    wanted = str(name).strip().lower()
+    for w in found:
+        if w["id"] == name:
+            return w["id"]
+    for w in found:
+        if w["name"].lower() == wanted:
+            return w["id"]
+    for w in found:
+        if w["name"].lower().startswith(wanted):
+            return w["id"]
+    return ""
 
 
 @app.get("/api/live/events")
 def live_events():
     q: queue.Queue = queue.Queue()
+    wid = (request.args.get("window") or "")[:64] or uuid.uuid4().hex[:8]
+    now = time.time()
     with live_lock:
-        live_tabs.append(q)
+        old = live_tabs.get(wid)
+        live_tabs[wid] = {"q": q, "name": (request.args.get("name") or "Untitled")[:200], "opened": old["opened"] if old else now,
+                          "used": old["used"] if old else now}
 
     def stream():
         try:
@@ -66,15 +105,30 @@ def live_events():
                 try:
                     msg = q.get(timeout=15)
                 except queue.Empty:
-                    yield ": ping\n\n"           # keeps the connection open and detects closed tabs
+                    yield ": ping\n\n"           # keeps the connection open and detects closed windows
                     continue
                 yield f"data: {json.dumps(msg)}\n\n"
         finally:
             with live_lock:
-                if q in live_tabs:
-                    live_tabs.remove(q)
+                if live_tabs.get(wid, {}).get("q") is q:
+                    live_tabs.pop(wid, None)
 
     return Response(stream(), mimetype="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.post("/api/live/hello")
+def live_hello():
+    """A window says what its project is called now, and that it is the one in use when it is."""
+
+    body = request.get_json(silent=True) or {}
+    with live_lock:
+        tab = live_tabs.get(str(body.get("window") or ""))
+        if tab:
+            if isinstance(body.get("name"), str):
+                tab["name"] = body["name"][:200] or "Untitled"
+            if body.get("used"):
+                tab["used"] = time.time()
+    return jsonify(ok=bool(tab))
 
 
 @app.post("/api/live/op")
@@ -83,18 +137,27 @@ def live_op():
     op, args = body.get("op"), body.get("args") or {}
     if not isinstance(op, str):
         abort(400, "op is required")
-    with live_lock:
-        tab = live_tabs[-1] if live_tabs else None
-    if tab is None:
+    wid = _window_named(body.get("window"))
+    if wid is None:
         return jsonify(ok=False, error="Riptide is not open in a browser. Open http://127.0.0.1:5173 and try again."), 503
+    if not wid:
+        names = ", ".join(f'"{w["name"]}" ({w["id"]})' for w in _windows())
+        return jsonify(ok=False, error=f"No Riptide window is called {body.get('window')!r}. Open ones: {names}."), 404
+    with live_lock:
+        tab = live_tabs.get(wid)
+    if tab is None:
+        return jsonify(ok=False, error="That Riptide window has just closed."), 404
     oid = uuid.uuid4().hex
     slot = {"event": threading.Event(), "result": None}
     live_waiting[oid] = slot
-    tab.put({"id": oid, "op": op, "args": args})
+    tab["q"].put({"id": oid, "op": op, "args": args})
     try:
         if not slot["event"].wait(timeout=float(body.get("timeout", 60))):
             return jsonify(ok=False, error="The editor did not answer in time (is the tab in the background or busy exporting?)"), 504
-        return jsonify(slot["result"])
+        result = slot["result"]
+        if isinstance(result, dict):
+            result.setdefault("window", {"id": wid, "name": tab["name"]})
+        return jsonify(result)
     finally:
         live_waiting.pop(oid, None)
 
@@ -110,8 +173,28 @@ def live_result(oid):
 
 @app.get("/api/live/status")
 def live_status():
-    with live_lock:
-        return jsonify(tabs=len(live_tabs))
+    found = _windows()
+    return jsonify(tabs=len(found), windows=[{"id": w["id"], "name": w["name"], "last_used": i == 0} for i, w in enumerate(found)])
+
+
+@app.post("/api/live/open")
+def live_open():
+    """Open another Riptide window, with a new project, and answer with it once it is ready."""
+
+    body = request.get_json(silent=True) or {}
+    wid = uuid.uuid4().hex[:8]
+    query = {"window": wid}
+    for key in ("name", "width", "height", "duration", "background"):
+        if body.get(key) not in (None, ""):
+            query[key] = str(body[key])
+    webbrowser.open(f"{request.host_url.rstrip('/')}/?{urllib.parse.urlencode(query)}")
+    deadline = time.monotonic() + float(body.get("timeout", 20))
+    while time.monotonic() < deadline:
+        with live_lock:
+            if wid in live_tabs:
+                return jsonify(ok=True, window={"id": wid, "name": live_tabs[wid]["name"]})
+        time.sleep(0.2)
+    return jsonify(ok=False, error="The new Riptide window did not open in time. Open http://127.0.0.1:5173 yourself."), 504
 
 
 # ---------- MCP over HTTP at /mcp ----------

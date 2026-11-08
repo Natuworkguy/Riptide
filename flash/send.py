@@ -228,6 +228,36 @@ def world(scene: str = "", name: str = "", props=None, window: str = "") -> str:
             "at the bottom: 3D shapes and models above it stand in it.")
 
 
+def open_windows() -> list:
+    """The Riptide windows open now, [] when none are or Riptide is not running."""
+    try:
+        return ask("/api/live/status", timeout=5).get("windows") or []
+    except (urllib.error.URLError, OSError, ValueError):
+        return []
+
+
+def pick_window(windows_open: list) -> dict:
+    """Flash's "choose" answer for the Send to Riptide button: which window to send to, the one used last first."""
+    ordered = sorted(windows_open, key=lambda w: not w.get("last_used"))
+    return {"choose": {
+        "title": "Send to Riptide",
+        "text": "Riptide has more than one window open. Which project should it go to?",
+        "label": "Window",
+        "button": "Send",
+        "options": [{"value": str(w["id"]), "label": f'{w["name"]}{" (used last)" if w.get("last_used") else ""}'}
+                    for w in ordered] + [{"value": "new", "label": "A new window"}],
+    }}
+
+
+def need_window(window: str) -> None:
+    """For Flash's tools: with more than one window open, WINDOW must name one, so nothing lands in the wrong project."""
+    open_now = [] if (window or "").strip() else open_windows()
+    if len(open_now) > 1:
+        raise SendError("Riptide has more than one window open: " + ", ".join(
+            f'"{w["name"]}" (window {w["id"]})' for w in open_now)
+            + ". Ask the user which one they mean if it is unclear, then send again with window set to it.")
+
+
 def windows() -> str:
     try:
         found = ask("/api/live/status", timeout=5).get("windows") or []
@@ -245,6 +275,7 @@ def main(argv: list) -> int:
     if argv[:1] == ["--world"]:
         try:
             asked = json.load(sys.stdin) if not sys.stdin.isatty() else {}
+            need_window(str(asked.get("window") or ""))
             print(world(str(asked.get("scene") or ""), str(asked.get("name") or ""), asked.get("props"), str(asked.get("window") or "")))
         except SendError as why:
             print(f"Error: {why}")
@@ -268,10 +299,18 @@ def main(argv: list) -> int:
             chat = str(asked.get("chat") or "")
             # The model whose bar it was pressed in.
             found = Path(str(asked["file"])) if asked.get("file") else newest_in_chat(chat)
-            print(json.dumps({"say": send(found, shown_as=name_in_chat(chat, found))}))
+            choice = str(asked.get("choice") or "")
+            if not choice:
+                open_now = open_windows()
+                if len(open_now) > 1:
+                    print(json.dumps(pick_window(open_now)))
+                    return 0
+            print(json.dumps({"say": send(found, shown_as=name_in_chat(chat, found), window=choice)}))
             return 0
         if not asked.get("path"):
             raise SendError("Give the path of a picture or a 3D model.")
+        if mode == "--tool":
+            need_window(str(asked.get("window") or ""))
         print(send(Path(str(asked["path"])), str(asked.get("name") or ""), asked.get("x"), asked.get("y"),
                    window=str(asked.get("window") or "")))
         return 0

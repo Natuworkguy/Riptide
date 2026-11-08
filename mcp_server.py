@@ -31,7 +31,9 @@ mcp = MCPServer(
         "Riptide is a keyframe motion-graphics editor running in the user's browser. Use get_project first to see the "
         "canvas, duration and layers (ids, types, timing, which properties are keyframed). Riptide can have several windows "
         "open, each a project of its own: list_windows shows them, use_window picks one and open_window opens another; "
-        "tools work in the window used last until one is picked. Use see_frames to look at "
+        "with only one window open, tools work in it. With more than one open, call list_windows and then use_window with "
+        "the one the user means (ask them when it is unclear) before anything else: until a window is picked, the other "
+        "tools refuse to act. Use see_frames to look at "
         "the animation (a contact sheet over time) and see_frame for one moment. Coordinates are canvas pixels with "
         "x,y at the layer's centre; times are seconds. Colours are hex strings. list_capabilities gives every layer "
         "type's properties, the easing names, presets and blend modes. All edits appear live and can be undone."
@@ -45,6 +47,23 @@ class RiptideError(ToolError):
 
 # The Riptide window every tool works in: its id, set by use_window or open_window; None is the one last used.
 WINDOW: str | None = None
+# Whether a window was picked on purpose (use_window, even with none, or open_window). With more than one window open,
+# tools refuse to act until one is, so a change never lands in the wrong project.
+PICKED = False
+
+
+def must_pick() -> None:
+    """Raise when several windows are open and none has been picked yet."""
+    if PICKED or WINDOW:
+        return
+    try:
+        found = post("/api/live/status", None, timeout=5).get("windows") or []
+    except RiptideError:
+        return      # call() reports the server being down
+    if len(found) > 1:
+        raise RiptideError(
+            f"Riptide has {len(found)} windows open: " + ", ".join(f'"{w["name"]}" ({w["id"]})' for w in found)
+            + ". Pick the one the user means with use_window first (ask them if it is unclear), then try again.")
 
 
 def post(path: str, body: dict | None, timeout: float = 60) -> Any:
@@ -67,6 +86,7 @@ def post(path: str, body: dict | None, timeout: float = 60) -> Any:
 
 
 def call(op: str, args: dict | None = None, timeout: float = 60) -> Any:
+    must_pick()
     body = json.dumps({"op": op, "args": {k: v for k, v in (args or {}).items() if v is not None}, "timeout": timeout,
                        "window": WINDOW}).encode()
     req = urllib.request.Request(f"{RIPTIDE}/api/live/op", data=body, headers={"Content-Type": "application/json"})
@@ -100,14 +120,18 @@ async def list_windows() -> dict:
     """Every Riptide window open in the browser: its id, its project's name, and which was used last. Each window is
     a project of its own. With no use_window, tools work in the one used last."""
     found = await anyio.to_thread.run_sync(lambda: post("/api/live/status", None, 10))
-    return {"windows": found.get("windows", []), "working_in": WINDOW or "the window used last"}
+    return {"windows": found.get("windows", []), "working_in": WINDOW or "the window used last",
+            **({"pick": "More than one window is open: call use_window with the one the user means before acting."}
+               if len(found.get("windows", [])) > 1 and not (PICKED or WINDOW) else {})}
 
 
 @mcp.tool()
 async def use_window(window: str | None = None) -> dict:
     """Work in one Riptide window from now on: its id, or its project's name (or the start of it), from
-    list_windows. None goes back to whichever window was used last."""
-    global WINDOW
+    list_windows. None goes back to whichever window was used last. With more than one window open, call this before
+    any other tool: they refuse to act until a window is picked."""
+    global WINDOW, PICKED
+    PICKED = True
     if window:
         found = (await anyio.to_thread.run_sync(lambda: post("/api/live/status", None, 10))).get("windows", [])
         wanted = window.strip().lower()
@@ -126,10 +150,11 @@ async def open_window(name: str = "Untitled", width: int | None = None, height: 
                       duration: float | None = None, background: str | None = None) -> dict:
     """Open another Riptide window in the browser with a new project of its own, and work in it from now on. The
     windows already open keep their projects."""
-    global WINDOW
+    global WINDOW, PICKED
     body = {"name": name, "width": width, "height": height, "duration": duration, "background": background}
     found = await anyio.to_thread.run_sync(lambda: post("/api/live/open", {k: v for k, v in body.items() if v is not None}, 25))
     WINDOW = found["window"]["id"]
+    PICKED = True
     return {"ok": True, "working_in": found["window"]}
 
 

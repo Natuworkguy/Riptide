@@ -8,7 +8,9 @@ const SceneEd = (() => {
   const r3 = v => Math.round(v * 1000) / 1000;
   let L = null, wrap = null, canvas = null, g2 = null, cam = null, orbit = null, gizmo = null, grid = null, box = null;
   let selId = null, view = 'free', dirty = true, raf = 0, playing = false, lastT = 0, holding = false, B = null;
-  const ghost = { keys: new Set(), look: null, speed: 1 };   // the ghost view: fly the viewport camera, WASD/QE and drag to look
+  const SPEED_LOCK_KEY = 'riptide.ghostSpeedLock', WHEEL_STEP_MS = 180;
+  const ghost = { keys: new Set(), look: null, speed: 1, wheelAt: 0, wantLock: false,
+    speedLock: (() => { try { return localStorage.getItem(SPEED_LOCK_KEY) === '1'; } catch { return false; } })() };   // the ghost view: fly the viewport camera, WASD/QE and drag to look
   const extras = [];          // what later modules add to the header (the library, the render mode)
   const ADD = [['box', 'Box', { size: [.5, .5, .5] }], ['rbox', 'Rounded box', { type: 'box', size: [.5, .5, .5], round: .05 }],
     ['cylinder', 'Cylinder', { size: [.4, .6, 1] }], ['sphere', 'Sphere', { size: [.5, .5, .5] }], ['cone', 'Cone', { size: [.4, .6, 1] }],
@@ -40,8 +42,9 @@ const SceneEd = (() => {
       <div class="seg tools"><button data-tool="translate" title="Move  G / W">Move</button><button data-tool="rotate" title="Turn  R / E">Turn</button><button data-tool="scale" title="Scale  S">Scale</button></div>
       <button class="tb small" data-act="add">+ Add</button><span class="extras"></span>
       <div class="seg"><button data-act="snap" class="on" title="Drop what you move onto the ground, or onto the top of what it is over">Snap</button></div>
+      <div class="seg"><button data-act="speedlock"${ghost.speedLock ? ' class="on"' : ''} title="Ghost view: scrolling changes the speed in steady, fixed steps, for trackpads and Magic Mice">Speed lock</button></div>
       <div class="seg views"><button data-view="free" title="Fly round the scene">Free</button><button data-view="ghost" title="Fly through the scene  V">Ghost</button><button data-view="film" title="Look through the film camera">Film camera</button></div>
-      <span class="sp"></span><button class="tb primary" data-act="done">Done</button></header>
+      <span class="sp"></span><button class="tb small" data-act="shot" title="Save this view as a PNG, without the grid or handles">Screenshot</button><button class="tb primary" data-act="done">Done</button></header>
       <aside class="outl"><div class="hd">Scene</div><div class="tree"></div></aside>
       <main class="vp"><canvas></canvas><div class="hint">Drag to orbit · right-drag to pan · scroll to zoom · click a prop to pick it</div></main>
       <aside class="insp"></aside>
@@ -68,13 +71,29 @@ const SceneEd = (() => {
     canvas.addEventListener('pointermove', e => { if (hook('move', e)) e.stopImmediatePropagation(); }, true);
     canvas.addEventListener('pointerup', e => { if (hook('up', e)) { down = null; e.stopImmediatePropagation(); } }, true);
     canvas.addEventListener('pointerdown', e => { down = [e.clientX, e.clientY];
-      if (view === 'ghost') { ghost.look = [e.clientX, e.clientY]; canvas.setPointerCapture(e.pointerId); } });
-    canvas.addEventListener('pointermove', e => { if (view !== 'ghost' || !ghost.look) return;
-      const dx = e.clientX - ghost.look[0], dy = e.clientY - ghost.look[1]; ghost.look = [e.clientX, e.clientY];
+      if (view === 'ghost') { if (!locked()) lockCursor(); ghost.look = [e.clientX, e.clientY]; canvas.setPointerCapture(e.pointerId); } });
+    canvas.addEventListener('pointermove', e => { if (view !== 'ghost') return;
+      // locked: the cursor stays hidden in the middle and every move turns the view, round and round with no edge;
+      // not locked (the browser refused): drag to look, as before
+      let dx, dy;
+      if (locked()) { dx = e.movementX; dy = e.movementY; }
+      else { if (!ghost.look) return; dx = e.clientX - ghost.look[0]; dy = e.clientY - ghost.look[1]; ghost.look = [e.clientX, e.clientY]; }
       const eu = new T.Euler().setFromQuaternion(cam.quaternion, 'YXZ');
       eu.y -= dx * .004; eu.x = Math.max(-1.55, Math.min(1.55, eu.x - dy * .004)); eu.z = 0; cam.quaternion.setFromEuler(eu); dirty = true; });
     canvas.addEventListener('wheel', e => { if (view !== 'ghost') return; e.preventDefault(); e.stopImmediatePropagation();
+      // Speed lock: trackpads and Magic Mice send floods of uneven, momentum-carried deltas; with it on, the scroll
+      // changes the speed by one fixed step at a steady pace (at most one step every WHEEL_STEP_MS), whatever the delta
+      if (!e.deltaY) return;
+      if (ghost.speedLock) { const now = performance.now(); if (now - ghost.wheelAt < WHEEL_STEP_MS) return; ghost.wheelAt = now; }
       ghost.speed = Math.max(.1, Math.min(20, ghost.speed * (e.deltaY < 0 ? 1.2 : 1 / 1.2))); hint(); }, { capture: true, passive: false });
+    document.addEventListener('pointerlockchange', () => {
+      // the lock went (Esc, which the browser keeps for itself while locked, or the tab losing focus): leave the ghost view
+      if (!locked() && view === 'ghost' && ghost.wantLock) { ghost.wantLock = false; setView('free'); }
+      else if (view === 'ghost') hint();
+    });
+    document.addEventListener('pointerlockerror', () => {
+      if (view === 'ghost') { ghost.wantLock = false; status('The browser would not lock the cursor: drag to look instead'); hint(); }
+    });
     canvas.addEventListener('pointerup', e => { ghost.look = null; if (view === 'ghost') { down = null; return; } if (down && Math.hypot(e.clientX - down[0], e.clientY - down[1]) < 4 && !gizmo.dragging && gizmo.axis == null) pick(e); down = null; });
     addEventListener('keydown', onKey, true);
     addEventListener('keyup', e => { ghost.keys.delete(e.code); }, true);
@@ -92,7 +111,7 @@ const SceneEd = (() => {
     for (const x of extras) x.mount?.(wrap.querySelector('.extras'));
     renderTree(); renderInsp(); footer(); tools(); dirty = true; cancelAnimationFrame(raf); loop();
   }
-  function close() { if (!wrap || wrap.hidden) return; stopPlay(); gizmo.detach(); wrap.hidden = true; cancelAnimationFrame(raf); L = null; refresh(); }
+  function close() { if (!wrap || wrap.hidden) return; unlockCursor(); stopPlay(); gizmo.detach(); wrap.hidden = true; cancelAnimationFrame(raf); L = null; refresh(); }
 
   // ----- the viewport -----
   function loop() {
@@ -127,11 +146,21 @@ const SceneEd = (() => {
       orbit.target.copy(cam.position).add(new T.Vector3(0, 0, -1).applyQuaternion(cam.quaternion).multiplyScalar(d)); orbit.update();
     }
     view = v; ghost.keys.clear(); ghost.look = null; flyT = 0;
+    if (view === 'ghost') lockCursor(); else unlockCursor();
     orbit.enabled = view === 'free'; if (view !== 'free') gizmo.detach();
     hint(); tools(); dirty = true;
   }
+  // The ghost view hides the cursor and keeps it in the middle (the Pointer Lock API), so looking can turn past 360°.
+  function locked() { return document.pointerLockElement === canvas; }
+  function lockCursor() {
+    if (locked() || !canvas.requestPointerLock) return;
+    ghost.wantLock = true;
+    try { const p = canvas.requestPointerLock(); if (p?.catch) p.catch(() => { ghost.wantLock = false; hint(); }); }
+    catch { ghost.wantLock = false; }
+  }
+  function unlockCursor() { ghost.wantLock = false; if (locked()) document.exitPointerLock(); }
   function hint() { wrap.querySelector('.vp .hint').textContent = view === 'ghost'
-    ? `Ghost view · WASD to fly · Q/E down/up · drag to look · Shift for speed · scroll to change speed (${ghost.speed.toFixed(1)}×) · Esc to leave`
+    ? `Ghost view · WASD to fly · Q/E down/up · ${locked() || ghost.wantLock ? 'move the mouse' : 'drag'} to look · Shift for speed · scroll to change speed (${ghost.speed.toFixed(1)}×) · Esc to leave`
     : 'Drag to orbit · right-drag to pan · scroll to zoom · click a prop to pick it'; }
   function draw(w, h, pr) {
     const o = state(L, time), staged = World.stage(L, o, time); B = staged.B; B.hold = holding; gnd = staged.ground;
@@ -144,8 +173,8 @@ const SceneEd = (() => {
     else if (node && gizmo.object !== node) gizmo.attach(node); else if (!node && gizmo.object) gizmo.detach();
     const helpers = [];
     // no grid or gizmo in a view drawn as filmed (path traced)
-    if (!film && !extras.some(x => x.helpers && !x.helpers())) { grid.position.set(0, staged.ground + 1, 0); helpers.push(grid); if (node) { box.setFromObject(node); helpers.push(box); if (view !== 'ghost') helpers.push(gizmo.getHelper()); } }
-    if (!film) for (const x of extras) x.overlay?.(helpers, B);
+    if (!film && !shooting && !extras.some(x => x.helpers && !x.helpers())) { grid.position.set(0, staged.ground + 1, 0); helpers.push(grid); if (node) { box.setFromObject(node); helpers.push(box); if (view !== 'ghost') helpers.push(gizmo.getHelper()); } }
+    if (!film && !shooting) for (const x of extras) x.overlay?.(helpers, B);
     for (const x of helpers) B.scene.add(x);
     // the frame: as filmed (in the film view, or with a mode such as path tracing), else lit plainly and fast
     const fw = film ? Math.round(Math.min(W, H * S.w / S.h)) : W, fh = film ? Math.round(fw * S.h / S.w) : H;
@@ -155,6 +184,23 @@ const SceneEd = (() => {
     for (const x of helpers) B.scene.remove(x);
     g2.fillStyle = '#0d0e11'; g2.fillRect(0, 0, W, H);
     g2.drawImage(R.domElement, (W - fw) / 2, (H - fh) / 2, fw, fh);
+  }
+  // a screenshot: the view drawn again without the grid, box and handles, at the viewport's full pixel size
+  // (the film view keeps only its frame, without the bars round it)
+  let shooting = false;
+  function shoot() {
+    if (!L) return;
+    const vp = wrap.querySelector('.vp'), pr = Math.min(2, devicePixelRatio || 1);
+    shooting = true; try { draw(vp.clientWidth, vp.clientHeight, pr); } finally { shooting = false; }
+    const R = World.renderer, fw = R.domElement.width, fh = R.domElement.height;
+    const oc = document.createElement('canvas'); oc.width = fw; oc.height = fh;
+    oc.getContext('2d').drawImage(canvas, (canvas.width - fw) / 2, (canvas.height - fh) / 2, fw, fh, 0, 0, fw, fh);
+    dirty = true;   // put the grid and handles back
+    const name = `${(typeof projectName !== 'undefined' && projectName) || 'Untitled'} - ${L.name} ${time.toFixed(2)}s.png`;
+    oc.toBlob(blob => { if (!blob) return status('Could not make the screenshot');
+      const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: name }); a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1e4);
+      status(`Saved ${name} · ${fw}×${fh}`); }, 'image/png');
   }
   function findNode(id) { if (isLay(id)) return B?.members?.find(n => n.userData.layerId === id.slice(2)) || null;
     let hit = null; B?.props?.traverse(n => { if (!hit && n.userData.partId === id && !n.isMesh) hit = n; }); return hit; }
@@ -327,8 +373,12 @@ const SceneEd = (() => {
     const f = found();
     if (a === 'add') return UI.menu(btn, ADD.map(([value, label]) => ({ value, label })), null, add);
     if (a === 'done') return close();
+    if (a === 'shot') return shoot();
     if (a === 'play') return playing ? stopPlay() : startPlay();
     if (a === 'snap') { snap = !snap; btn?.classList.toggle('on', snap); return; }
+    if (a === 'speedlock') { ghost.speedLock = !ghost.speedLock; btn?.classList.toggle('on', ghost.speedLock);
+      try { localStorage.setItem(SPEED_LOCK_KEY, ghost.speedLock ? '1' : '0'); } catch { /* private mode: it lasts this session */ }
+      return; }
     if (!f) return;
     if (a === 'dup') { const c = clone(f.P); if (Array.isArray(c.at)) c.at = [c.at[0] + .3, c.at[1], c.at[2]]; f.list.splice(f.list.indexOf(f.P) + 1, 0, c); World.ensureIds(objs()); selId = c.id; }
     if (a === 'del') { f.list.splice(f.list.indexOf(f.P), 1); selId = null; gizmo.detach(); }

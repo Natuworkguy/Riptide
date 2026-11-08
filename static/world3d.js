@@ -92,7 +92,12 @@ const World = (() => {
         cc += uSun * pow(max(mu, 0.), 4.) * (1. - dens * .7) * 1.2;
         c = mix(c, cc, dens * smoothstep(.0, .16, d.y));
       }
-      if (uStars > 0. && d.y > 0.) { vec2 g = floor(d.xz / (d.y + .2) * 300.); float s = step(.997, h21(g)) * h21(g + 7.);
+      // stars: cells on the sky's sphere itself (not a plane projected to the horizon, which stretched them into
+      // dashes), each a soft round point around a jittered centre, so they stay round at any aspect and camera move
+      if (uStars > 0. && d.y > 0.) { vec3 q = normalize(d) * 160., g = floor(q), f = q - g;
+        vec2 k = g.xy + g.z * vec2(37.1, 17.3); float on = step(.94, h21(k));
+        vec3 ctr = .3 + .4 * vec3(h21(k + 3.), h21(k + 5.), h21(k + 9.));
+        float r = length(f - ctr), s = on * smoothstep(.16, .02, r) * (.35 + .65 * h21(k + 7.));
         c += vec3(s) * uStars * smoothstep(0., .3, d.y); }
       return c;
     }

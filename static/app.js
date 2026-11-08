@@ -387,7 +387,11 @@ function drawLayer(c, L, t) {
   if (fx?.wipe && !deep) { const { p, dx, dy, w, h } = fx.wipe; c.beginPath();
     if (dx) c.rect(dx < 0 ? -w / 2 : w / 2 - w * p, -h / 2, w * p, h); else c.rect(-w / 2, dy < 0 ? -h / 2 : h / 2 - h * p, w, h * p);
     c.clip(); }
-  if (L.type === 'world') { if (!World.draw(c, L, o, t)) { c.fillStyle = '#20232b'; c.fillRect(0, 0, S.w, S.h); } }
+  if (L.type === 'world') {
+    // the world fills only its own box (the one its selection outline shows), not the whole frame
+    { const w = (o.w ?? S.w) * o.scale * o.sx, h = (o.h ?? S.h) * o.scale * o.sy, M = c.getTransform();
+      c.translate(o.x, o.y); c.rotate(o.rotation * PI / 180); c.beginPath(); c.rect(-w / 2, -h / 2, w, h); c.setTransform(M); c.clip(); }
+    if (!World.draw(c, L, o, t)) { c.fillStyle = '#20232b'; c.fillRect(0, 0, S.w, S.h); } }
   else if (deep) R3D.draw(c, L, o, t, drawContent); else drawContent(c, L, o, t);
   // a dip covers the layer with black or white, all of it at the dip's middle
   if (fx?.dip && fx.dip.a > 0 && !deep) { c.filter = 'none'; c.shadowColor = 'transparent'; c.globalAlpha = Math.min(1, fx.dip.a * 1.4) * Math.min(1, o.opacity);
@@ -1088,7 +1092,7 @@ $('#layerList').addEventListener('dragover', e => { e.preventDefault(); document
 $('#layerList').addEventListener('drop', e => {
   if (!dragRow) return; e.preventDefault(); const to = +e.target.closest('.layer')?.dataset.id; if (!dragRow || !to || to === dragRow) return;
   const from = S.layers.findIndex(l => l.id === dragRow), L = S.layers.splice(from, 1)[0];
-  S.layers.splice(S.layers.findIndex(l => l.id === to) + (from > S.layers.findIndex(l => l.id === to) ? 1 : 0), 0, L);
+  S.layers.splice(S.layers.findIndex(l => l.id === to) + 1, 0, L); // the line is on the target row's top edge: land just in front of it
   // dropped among a group's layers it joins that group; dropped anywhere else it leaves its group
   const T = S.layers.find(l => l.id === to);
   if (L.type !== 'group') { if (T.parent != null) L.parent = T.parent; else delete L.parent; }
@@ -2832,6 +2836,7 @@ async function save(as = false) {
 function loadText(text, name, handle = null) {
   const d = JSON.parse(text), p = d.format === 'riptide' || d.format === 'wobble' ? d.project : d;
   if (!p || !Array.isArray(p.layers) || !(p.w > 0) || !(p.h > 0)) throw new Error('This file is not a Riptide project.');
+  p.layers = p.layers.filter(L => L.type !== 'fluid');   // fluid layers were removed: drop any a saved project still has
   p.layers.forEach(L => { L.p = { ...DEFAULTS, ...L.p }; L.keys ||= {}; }); p.assets ||= {}; p.markers ||= []; p.vars ||= {};
   for (const [id, a] of Object.entries(p.assets)) if (a.kind === 'video' && a.src) {
     const src = a.src; delete a.src;

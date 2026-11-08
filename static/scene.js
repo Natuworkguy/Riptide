@@ -21,8 +21,12 @@ const SceneEd = (() => {
     ['point', 'Point light', { type: 'light', light: 'point', color: '#ffe8cc', power: 120 }],
     ['spot', 'Spot light', { type: 'light', light: 'spot', color: '#ffffff', power: 200, angle: 30, soft: 40, turn: [-35, 0, 0] }],
     ['group', 'Empty group', { type: 'group', children: [] }]];
+  // what later modules add to the Add menu: [kind, label, spec]
+  const ADD_MORE = ADD;
 
   const objs = () => (L.p.objects ||= []);
+  // props key on world time: the timeline's, slowed or sped by the world's speed
+  const wt = () => World.worldTime(L, time);
   // the 3D shapes and models above the world, up to the next world: layers of their own, picked as 'L:' + their id
   const isLay = id => typeof id === 'string' && id.startsWith('L:');
   const layers3d = () => { const out = []; for (let j = S.layers.indexOf(L) + 1; j < S.layers.length; j++) { const x = S.layers[j];
@@ -31,7 +35,7 @@ const SceneEd = (() => {
   let gnd = 0, snap = true;
   const found = () => selId && !isLay(selId) ? World.findPart(objs(), selId) : null;
   const sel = () => found()?.P || null;
-  const nameOf = P => P.name || (P.type === 'model' ? 'Model' : P.type === 'light' ? `${P.light === 'spot' ? 'Spot' : 'Point'} light` : P.type === 'truss' ? 'Lattice' : P.type === 'label' ? 'Screen'
+  const nameOf = P => P.name || (P.type === 'camera' ? 'Camera' : P.type === 'model' ? 'Model' : P.type === 'light' ? `${P.light === 'spot' ? 'Spot' : 'Point'} light` : P.type === 'truss' ? 'Lattice' : P.type === 'label' ? 'Screen'
     : (P.type || 'group')[0].toUpperCase() + (P.type || 'group').slice(1));
   const touch = (record = false) => { dirty = true; if (record) { refresh(); } };
 
@@ -163,7 +167,8 @@ const SceneEd = (() => {
     ? `Ghost view · WASD to fly · Q/E down/up · ${locked() || ghost.wantLock ? 'move the mouse' : 'drag'} to look · Shift for speed · scroll to change speed (${ghost.speed.toFixed(1)}×) · Esc to leave`
     : 'Drag to orbit · right-drag to pan · scroll to zoom · click a prop to pick it'; }
   function draw(w, h, pr) {
-    const o = state(L, time), staged = World.stage(L, o, time); B = staged.B; B.hold = holding; gnd = staged.ground;
+    World.showGuides = view !== 'film' && !extras.some(x => x.helpers && !x.helpers());
+    const o = state(L, time), staged = World.stage(L, o, time); World.showGuides = false; B = staged.B; B.hold = holding; gnd = staged.ground;
     const R = World.renderer, film = view === 'film', W = canvas.width, H = canvas.height;
     let camera = cam;
     if (film) camera = staged.cam; else { cam.aspect = W / H; cam.updateProjectionMatrix(); }
@@ -237,7 +242,7 @@ const SceneEd = (() => {
   // ----- what the gizmo moved, into the prop: its value, or its key at the playhead -----
   function setVal(P, prop, v) {
     const ks = P.keys?.[prop];
-    if (Array.isArray(ks) && ks.length) { const t = Math.round(time * 1000) / 1000, k = ks.find(k => Math.abs(k.t - t) < .005);
+    if (Array.isArray(ks) && ks.length) { const t = Math.round(wt() * 1000) / 1000, k = ks.find(k => Math.abs(k.t - t) < .005);
       if (k) k.v = v; else { ks.push({ t, v, ease: 'easeInOut' }); ks.sort((a, b) => a.t - b.t); } }
     else P[prop] = v;
   }
@@ -279,7 +284,7 @@ const SceneEd = (() => {
 
   // ----- the inspector: the picked prop, or the world -----
   const num = (k, v, step = .01, label = k) => `<label class="f"><span>${label}</span><input data-k="${k}" type="number" step="${step}" value="${v ?? ''}"></label>`;
-  const vec = (k, v, label, step) => { const has = sel()?.keys?.[k]?.length, here = sel()?.keys?.[k]?.some(x => Math.abs(x.t - time) < .005);
+  const vec = (k, v, label, step) => { const has = sel()?.keys?.[k]?.length, here = sel()?.keys?.[k]?.some(x => Math.abs(x.t - wt()) < .005);
     return `<div class="vec"><div class="vh"><span>${label}</span><button class="key${has ? ' has' : ''}${here ? ' here' : ''}" data-key="${k}" title="${here ? 'Remove the key here' : 'Key it at the playhead'}">◆</button></div>
       <div class="v3">${[0, 1, 2].map(i => `<input data-k="${k}" data-i="${i}" type="number" step="${step}" value="${r3(v[i] ?? 0)}">`).join('')}</div></div>`; };
   function cur(P, prop, base) { const ks = P.keys?.[prop]; if (!ks?.length) return base;
@@ -318,12 +323,12 @@ const SceneEd = (() => {
       if (v) i.value = r3(k === 'scale' && v.length === 1 ? v[0] : v[+i.dataset.i]); } return; }
     el.dataset.for = P?.id || '';
     if (!P) { el.innerHTML = `<div class="hd">World</div><p class="note">Pick a prop in the viewport or the outliner to move, turn and change it. The world's sky, ground, air and lens are in its layer's Design panel.</p>
-      <div class="acts"><button class="tb small" data-act="add">+ Add a prop</button></div>`; return; }
+      <div class="acts"><button class="tb small" data-act="add">+ Add a prop</button></div>` + extras.map(x => x.worldInspector?.(L) || '').join(''); return; }
     const at = cur(P, 'at', P.at || [0, 0, 0]), turn = cur(P, 'turn', P.turn || [0, 0, 0]), sc = [].concat(cur(P, 'scale', P.scale ?? 1)), s3 = sc.length === 1 ? [sc[0], sc[0], sc[0]] : sc;
     const size = P.size || [1, 1, 1], t = P.type || 'group';
     let h = `<div class="hd">${esc(nameOf(P))}</div><label class="f wide"><span>Name</span><input data-k="name" value="${esc(P.name || '')}" placeholder="${esc(nameOf(P))}"></label>`;
     h += vec('at', at, 'Position m', .01) + vec('turn', turn, 'Turn °', 1) + vec('scale', s3, 'Scale', .01);
-    if (t !== 'group' && t !== 'light' && t !== 'model' && t !== 'mesh') {
+    if (!['group', 'light', 'model', 'mesh', 'camera', 'car', 'person', 'fx'].includes(t)) {
       const lab = t === 'cylinder' || t === 'cone' ? ['Diameter', 'Height', ''] : t === 'torus' ? ['Ring', '', 'Tube'] : t === 'label' ? ['Width', 'Height', ''] : t === 'capsule' ? ['Diameter', 'Length', ''] : ['Width', 'Height', 'Depth'];
       h += `<div class="vec"><div class="vh"><span>Size m</span></div><div class="v3">${[0, 1, 2].map(i => lab[i] ? `<input data-k="size" data-i="${i}" type="number" step=".01" title="${lab[i]}" value="${r3(+size[i] || 1)}">` : '<span></span>').join('')}</div></div>`;
     }
@@ -333,7 +338,7 @@ const SceneEd = (() => {
       <label class="f"><span>Ink</span><input data-k="color" type="color" value="${P.color || '#f2f2f2'}"></label><label class="f"><span>Back</span><input data-k="background" type="color" value="${P.background || '#050505'}"></label>`;
     if (t === 'light') h += `<label class="f"><span>Kind</span><select data-k="light"><option value="point"${P.light !== 'spot' ? ' selected' : ''}>Point</option><option value="spot"${P.light === 'spot' ? ' selected' : ''}>Spot</option></select></label>
       <label class="f"><span>Colour</span><input data-k="color" type="color" value="${P.color || '#ffffff'}"></label>${num('power', P.power ?? 100, 5, 'Power')}${P.light === 'spot' ? num('angle', P.angle ?? 35, 1, 'Cone °') + num('soft', P.soft ?? 40, 5, 'Soft %') : ''}`;
-    if (t !== 'group' && t !== 'light' && t !== 'label' && t !== 'model') {
+    if (!['group', 'light', 'label', 'model', 'camera', 'person', 'fx'].includes(t)) {
       const fins = [...World.FINISHES, ...(World.extraFinishes?.() || [])];
       h += `<label class="f wide"><span>Finish</span><select data-k="finish">${fins.map(f => `<option value="${esc(f)}"${(P.finish || 'plastic') === f ? ' selected' : ''}>${esc(World.finishName?.(f) || f)}</option>`).join('')}</select></label>
         <label class="f"><span>Colour</span><input data-k="color" type="color" value="${P.color || '#' + World.lin(World.FINISH_LOOKS[P.finish || 'plastic']?.color || '#cccccc').getHexString(T.SRGBColorSpace)}"></label>${num('glow', P.glow || 0, .1, 'Glow')}`;
@@ -392,7 +397,7 @@ const SceneEd = (() => {
     if (b.dataset.tool) { gizmo.setMode(b.dataset.tool); tools(); return; }
     if (b.dataset.view) { setView(b.dataset.view); return; }
     if (b.dataset.eye) { const f = World.findPart(objs(), b.dataset.eye); if (f) { f.P.hidden = !f.P.hidden; if (!f.P.hidden) delete f.P.hidden; renderTree(); dirty = true; refresh(); } return; }
-    if (b.dataset.key) { const P = sel(); if (!P) return; const k = b.dataset.key, t = Math.round(time * 1000) / 1000;
+    if (b.dataset.key) { const P = sel(); if (!P) return; const k = b.dataset.key, t = Math.round(wt() * 1000) / 1000;
       P.keys ||= {}; const ks = (P.keys[k] ||= []), at = ks.findIndex(x => Math.abs(x.t - t) < .005);
       const now = cur(P, k, k === 'scale' ? [].concat(P.scale ?? 1) : P[k] || [0, 0, 0]);
       const v = !Array.isArray(now) ? r3(+now) : k === 'scale' && (now.length === 1 || now.every(x => r3(x) === r3(now[0]))) ? r3(now[0]) : now.map(r3);
@@ -437,6 +442,7 @@ const SceneEd = (() => {
     select, get selected() { return sel(); }, get selectedId() { return selId; },
     // for tools that work in the viewport
     get api() { return { cam: view === 'film' ? null : cam, canvas, gizmo, orbit, B, findNode, view }; },
+    setView: v => setView(v), add: (kind, spec, label) => { if (spec) ADD.push([kind, label || kind, spec]); }, get time() { return wt(); },
     record() { refresh(); renderTree(); renderInsp(); dirty = true; },
     // where a new prop goes: on the ground, where the view looks
     spot() { const t = orbit?.target; return t ? [r3(t.x / M), 0, r3(t.z / M)] : [0, 0, 0]; } };

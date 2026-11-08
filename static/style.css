@@ -648,3 +648,5 @@ canvas.graph{display:block;cursor:default}
 .sced .acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
 
 .sced .vp.drop{box-shadow:inset 0 0 0 2px var(--accent)}
+.sced .shotrow{display:flex;align-items:center;gap:8px;height:26px;font-size:12px}.sced .shotrow .t{font-family:var(--mono);color:var(--dim);width:54px}.sced .shotrow .n{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sced .shotrow .eye{color:var(--dim);width:20px;height:20px;border-radius:4px}.sced .shotrow .eye:hover{background:#ffffff14;color:var(--text)}

@@ -1222,13 +1222,13 @@ function renderProps() {
         else if (k === 'three') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="three" title="${v ? 'Make it flat again' : 'Turn it in 3D, push it back, and let a camera move around it'}"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
         else if (k === 'hdri' || k === 'floorFinish') { const a = S.assets?.[String(v || '').replace(/^lib:/, '')];
           field = `<button class="selectbtn" data-menu="${k}"><span>${a ? esc(a.name) : k === 'hdri' ? 'None: the sky above' : 'Its own'}</span>${ICON.chev}</button>`; }
-        else if (k === 'sky' || k === 'ground' || k === 'render') field = `<button class="selectbtn" data-menu="${k}"><span>${((k === 'sky' ? World.SKIES : k === 'ground' ? World.GROUNDS : World.RENDERS).find(x => x[0] === v) || ['', v])[1]}</span>${ICON.chev}</button>`;
+        else if (k === 'sky' || k === 'ground' || k === 'render' || k === 'letterbox') field = `<button class="selectbtn" data-menu="${k}"><span>${((k === 'sky' ? World.SKIES : k === 'ground' ? World.GROUNDS : k === 'render' ? World.RENDERS : World.LETTERBOXES).find(x => x[0] === String(v)) || ['', v])[1]}</span>${ICON.chev}</button>`;
         else if (k === 'shape') field = `<button class="selectbtn" data-menu="shape"><span>${R3D.SHAPES.find(x => x[0] === v)?.[1] || v}</span>${ICON.chev}</button>`;
         else if (k === 'material') field = `<button class="selectbtn" data-menu="material"><span>${R3D.MATERIALS.find(x => x[0] === v)?.[1] || v}</span>${ICON.chev}</button>`;
         else if (k === 'phys') field = `<button class="selectbtn" data-menu="phys"><span>${(Physics.KINDS.find(x => x[0] === (v || 'none')) || Physics.KINDS[0])[1]}</span>${ICON.chev}</button>`;
         else if (k === 'walls') field = `<button class="selectbtn" data-menu="walls"><span>${(Physics.WALLS.find(x => x[0] === v) || Physics.WALLS[0])[1]}</span>${ICON.chev}</button>`;
         else field = `<input data-p="${k}" value="${fmt(v)}" inputmode="decimal" spellcheck="false"${isFixed ? ' disabled' : ''}>`;
-        const wide = ['fill', 'fill2', ...MIDS, 'grad', 'stroke', 'text', 'weight', 'font', 'italic', 'three', 'shape', 'material', 'phys', 'walls', 'sky', 'ground', 'render', 'hdri', 'floorFinish', ...World.COLORS, 'mask', 'matte', 'lut', 'keyColor', 'chroma', 'minv'].includes(k) ? ' wide' : '';
+        const wide = ['fill', 'fill2', ...MIDS, 'grad', 'stroke', 'text', 'weight', 'font', 'italic', 'three', 'shape', 'material', 'phys', 'walls', 'sky', 'ground', 'render', 'letterbox', 'hdri', 'floorFinish', ...World.COLORS, 'mask', 'matte', 'lut', 'keyColor', 'chroma', 'minv'].includes(k) ? ' wide' : '';
         // Keeping the proportions means nothing once either side is locked.
         const lock = k === 'w' && list.includes('h') && !L.fix?.w && !L.fix?.h ? `<button class="ib aspect ${aspectLocked(L) ? 'on' : ''}" data-cmd="aspect" title="${aspectLocked(L) ? 'Aspect ratio locked: click to unlock' : 'Lock aspect ratio'}">${aspectLocked(L) ? ICON.link : ICON.unlink}</button>` : '';
         const drop = MIDS.includes(k) ? `<button class="ib" data-cmd="delstop" data-k="${k}" title="Take this colour out of the gradient">${ICON.trash}</button>` : '';
@@ -1440,8 +1440,8 @@ Pn.addEventListener('click', e => {
   else if (t.dataset.cmd === 'three') { L.p.three = !L.p.three; refresh(); status(L.p.three ? `${L.name} is 3D: turn it with Rotate X and Y, push it back with Depth` : `${L.name} is flat again`); }
   else if (t.dataset.menu === 'shape')
     UI.menu(t, R3D.SHAPES.map(([value, label]) => ({ value, label })), L.p.shape, v => { L.p.shape = v; if (v === 'text') R3D.loadFont(); refresh(); });
-  else if (t.dataset.menu === 'sky' || t.dataset.menu === 'ground' || t.dataset.menu === 'render') { const k = t.dataset.menu;
-    UI.menu(t, (k === 'sky' ? World.SKIES : k === 'ground' ? World.GROUNDS : World.RENDERS).map(([value, label]) => ({ value, label })), L.p[k], v => { L.p[k] = v; refresh();
+  else if (['sky', 'ground', 'render', 'letterbox'].includes(t.dataset.menu)) { const k = t.dataset.menu;
+    UI.menu(t, (k === 'sky' ? World.SKIES : k === 'ground' ? World.GROUNDS : k === 'render' ? World.RENDERS : World.LETTERBOXES).map(([value, label]) => ({ value, label })), String(L.p[k]), v => { L.p[k] = v; refresh();
       if (k === 'render' && v === 'path') status('Path traced: exports give every frame all its samples. See it clear up in Edit scene, Path traced view'); }); }
   else if (t.dataset.cmd === 'editscene') SceneEd.open(L);
   else if (t.dataset.menu === 'hdri' || t.dataset.menu === 'floorFinish') { const k = t.dataset.menu, kind = k === 'hdri' ? 'hdri' : 'material';

@@ -58,8 +58,9 @@ const PathTrace = (() => {
   function lensOf(cam, o) {
     const c = new T.PhysicalCamera(cam.fov, cam.aspect, cam.near, cam.far);
     c.position.copy(cam.position); c.quaternion.copy(cam.quaternion); c.updateMatrixWorld(); c.updateProjectionMatrix();
-    c.focusDistance = o.focus > 0 ? o.focus * M : (cam.userData.d || 1000);
-    c.fStop = o.dof > 0 ? Math.max(1, 22 / (1 + (o.dof / 100) * 14)) : 64; c.apertureBlades = 7;
+    const dof = cam.userData.dof ?? o.dof;
+    c.focusDistance = cam.userData.focus ?? (o.focus > 0 ? o.focus * M : (cam.userData.d || 1000));
+    c.fStop = dof > 0 ? Math.max(1, 22 / (1 + (dof / 100) * 14)) : 64; c.apertureBlades = 7;
     return c;
   }
 
@@ -80,24 +81,10 @@ const PathTrace = (() => {
   }
   const on = o => o.render === 'path' && !!World.renderer;
 
-  // exports and agents' frames: every sample, before the frame is kept (seekVideos waits for this)
-  const done = new Map();     // world layer id -> {key, canvas}
-  World.prepareFrame = async t => {
-    for (const L of S.layers) {
-      if (L.type !== 'world' || !visibleAt(L, t)) continue;
-      const o = state(L, t); if (!on(o)) continue;
-      const W = S.w, H = S.h, staged = World.stage(L, o, t), want = Math.max(1, Math.round(+o.samples || 128));
-      sceneKey = '';     // a frame of its own, from its first sample
-      while (!trace(L, o, t, staged.B, staged.cam, W, H, want, 40)) await new Promise(r => setTimeout(r, 0));
-      const cv = done.get(L.id)?.canvas || document.createElement('canvas'); cv.width = W; cv.height = H;
-      cv.getContext('2d').drawImage(World.renderer.domElement, 0, 0);
-      done.set(L.id, { key: `${t}|${JSON.stringify(o)}|${World.version}`, canvas: cv });
-    }
-  };
-  World.finalRender = (L, o, t) => {
-    if (!on(o)) return null;
-    const d = done.get(L.id);
-    return d && d.key === `${t}|${JSON.stringify(o)}|${World.version}` ? d.canvas : null;
+  // a whole frame, every sample, for an export (World.prepareFrame calls this)
+  World.traceFrame = async (L, o, t, B, cam, W, H, samples) => {
+    sceneKey = '';     // a frame of its own, from its first sample
+    while (!trace(L, o, t, B, cam, W, H, samples, 40)) await new Promise(r => setTimeout(r, 0));
   };
 
   // the scene editor: a Path traced view that clears up while you watch

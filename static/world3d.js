@@ -9,6 +9,7 @@
 const World = (() => {
   const T = window.RiptideThree, M = 100;
   const R = () => R3D._;
+  const LETTERBOXES = [['none', 'None'], ['2.39', '2.39 : 1 (scope)'], ['2', '2 : 1'], ['1.85', '1.85 : 1']];
   const RENDERS = [['preview', 'Preview: fast'], ['path', 'Path traced: real light']];
   const SKIES = [['sunset', 'Golden hour'], ['day', 'Clear day'], ['dusk', 'Dusk'], ['haze', 'Hazy'], ['overcast', 'Overcast'],
     ['night', 'Night'], ['studio', 'Studio']];
@@ -25,20 +26,20 @@ const World = (() => {
   };
   const FIELDS = ['sky', 'hdri', 'hdriTurn', 'hdriPower', 'sunEl', 'sunAz', 'sunPower', 'clouds', 'wind',
     'ground', 'groundColor', 'floorFinish', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH', 'sway', 'swayLoop',
-    'fog', 'dust', 'eye', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao', 'render', 'samples', 'objects'];
+    'fog', 'dust', 'eye', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao', 'render', 'samples', 'pace', 'shutter', 'letterbox', 'objects', 'shots'];
   const DEFAULTS = { hdri: '', hdriTurn: 0, hdriPower: 100, floorFinish: '', sky: 'sunset', sunEl: 8, sunAz: 10, sunPower: 100, clouds: 45, wind: 4, ground: 'ocean', groundColor: '#8a6a45',
     water: '#0b4a46', waves: .6, chop: 50, swell: 0, curl: .5, waveDist: 45, waveAngle: -20, plants: '#c09a48', grass: 60, grassH: .9, sway: 3, swayLoop: false,
-    fog: 8, dust: 0, eye: 1.7, heading: 0, pitch: 0, travel: 0, lens: 35, focus: 0, dof: 0, exposure: 0, bloom: 30, grain: 15, fringe: 10, ao: 0, render: 'preview', samples: 128 };
+    fog: 8, dust: 0, eye: 1.7, heading: 0, pitch: 0, travel: 0, lens: 35, focus: 0, dof: 0, exposure: 0, bloom: 30, grain: 15, fringe: 10, ao: 0, render: 'preview', samples: 128, pace: 100, shutter: 0, letterbox: 'none' };
   const LABELS = { hdri: 'Sky photo', hdriTurn: 'Photo turn°', hdriPower: 'Photo light %', floorFinish: 'Ground finish', sky: 'Sky', sunEl: 'Sun height°', sunAz: 'Sun around°', sunPower: 'Sun %', clouds: 'Clouds %', wind: 'Wind m/s',
     ground: 'Ground', groundColor: 'Ground colour', water: 'Water', waves: 'Waves m', chop: 'Chop %', swell: 'Breaker m', curl: 'Curl',
     waveDist: 'Breaker at m', waveAngle: 'Breaker turn°', plants: 'Plants', grass: 'Plants %', grassH: 'Plant height m', sway: 'Sway m/s', swayLoop: 'Loop sway',
     fog: 'Fog', dust: 'Dust', eye: 'Eye height m', heading: 'Look around°', pitch: 'Look up°', travel: 'Travel m', lens: 'Lens mm',
-    focus: 'Focus m', dof: 'Depth of field', exposure: 'Exposure', bloom: 'Bloom', grain: 'Grain', fringe: 'Fringe', ao: 'Contact shade', render: 'Render', samples: 'Samples' };
+    focus: 'Focus m', dof: 'Depth of field', exposure: 'Exposure', bloom: 'Bloom', grain: 'Grain', fringe: 'Fringe', ao: 'Contact shade', render: 'Render', samples: 'Samples', pace: 'World speed %', shutter: 'Motion blur°', letterbox: 'Letterbox' };
   const COLORS = ['groundColor', 'water', 'plants'];
-  const NUMBERS = FIELDS.filter(k => !['sky', 'ground', 'objects', 'swayLoop', 'hdri', 'floorFinish', 'render', ...COLORS].includes(k));
+  const NUMBERS = FIELDS.filter(k => !['sky', 'ground', 'objects', 'shots', 'swayLoop', 'hdri', 'floorFinish', 'render', 'letterbox', ...COLORS].includes(k));
   const GROUPS = [['World', ['hdri', 'hdriTurn', 'hdriPower', 'sky', 'sunEl', 'sunAz', 'sunPower', 'clouds', 'wind', 'fog', 'dust']],
     ['Ground', ['ground', 'groundColor', 'floorFinish', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH', 'sway', 'swayLoop']],
-    ['Lens', ['render', 'samples', 'eye', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao']]];
+    ['Lens', ['render', 'samples', 'pace', 'shutter', 'letterbox', 'eye', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao']]];
   const STEP = { waves: .05, curl: .01, grassH: .05, eye: .05, exposure: .05 };
   const deg = v => (+v || 0) * Math.PI / 180;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -392,13 +393,26 @@ const World = (() => {
   }
   const labelMats = new Map();
   // A prop's transform at T: its keyframes where it has them ({at: [{t, v, ease}], turn: …, scale: …}), else its value.
+  // A place keyed three times or more moves along a smooth curve through its keys (unless its path is 'straight').
   function keyed(P, prop, t, base) {
     const ks = P.keys?.[prop]; if (!Array.isArray(ks) || !ks.length) return base;
     const mix = (a, b, f) => Array.isArray(a) ? a.map((x, i) => (+x || 0) + ((+b?.[i] || 0) - (+x || 0)) * f) : (+a || 0) + ((+b || 0) - (+a || 0)) * f;
     if (t <= ks[0].t) return ks[0].v;
+    const smooth = prop === 'at' && ks.length >= 3 && P.path !== 'straight';
     for (let i = 0; i < ks.length - 1; i++) { const a = ks[i], b = ks[i + 1];
-      if (t <= b.t) return mix(a.v, b.v, (typeof easeFn === 'function' ? easeFn(a) : x => x)((t - a.t) / (b.t - a.t || 1))); }
+      if (t > b.t) continue;
+      const u = (typeof easeFn === 'function' ? easeFn(a) : x => x)((t - a.t) / (b.t - a.t || 1));
+      if (!smooth) return mix(a.v, b.v, u);
+      const p0 = (ks[i - 1] || a).v, p3 = (ks[i + 2] || b).v;
+      return a.v.map((_, j) => cr(+p0[j] || 0, +a.v[j] || 0, +b.v[j] || 0, +p3[j] || 0, u));
+    }
     return ks[ks.length - 1].v;
+  }
+  // which way a prop is going at T: for 'face the way it travels'
+  function heading(P, t) {
+    const a = keyed(P, 'at', t - .05, P.at || [0, 0, 0]), b = keyed(P, 'at', t + .05, P.at || [0, 0, 0]);
+    const dx = (+b[0] || 0) - (+a[0] || 0), dz = (+b[2] || 0) - (+a[2] || 0);
+    return Math.hypot(dx, dz) < 1e-5 ? null : Math.atan2(dx, dz);
   }
   const scale3 = v => Array.isArray(v) ? [0, 1, 2].map(i => +v[i] || 1) : [+v || 1, +v || 1, +v || 1];
   // the lights a prop can be
@@ -417,6 +431,7 @@ const World = (() => {
     const node = new T.Group(), at = keyed(P, 'at', t, P.at || [0, 0, 0]), turn = keyed(P, 'turn', t, P.turn || [0, 0, 0]), spin = P.spin || [0, 0, 0];
     node.position.set((+at[0] || 0) * M, ((+at[1] || 0) + (+P.bob || 0) * Math.sin(t * 2.1 + (+at[0] || 0))) * M, (+at[2] || 0) * M);
     node.rotation.set(deg((+turn[0] || 0) + (+spin[0] || 0) * t), deg((+turn[1] || 0) + (+spin[1] || 0) * t), deg((+turn[2] || 0) + (+spin[2] || 0) * t), 'YXZ');
+    if (P.face === 'travel') { const h = heading(P, t); if (h != null) node.rotation.y = h + deg(+turn[1] || 0); }
     node.scale.set(...scale3(keyed(P, 'scale', t, P.scale ?? 1)));
     node.userData.partId = P.id;
     if (P.type === 'light') node.add(lightOf(P));
@@ -510,7 +525,66 @@ const World = (() => {
   }
 
   // ----- the camera: the world's own (eye height, looking around, travel, lens), moved by a camera layer -----
-  function camera(t, o) {
+  // the props from the top down to ID, for where it is in the world
+  function chain(list, id, up = []) {
+    for (const P of Array.isArray(list) ? list : []) { if (P?.id === id) return [...up, P]; const f = chain(P?.children, id, [...up, P]); if (f) return f; }
+    return null;
+  }
+  function partMatrix(o, id, tw) {
+    const parts = chain(o.objects, id); if (!parts) return null;
+    const m = new T.Matrix4().makeTranslation(0, -(+o.eye || 1.7) * M, 0), q = new T.Quaternion(), e = new T.Euler();
+    for (const P of parts) {
+      const at = keyed(P, 'at', tw, P.at || [0, 0, 0]), turn = keyed(P, 'turn', tw, P.turn || [0, 0, 0]), spin = P.spin || [0, 0, 0];
+      e.set(deg((+turn[0] || 0) + (+spin[0] || 0) * tw), deg((+turn[1] || 0) + (+spin[1] || 0) * tw), deg((+turn[2] || 0) + (+spin[2] || 0) * tw), 'YXZ');
+      if (P.face === 'travel') { const h = heading(P, tw); if (h != null) e.y = h + deg(+turn[1] || 0); }
+      q.setFromEuler(e);
+      m.multiply(new T.Matrix4().compose(new T.Vector3((+at[0] || 0) * M, ((+at[1] || 0) + (+P.bob || 0) * Math.sin(tw * 2.1 + (+at[0] || 0))) * M, (+at[2] || 0) * M), q,
+        new T.Vector3(...scale3(keyed(P, 'scale', tw, P.scale ?? 1)))));
+    }
+    return { m, P: parts[parts.length - 1] };
+  }
+  // the camera prop the shot list cuts to at T, if any
+  function shotAt(o, t) {
+    const list = Array.isArray(o.shots) ? o.shots : []; let cur = null;
+    for (const s of list) if (+s.t <= t + 1e-6 && (!cur || +s.t >= +cur.t)) cur = s;
+    return cur?.cam ? cur.cam : null;
+  }
+  // a camera prop as the camera: where it stands, what it looks at, its lens, focus and the shake of a hand holding it
+  function propCamera(o, id, tw) {
+    const f = partMatrix(o, id, tw); if (!f || f.P.type !== 'camera') return null;
+    const P = f.P, lens = clamp(+P.lens || 35, 6, 400), cam = new T.PerspectiveCamera(2 * Math.atan(12 / lens) * 180 / Math.PI, S.w / S.h, 5, 4e6);
+    f.m.decompose(cam.position, cam.quaternion, new T.Vector3());
+    const look = P.lookAt ? partMatrix(o, P.lookAt, tw) : null, ahead = new T.Vector3();
+    if (look) { look.m.decompose(ahead, new T.Quaternion(), new T.Vector3()); ahead.y += (+(look.P.size?.[1]) || 0) * M / 2; cam.up.set(0, 1, 0); cam.lookAt(ahead); cam.rotateZ(deg(-(+(P.turn?.[2]) || 0))); }
+    else if (P.face === 'travel') { const h = heading(P, tw); if (h != null) { cam.rotation.set(deg(+(P.turn?.[0]) || 0), h + Math.PI, deg(+(P.turn?.[2]) || 0), 'YXZ'); } }
+    // a hand-held camera wanders a little, the same way every time
+    const sh = clamp(+P.shake || 0, 0, 100) / 100;
+    if (sh) { const n = (a, b, c) => Math.sin(tw * a + b) * .6 + Math.sin(tw * c + b * 2.3) * .4;
+      cam.rotateX(deg(n(1.7, .3, 4.3) * 1.4 * sh)); cam.rotateY(deg(n(1.3, 1.1, 3.7) * 1.6 * sh)); cam.rotateZ(deg(n(.9, 2.1, 2.9) * .8 * sh));
+      cam.position.y += n(2.3, .7, 5.1) * 1.5 * sh; }
+    cam.updateMatrixWorld(); cam.updateProjectionMatrix();
+    const fwd = new T.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+    const focusAt = P.focusOn ? partMatrix(o, P.focusOn, tw) : look;
+    let d = +P.focus > 0 ? +P.focus * M : 1000;
+    if (focusAt) { const p = new T.Vector3(); focusAt.m.decompose(p, new T.Quaternion(), new T.Vector3()); p.y += (+(focusAt.P.size?.[1]) || 0) * M / 2; d = Math.max(10, p.distanceTo(cam.position)); }
+    cam.userData.d = d; cam.userData.focus = d; cam.userData.target = cam.position.clone().addScaledVector(fwd, d);
+    if (+P.dof > 0) cam.userData.dof = +P.dof;
+    cam.userData.prop = id;
+    return cam;
+  }
+  // world time: the timeline's time, slowed or sped by the world's speed (%, keyed for ramps)
+  const paceMemo = new Map();
+  function worldTime(L, t) {
+    if (!L) return t;
+    if (!L.keys?.pace?.length) { const p = L.p?.pace; return t * (p == null || p === '' || !isFinite(+p) ? 100 : Math.max(0, +p)) / 100; }
+    const key = JSON.stringify(L.keys.pace) + '|' + t, hit = paceMemo.get(L.id);
+    if (hit?.key === key) return hit.v;
+    let v = 0; const dt = 1 / 120;
+    for (let x = 0; x < t; x += dt) v += Math.max(0, +val(L, 'pace', Math.min(t, x + dt / 2)) || 0) / 100 * Math.min(dt, t - x);
+    paceMemo.set(L.id, { key, v }); return v;
+  }
+  function camera(t, o, L = null) {
+    const shot = shotAt(o, t); if (shot) { const c = propCamera(o, shot, worldTime(L, t)); if (c) return c; }
     const C = R().cameraState(t), lens = clamp(+o.lens || 35, 6, 400), zoom = Math.max(.05, +C.zoom || 1);
     const half = Math.atan(12 / lens), d0 = (S.h / 2) / Math.tan(half);
     const cam = new T.PerspectiveCamera(2 * Math.atan(Math.tan(half) / zoom) * 180 / Math.PI, S.w / S.h, 5, 4e6);
@@ -604,7 +678,9 @@ const World = (() => {
 
   // Set the world up as it is at T: its sky, light, ground, props and the 3D layers in it. What films it is separate.
   function stage(L, o, t, k = 1) {
-    const Rr = renderer, B = worldFor(L), U = B.uniforms, pal = PALETTE[o.sky] || PALETTE.sunset, cam = camera(t, o), ground = -(+o.eye || 1.7) * M;
+    const Rr = renderer, B = worldFor(L), U = B.uniforms, pal = PALETTE[o.sky] || PALETTE.sunset, cam = camera(t, o, L), ground = -(+o.eye || 1.7) * M;
+    // what moves by itself in the world moves on world time, slowed or sped by its speed
+    const tl = t; t = worldTime(L, t); void tl;
     const sun = sunDir(o), elev = clamp(sun.y * 4 + .15, 0, 1);
     // the sky
     U.uSunDir.value.copy(sun); U.uZen.value.copy(lin(pal.zen)); U.uHor.value.copy(lin(pal.hor)); U.uSun.value.copy(lin(pal.sun)).multiplyScalar(pal.power * (o.sunPower ?? 100) / 100);
@@ -652,12 +728,14 @@ const World = (() => {
     if (B.propsKey !== pkey && B.hold !== true) { if (B.props) B.scene.remove(B.props);
       B.props = buildProps(o.objects, t); B.propsKey = pkey; B.scene.add(B.props); }
     B.props.position.set(0, ground, 0);
+    // guides (camera props) show only in the scene editor's own views
+    B.props.traverse(n => { if (n.userData.guide) n.visible = !!World.showGuides; });
     // the 3D shapes and models above it
     // (kept as they are while the scene editor's gizmo holds one, so it is not swapped from under it)
     if (!(B.hold === true && B.members?.length)) {
       for (const m of B.members || []) { B.scene.remove(m); m.userData.dispose?.(); }
       B.members = [];
-      for (const M2 of members(L, t)) { const os = state(M2, t), obj = R().object(M2, os, t, k, drawContent); if (!obj) continue;
+      for (const M2 of members(L, tl)) { const os = state(M2, tl), obj = R().object(M2, os, tl, k, drawContent); if (!obj) continue;
         obj.userData.layerId = M2.id;
         obj.traverse(x => { if (x.isMesh) { x.castShadow = x.receiveShadow = true; } }); B.scene.add(obj); B.members.push(obj); }
     }
@@ -670,10 +748,39 @@ const World = (() => {
     if (Rr.domElement.width !== W || Rr.domElement.height !== H) Rr.setSize(W, H, false);
     const { B, cam } = stage(L, o, t, k);
     // a frame already finished another way (path traced, for an export)
-    const done = World.finalRender?.(L, o, t); if (done) { c.drawImage(done, 0, 0, S.w, S.h); return true; }
-    shoot(B, cam, o, t, W, H);
-    c.drawImage(Rr.domElement, 0, 0, S.w, S.h);
+    const done = finished.get(L.id);
+    if (done && done.key === frameKey(L, o, t)) c.drawImage(done.canvas, 0, 0, S.w, S.h);
+    else { shoot(B, cam, o, t, W, H); c.drawImage(Rr.domElement, 0, 0, S.w, S.h); }
+    bars(c, o);
     return true;
+  }
+  // black bars top and bottom, for a wider picture than the canvas
+  function bars(c, o) {
+    const r = +o.letterbox; if (!(r > 0) || S.w / S.h >= r) return;
+    const h = (S.h - S.w / r) / 2; c.save(); c.globalAlpha = 1; c.filter = 'none'; c.fillStyle = '#000'; c.fillRect(0, 0, S.w, h); c.fillRect(0, S.h - h, S.w, h); c.restore();
+  }
+  // Frames finished before they are kept, for an export (or an agent's look): path traced, and with motion blur, a
+  // frame made of moments across the shutter's time, laid over each other.
+  const finished = new Map();
+  const frameKey = (L, o, t) => `${t}|${JSON.stringify(o)}|${World.version}`;
+  async function prepareFrame(t) {
+    for (const L of S.layers) {
+      if (L.type !== 'world' || L.hidden || !visibleAt(L, t)) continue;
+      const o = state(L, t), path = o.render === 'path' && World.traceFrame, shutter = clamp(+o.shutter || 0, 0, 360);
+      if (!path && !shutter) { finished.delete(L.id); continue; }
+      if (!gl()) return;
+      const W = S.w, H = S.h, n = shutter ? (path ? 4 : 10) : 1, fps = (typeof exportOpts !== 'undefined' && +exportOpts.fps) || 30;
+      const cv = finished.get(L.id)?.canvas || document.createElement('canvas'); cv.width = W; cv.height = H; const g = cv.getContext('2d');
+      for (let i = 0; i < n; i++) {
+        const ts = n === 1 ? t : Math.max(0, t + ((i + .5) / n - .5) * (shutter / 360) / fps), os = n === 1 ? o : state(L, ts);
+        if (renderer.domElement.width !== W || renderer.domElement.height !== H) renderer.setSize(W, H, false);
+        const st = stage(L, os, ts);
+        if (path) await World.traceFrame(L, os, ts, st.B, st.cam, W, H, Math.max(1, Math.round((+os.samples || 128) / n)));
+        else { shoot(st.B, st.cam, os, ts, W, H); await new Promise(r => setTimeout(r, 0)); }
+        g.globalAlpha = 1 / (i + 1); g.drawImage(renderer.domElement, 0, 0);
+      }
+      finished.set(L.id, { key: frameKey(L, o, t), canvas: cv });
+    }
   }
   // film the staged world through its lens, into the renderer's canvas
   function shoot(B, cam, o, t, W, H) {
@@ -681,15 +788,16 @@ const World = (() => {
     Rr.toneMappingExposure = Math.pow(2, +o.exposure || 0);
     const P = lens(W, H, B.scene, cam);
     P.ao.enabled = o.ao > 0; if (P.ao.enabled) { P.ao.blendIntensity = clamp(o.ao / 100, 0, 1); P.ao.updateGtaoMaterial?.({ radius: 60, distanceExponent: 1, thickness: 40, scale: 1 }); }
-    const focus = o.focus > 0 ? o.focus * M : cam.userData.d;
-    P.bokeh.enabled = o.dof > 0; P.bokeh.uniforms.focus.value = focus; P.bokeh.uniforms.aperture.value = clamp(o.dof / 100, 0, 2) * 3e-5;
-    P.bokeh.uniforms.maxblur.value = .004 + .016 * clamp(o.dof / 100, 0, 1.5);
+    // a camera prop's own focus and depth of field, else the world's
+    const dof = cam.userData.dof ?? o.dof, focus = cam.userData.focus ?? (o.focus > 0 ? o.focus * M : cam.userData.d);
+    P.bokeh.enabled = dof > 0; P.bokeh.uniforms.focus.value = focus; P.bokeh.uniforms.aperture.value = clamp(dof / 100, 0, 2) * 3e-5;
+    P.bokeh.uniforms.maxblur.value = .004 + .016 * clamp(dof / 100, 0, 1.5);
     P.bloom.enabled = o.bloom > 0; P.bloom.strength = clamp(o.bloom / 100, 0, 3) * .6; P.bloom.radius = .55; P.bloom.threshold = 1.1;
     const fu = P.film.uniforms; fu.uTime.value = t; fu.uGrain.value = clamp(o.grain / 100, 0, 2); fu.uFringe.value = clamp(o.fringe / 100, 0, 3); fu.uAspect.value = W / H;
     composer.render();
   }
   // the camera that films a 3D layer standing in a world, for where it lands on the canvas
-  R3D.worldCamera = (L, t) => { const W = worldOf(L, t); return W ? camera(t, state(W, t)) : null; };
+  R3D.worldCamera = (L, t) => { const W = worldOf(L, t); return W ? camera(t, state(W, t), W) : null; };
 
   // ----- scenes to start from -----
   // Each sets a world's settings and props, and keys a slow camera move across the composition.
@@ -750,9 +858,9 @@ const World = (() => {
       keys: d => ({ heading: [[0, -4, 'sineInOut'], [d, 4]] }) },
   };
 
-  const World = { RENDERS, SKIES, GROUNDS, FIELDS, DEFAULTS, LABELS, COLORS, NUMBERS, GROUPS, STEP, PRESETS, PARTS, FINISHES: Object.keys(FINISHES), FINISH_LOOKS: FINISHES,
+  const World = { LETTERBOXES, RENDERS, SKIES, GROUNDS, FIELDS, DEFAULTS, LABELS, COLORS, NUMBERS, GROUPS, STEP, PRESETS, PARTS, FINISHES: Object.keys(FINISHES), FINISH_LOOKS: FINISHES,
     shows, draw, stage, shoot, worldOf, camera, gl, ensureIds, findPart, finish, custom, M, lin, deg, partGeometry,
-    get renderer() { return renderer; }, get available() { return !!T; }, finalRender: null,
+    get renderer() { return renderer; }, get available() { return !!T; }, prepareFrame, bars, worldTime, propCamera, shotAt, partMatrix,
     // bumped when something props are built from finishes loading (a model, a texture), so they are built again
     version: 0 };
   return World;

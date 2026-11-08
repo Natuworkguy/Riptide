@@ -90,7 +90,7 @@ const Library = (() => {
     return true;
   };
   // a model prop: the model at its own size (glTF is in metres), standing on the ground where it is put
-  World.custom.model = P => {
+  World.custom.model = (P, t = 0) => {
     const a = S.assets?.[P.asset]; if (!a?.src) return null;
     let c = modelCache.get(P.asset);
     if (!c) { c = {}; modelCache.set(P.asset, c);
@@ -99,14 +99,20 @@ const Library = (() => {
         let g;
         if (a.format === 'obj') { g = new T.OBJLoader().parse(new TextDecoder().decode(buf));
           g.traverse(m => { if (m.isMesh) { if (!m.geometry.attributes.normal) m.geometry.computeVertexNormals(); m.material = World.finish('plastic', '#b8b8b8'); } }); }
-        else g = (await new T.GLTFLoader().parseAsync(buf, '')).scene;
+        else { const gl = await new T.GLTFLoader().parseAsync(buf, ''); g = gl.scene; c.clips = gl.animations || []; }
         const b = new T.Box3().setFromObject(g), ctr = b.getCenter(new T.Vector3());
         g.position.set(-ctr.x, -b.min.y, -ctr.z); const holder = new T.Group(); holder.add(g); c.group = holder; loaded();
       })().catch(() => { c.failed = true; status(`Could not read the model ${a.name}`); });
     }
     if (!c.group) return null;
-    const g = c.group.clone(true); g.scale.setScalar(M); return g;
+    // a rigged model is copied with its skeleton, and plays the clip picked, at the world's time
+    const g = T.SkeletonUtils.clone(c.group); g.scale.setScalar(M);
+    const clip = P.clip && c.clips?.find(x => x.name === P.clip);
+    if (clip) { const mix = new T.AnimationMixer(g.children[0]); mix.clipAction(clip).play();
+      const len = clip.duration || 1, at = t * (+P.clipSpeed || 1) + (+P.clipOffset || 0); mix.setTime(P.clipOnce ? Math.min(at, len - 1e-3) : ((at % len) + len) % len); }
+    return g;
   };
+  World.clipsOf = id => modelCache.get(id)?.clips?.map(x => x.name) || [];
   World.PARTS.push('model');
 
   // ----- in the scene editor: an Import menu, and files dropped on the viewport -----

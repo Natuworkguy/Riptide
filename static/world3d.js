@@ -440,7 +440,7 @@ const World = (() => {
       if (P.type === 'label') { const key = `${P.text}|${P.color}|${P.background}`;
         mat = labelMats.get(key) || new T.MeshBasicMaterial({ map: labelTexture(P.text, P.color, P.background) }); labelMats.set(key, mat); }
       else mat = finish(P.finish, P.color, P.glow, P);
-      const g = custom[P.type] ? custom[P.type](P) : partGeometry(P);
+      const g = custom[P.type] ? custom[P.type](P, t) : partGeometry(P);
       if (g?.isObject3D) { g.traverse(x => { if (x.isMesh) { x.castShadow = x.receiveShadow = true; x.userData.partId = P.id; } }); node.add(g); }
       else if (g) { const mesh = new T.Mesh(g, mat); mesh.scale.setScalar(M); mesh.castShadow = mesh.receiveShadow = P.type !== 'label'; mesh.userData.partId = P.id; node.add(mesh); }
     }
@@ -460,7 +460,8 @@ const World = (() => {
       const f = findPart(P?.children, id, P); if (f) return f; }
     return null;
   }
-  const animated = list => JSON.stringify(list || []).match(/"(keys|spin|bob)"/);
+  // props that move by themselves: keyed, spinning, bobbing, playing a clip, or alive (cars, people, crowds, effects)
+  const animated = list => JSON.stringify(list || []).match(/"(keys|spin|bob|clip)"|"type":"(car|person|crowd|fx|rain)"/);
   function buildProps(list, t) {
     const root = new T.Group();
     for (const P of Array.isArray(list) ? list : []) { const n = buildPart(P, t); if (n) root.add(n); }
@@ -859,7 +860,7 @@ const World = (() => {
   };
 
   const World = { LETTERBOXES, RENDERS, SKIES, GROUNDS, FIELDS, DEFAULTS, LABELS, COLORS, NUMBERS, GROUPS, STEP, PRESETS, PARTS, FINISHES: Object.keys(FINISHES), FINISH_LOOKS: FINISHES,
-    shows, draw, stage, shoot, worldOf, camera, gl, ensureIds, findPart, finish, custom, M, lin, deg, partGeometry,
+    shows, draw, stage, shoot, worldOf, camera, gl, ensureIds, findPart, finish, custom, M, lin, deg, partGeometry, keyed, heading,
     get renderer() { return renderer; }, get available() { return !!T; }, prepareFrame, bars, worldTime, propCamera, shotAt, partMatrix,
     // bumped when something props are built from finishes loading (a model, a texture), so they are built again
     version: 0 };

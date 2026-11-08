@@ -22,21 +22,21 @@ const World = (() => {
     night: { zen: '#03050d', hor: '#16203d', sun: '#a9bbff', lit: '#3a4466', shade: '#0b0f1c', disk: .6, power: .35 },
     studio: { zen: '#25272d', hor: '#5b5d66', sun: '#ffffff', lit: '#000000', shade: '#000000', disk: 0, power: 1.8 },
   };
-  const FIELDS = ['sky', 'sunEl', 'sunAz', 'sunPower', 'clouds', 'wind',
-    'ground', 'groundColor', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH', 'sway', 'swayLoop',
+  const FIELDS = ['sky', 'hdri', 'hdriTurn', 'hdriPower', 'sunEl', 'sunAz', 'sunPower', 'clouds', 'wind',
+    'ground', 'groundColor', 'floorFinish', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH', 'sway', 'swayLoop',
     'fog', 'dust', 'eye', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao', 'objects'];
-  const DEFAULTS = { sky: 'sunset', sunEl: 8, sunAz: 10, sunPower: 100, clouds: 45, wind: 4, ground: 'ocean', groundColor: '#8a6a45',
+  const DEFAULTS = { hdri: '', hdriTurn: 0, hdriPower: 100, floorFinish: '', sky: 'sunset', sunEl: 8, sunAz: 10, sunPower: 100, clouds: 45, wind: 4, ground: 'ocean', groundColor: '#8a6a45',
     water: '#0b4a46', waves: .6, chop: 50, swell: 0, curl: .5, waveDist: 45, waveAngle: -20, plants: '#c09a48', grass: 60, grassH: .9, sway: 3, swayLoop: false,
     fog: 8, dust: 0, eye: 1.7, heading: 0, pitch: 0, travel: 0, lens: 35, focus: 0, dof: 0, exposure: 0, bloom: 30, grain: 15, fringe: 10, ao: 0 };
-  const LABELS = { sky: 'Sky', sunEl: 'Sun height°', sunAz: 'Sun around°', sunPower: 'Sun %', clouds: 'Clouds %', wind: 'Wind m/s',
+  const LABELS = { hdri: 'Sky photo', hdriTurn: 'Photo turn°', hdriPower: 'Photo light %', floorFinish: 'Ground finish', sky: 'Sky', sunEl: 'Sun height°', sunAz: 'Sun around°', sunPower: 'Sun %', clouds: 'Clouds %', wind: 'Wind m/s',
     ground: 'Ground', groundColor: 'Ground colour', water: 'Water', waves: 'Waves m', chop: 'Chop %', swell: 'Breaker m', curl: 'Curl',
     waveDist: 'Breaker at m', waveAngle: 'Breaker turn°', plants: 'Plants', grass: 'Plants %', grassH: 'Plant height m', sway: 'Sway m/s', swayLoop: 'Loop sway',
     fog: 'Fog', dust: 'Dust', eye: 'Eye height m', heading: 'Look around°', pitch: 'Look up°', travel: 'Travel m', lens: 'Lens mm',
     focus: 'Focus m', dof: 'Depth of field', exposure: 'Exposure', bloom: 'Bloom', grain: 'Grain', fringe: 'Fringe', ao: 'Contact shade' };
   const COLORS = ['groundColor', 'water', 'plants'];
-  const NUMBERS = FIELDS.filter(k => !['sky', 'ground', 'objects', 'swayLoop', ...COLORS].includes(k));
-  const GROUPS = [['World', ['sky', 'sunEl', 'sunAz', 'sunPower', 'clouds', 'wind', 'fog', 'dust']],
-    ['Ground', ['ground', 'groundColor', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH', 'sway', 'swayLoop']],
+  const NUMBERS = FIELDS.filter(k => !['sky', 'ground', 'objects', 'swayLoop', 'hdri', 'floorFinish', ...COLORS].includes(k));
+  const GROUPS = [['World', ['hdri', 'hdriTurn', 'hdriPower', 'sky', 'sunEl', 'sunAz', 'sunPower', 'clouds', 'wind', 'fog', 'dust']],
+    ['Ground', ['ground', 'groundColor', 'floorFinish', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH', 'sway', 'swayLoop']],
     ['Lens', ['eye', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao']]];
   const STEP = { waves: .05, curl: .01, grassH: .05, eye: .05, exposure: .05 };
   const deg = v => (+v || 0) * Math.PI / 180;
@@ -48,7 +48,9 @@ const World = (() => {
     if (['curl', 'waveDist', 'waveAngle'].includes(k)) return o.ground === 'ocean' && (o.swell > 0 || keyed);
     if (['plants', 'grass', 'grassH', 'sway', 'swayLoop'].includes(k)) return o.ground === 'field';
     if (k === 'groundColor') return o.ground !== 'ocean' && o.ground !== 'none';
-    if (k === 'clouds') return o.sky !== 'studio';
+    if (k === 'clouds') return o.sky !== 'studio' && !o.hdri;
+    if (k === 'hdriTurn' || k === 'hdriPower') return !!o.hdri;
+    if (k === 'floorFinish') return o.ground === 'floor' || o.ground === 'desert' || o.ground === 'field';
     if (k === 'focus') return o.dof > 0 || keyed;
     return true;
   }
@@ -324,7 +326,8 @@ const World = (() => {
     glow: { color: '#ff3b30', emissive: 3 },
   };
   const matCache = new Map();
-  function finish(name, color, emissive) {
+  function finish(name, color, emissive, P) {
+    if (typeof name === 'string' && name.startsWith('lib:') && World.finishHook) return World.finishHook(name.slice(4), color, P, emissive);
     const key = `${name}|${color || ''}|${emissive ?? ''}`; if (matCache.has(key)) return matCache.get(key);
     const F = FINISHES[name] || FINISHES.plastic, c = lin(color || F.color);
     const m = new T.MeshPhysicalMaterial({ color: c, metalness: F.metalness ?? 0, roughness: F.roughness ?? .5, clearcoat: F.clearcoat || 0,
@@ -414,7 +417,7 @@ const World = (() => {
       let mat;
       if (P.type === 'label') { const key = `${P.text}|${P.color}|${P.background}`;
         mat = labelMats.get(key) || new T.MeshBasicMaterial({ map: labelTexture(P.text, P.color, P.background) }); labelMats.set(key, mat); }
-      else mat = finish(P.finish, P.color, P.glow);
+      else mat = finish(P.finish, P.color, P.glow, P);
       const g = custom[P.type] ? custom[P.type](P) : partGeometry(P);
       if (g?.isObject3D) { g.traverse(x => { if (x.isMesh) { x.castShadow = x.receiveShadow = true; x.userData.partId = P.id; } }); node.add(g); }
       else if (g) { const mesh = new T.Mesh(g, mat); mesh.scale.setScalar(M); mesh.castShadow = mesh.receiveShadow = P.type !== 'label'; mesh.userData.partId = P.id; node.add(mesh); }
@@ -468,7 +471,7 @@ const World = (() => {
   }
 
   // ----- the ground under everything but the ocean -----
-  function groundMesh(kind, color) {
+  function groundMesh(kind, color, libFinish) {
     const size = 8000 * M, n = kind === 'desert' ? 400 : 2, g = new T.PlaneGeometry(size, size, n, n); g.rotateX(-Math.PI / 2);
     if (kind === 'desert') { const p = g.attributes.position, rand = rng(11);
       const ph = [rand() * 9, rand() * 9, rand() * 9];
@@ -478,7 +481,8 @@ const World = (() => {
       g.computeVertexNormals(); }
     const pt = kind === 'desert' ? 'sand' : kind === 'floor' ? 'floor' : 'soil', rep = kind === 'floor' ? 2000 : 3000;
     const mat = new T.MeshStandardMaterial({ color: lin(color), roughness: kind === 'floor' ? .45 : .95, metalness: 0, map: tex(pt, rep, true), bumpMap: tex(pt, rep), bumpScale: kind === 'floor' ? .2 : 1.2 });
-    const m = new T.Mesh(g, mat); m.receiveShadow = true; m.frustumCulled = false; return m;
+    const lib = libFinish && World.finishHook ? World.finishHook(libFinish.replace(/^lib:/, ''), null, { size: [size / M, 1, size / M], tile: 2, ground: true }) : null;
+    const m = new T.Mesh(g, lib || mat); m.receiveShadow = true; m.frustumCulled = false; return m;
   }
 
   // ----- dust in the air, catching the light -----
@@ -608,13 +612,16 @@ const World = (() => {
     B.sun.position.copy(stage).addScaledVector(sun, 20000); B.sun.target.position.copy(stage); B.sun.target.updateMatrixWorld();
     B.hemi.color.copy(lin(pal.zen)).lerp(lin(pal.hor), .5); B.hemi.groundColor.copy(lin(o.ground === 'ocean' ? o.water : o.groundColor)).multiplyScalar(.6); B.hemi.intensity = .5 + .4 * pal.power;
     B.scene.environment = environment(B, o); B.scene.environmentIntensity = .55 + .45 * pal.power;
+    // a sky photo (an HDRI from the library) lights and backs the world instead
+    const photo = o.hdri && World.hdriHook ? World.hdriHook(B, o) : false;
+    B.sky.visible = !photo; if (!photo) B.scene.background = null;
     const fogC = lin(pal.hor).lerp(lin(pal.sun), .15);
     B.scene.fog = o.fog > 0 ? new T.FogExp2(fogC, (+o.fog / 100) * .02 / M) : null;
     // the ground
     rebuild(B, 'ocean', o.ground === 'ocean' ? 'ocean' : null, () => oceanMesh(U));
     // a field far off is the colour of what grows in it
     const soil = o.ground === 'field' ? '#' + lin(o.groundColor).lerp(lin(o.plants), .45).getHexString(T.SRGBColorSpace) : o.groundColor;
-    rebuild(B, 'land', ['field', 'desert', 'floor'].includes(o.ground) ? o.ground + soil : null, () => groundMesh(o.ground, soil));
+    rebuild(B, 'land', ['field', 'desert', 'floor'].includes(o.ground) ? o.ground + soil + (o.floorFinish || '') : null, () => groundMesh(o.ground, soil, o.floorFinish));
     if (B.land) B.land.position.set(0, ground, 0);
     const count = o.ground === 'field' ? Math.round(clamp(+o.grass, 0, 100) * 900) : 0;
     const wheat = rebuild(B, 'wheat', count ? [count, (+o.grassH).toFixed(2), o.plants].join('|') : null, () => fieldMesh(count, Math.max(.05, +o.grassH || .9), o.plants));
@@ -634,7 +641,7 @@ const World = (() => {
     if (dust) { const u = dust.material.uniforms; u.uTime.value = t; u.uWind.value = +o.wind || 0; u.uCenter.value.set(stage.x, ground, stage.z);
       u.uCol.value.copy(lin(pal.sun)).multiplyScalar(.6 * elev + .1); u.uSize.value = 1.4; }
     // props: built again when they change, or every frame when they move with time; not while one is held
-    const pkey = JSON.stringify(o.objects || []) + (animated(o.objects) ? '@' + t : '');
+    const pkey = JSON.stringify(o.objects || []) + (animated(o.objects) ? '@' + t : '') + '#' + World.version;
     if (B.propsKey !== pkey && B.hold !== true) { if (B.props) B.scene.remove(B.props);
       B.props = buildProps(o.objects, t); B.propsKey = pkey; B.scene.add(B.props); }
     B.props.position.set(0, ground, 0);
@@ -737,6 +744,8 @@ const World = (() => {
 
   const World = { SKIES, GROUNDS, FIELDS, DEFAULTS, LABELS, COLORS, NUMBERS, GROUPS, STEP, PRESETS, PARTS, FINISHES: Object.keys(FINISHES), FINISH_LOOKS: FINISHES,
     shows, draw, stage, shoot, worldOf, camera, gl, ensureIds, findPart, finish, custom, M, lin, deg,
-    get renderer() { return renderer; }, get available() { return !!T; }, finalRender: null };
+    get renderer() { return renderer; }, get available() { return !!T; }, finalRender: null,
+    // bumped when something props are built from finishes loading (a model, a texture), so they are built again
+    version: 0 };
   return World;
 })();

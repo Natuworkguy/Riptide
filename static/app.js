@@ -1216,13 +1216,15 @@ function renderProps() {
         else if (k === 'align') field = `<button class="selectbtn" data-menu="align"><span>${(TEXT_ALIGNS.find(a => a[0] === v) || TEXT_ALIGNS[1])[1]}</span>${ICON.chev}</button>`;
         else if (k === 'tcase') field = `<button class="selectbtn" data-menu="tcase"><span>${(TEXT_CASES.find(a => a[0] === v) || TEXT_CASES[0])[1]}</span>${ICON.chev}</button>`;
         else if (k === 'three') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="three" title="${v ? 'Make it flat again' : 'Turn it in 3D, push it back, and let a camera move around it'}"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
+        else if (k === 'hdri' || k === 'floorFinish') { const a = S.assets?.[String(v || '').replace(/^lib:/, '')];
+          field = `<button class="selectbtn" data-menu="${k}"><span>${a ? esc(a.name) : k === 'hdri' ? 'None: the sky above' : 'Its own'}</span>${ICON.chev}</button>`; }
         else if (k === 'sky' || k === 'ground') field = `<button class="selectbtn" data-menu="${k}"><span>${((k === 'sky' ? World.SKIES : World.GROUNDS).find(x => x[0] === v) || ['', v])[1]}</span>${ICON.chev}</button>`;
         else if (k === 'shape') field = `<button class="selectbtn" data-menu="shape"><span>${R3D.SHAPES.find(x => x[0] === v)?.[1] || v}</span>${ICON.chev}</button>`;
         else if (k === 'material') field = `<button class="selectbtn" data-menu="material"><span>${R3D.MATERIALS.find(x => x[0] === v)?.[1] || v}</span>${ICON.chev}</button>`;
         else if (k === 'phys') field = `<button class="selectbtn" data-menu="phys"><span>${(Physics.KINDS.find(x => x[0] === (v || 'none')) || Physics.KINDS[0])[1]}</span>${ICON.chev}</button>`;
         else if (k === 'walls') field = `<button class="selectbtn" data-menu="walls"><span>${(Physics.WALLS.find(x => x[0] === v) || Physics.WALLS[0])[1]}</span>${ICON.chev}</button>`;
         else field = `<input data-p="${k}" value="${fmt(v)}" inputmode="decimal" spellcheck="false"${isFixed ? ' disabled' : ''}>`;
-        const wide = ['fill', 'fill2', ...MIDS, 'grad', 'stroke', 'text', 'weight', 'font', 'italic', 'three', 'shape', 'material', 'phys', 'walls', 'sky', 'ground', ...World.COLORS, 'mask', 'matte', 'lut', 'keyColor', 'chroma', 'minv'].includes(k) ? ' wide' : '';
+        const wide = ['fill', 'fill2', ...MIDS, 'grad', 'stroke', 'text', 'weight', 'font', 'italic', 'three', 'shape', 'material', 'phys', 'walls', 'sky', 'ground', 'hdri', 'floorFinish', ...World.COLORS, 'mask', 'matte', 'lut', 'keyColor', 'chroma', 'minv'].includes(k) ? ' wide' : '';
         // Keeping the proportions means nothing once either side is locked.
         const lock = k === 'w' && list.includes('h') && !L.fix?.w && !L.fix?.h ? `<button class="ib aspect ${aspectLocked(L) ? 'on' : ''}" data-cmd="aspect" title="${aspectLocked(L) ? 'Aspect ratio locked: click to unlock' : 'Lock aspect ratio'}">${aspectLocked(L) ? ICON.link : ICON.unlink}</button>` : '';
         const drop = MIDS.includes(k) ? `<button class="ib" data-cmd="delstop" data-k="${k}" title="Take this colour out of the gradient">${ICON.trash}</button>` : '';
@@ -1437,6 +1439,11 @@ Pn.addEventListener('click', e => {
   else if (t.dataset.menu === 'sky' || t.dataset.menu === 'ground') { const k = t.dataset.menu;
     UI.menu(t, (k === 'sky' ? World.SKIES : World.GROUNDS).map(([value, label]) => ({ value, label })), L.p[k], v => { L.p[k] = v; refresh(); }); }
   else if (t.dataset.cmd === 'editscene') SceneEd.open(L);
+  else if (t.dataset.menu === 'hdri' || t.dataset.menu === 'floorFinish') { const k = t.dataset.menu, kind = k === 'hdri' ? 'hdri' : 'material';
+    const have = Object.entries(S.assets || {}).filter(([, a]) => a.kind === kind).map(([id, a]) => ({ value: k === 'hdri' ? id : 'lib:' + id, label: a.name }));
+    UI.menu(t, [{ value: '', label: k === 'hdri' ? 'None: the sky above' : 'Its own' }, ...have,
+      { value: '__import', label: k === 'hdri' ? 'Import a sky photo…' : 'Import a material from images…', hint: k === 'hdri' ? '.hdr' : 'colour, normal, roughness, AO', group: 'Import' }], L.p[k] || '',
+      v => { if (v === '__import') return Library.choose(L, k === 'hdri' ? '.hdr' : 'image/*'); L.p[k] = v; refresh(); }); }
   else if (t.dataset.menu === 'worldscene')
     UI.menu(t, Object.entries(World.PRESETS).map(([value, P]) => ({ value, label: P.label, hint: P.hint })), null, v => applyWorld(L, v));
   else if (t.dataset.menu === 'material')
@@ -3521,7 +3528,8 @@ function addImageLayer(id, x = S.w / 2, y = S.h / 2) {
 }
 let assetSig = '';
 function renderAssets() {
-  const ids = Object.keys(S.assets || {}), sids = Object.keys(S.sounds || {}).filter(k => SND[k]), usedS = new Set(allClips().map(([, c]) => c.sound));
+  // 3D worlds' skies and materials live in their scene's library, not here
+  const ids = Object.keys(S.assets || {}).filter(id => !['hdri', 'material'].includes(S.assets[id].kind)), sids = Object.keys(S.sounds || {}).filter(k => SND[k]), usedS = new Set(allClips().map(([, c]) => c.sound));
   const sig = ids.join() + '|' + S.layers.filter(l => l.p.asset).map(l => l.p.asset).join() + '|' + sids.join() + '|' + [...usedS].join();
   if (sig === assetSig) return; assetSig = sig;
   $('#assetCount').textContent = ids.length + sids.length || '';

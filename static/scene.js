@@ -29,7 +29,7 @@ const SceneEd = (() => {
   let gnd = 0, snap = true;
   const found = () => selId && !isLay(selId) ? World.findPart(objs(), selId) : null;
   const sel = () => found()?.P || null;
-  const nameOf = P => P.name || (P.type === 'light' ? `${P.light === 'spot' ? 'Spot' : 'Point'} light` : P.type === 'truss' ? 'Lattice' : P.type === 'label' ? 'Screen'
+  const nameOf = P => P.name || (P.type === 'model' ? 'Model' : P.type === 'light' ? `${P.light === 'spot' ? 'Spot' : 'Point'} light` : P.type === 'truss' ? 'Lattice' : P.type === 'label' ? 'Screen'
     : (P.type || 'group')[0].toUpperCase() + (P.type || 'group').slice(1));
   const touch = (record = false) => { dirty = true; if (record) { refresh(); } };
 
@@ -268,7 +268,7 @@ const SceneEd = (() => {
     const size = P.size || [1, 1, 1], t = P.type || 'group';
     let h = `<div class="hd">${esc(nameOf(P))}</div><label class="f wide"><span>Name</span><input data-k="name" value="${esc(P.name || '')}" placeholder="${esc(nameOf(P))}"></label>`;
     h += vec('at', at, 'Position m', .01) + vec('turn', turn, 'Turn °', 1) + vec('scale', s3, 'Scale', .01);
-    if (t !== 'group' && t !== 'light') {
+    if (t !== 'group' && t !== 'light' && t !== 'model') {
       const lab = t === 'cylinder' || t === 'cone' ? ['Diameter', 'Height', ''] : t === 'torus' ? ['Ring', '', 'Tube'] : t === 'label' ? ['Width', 'Height', ''] : t === 'capsule' ? ['Diameter', 'Length', ''] : ['Width', 'Height', 'Depth'];
       h += `<div class="vec"><div class="vh"><span>Size m</span></div><div class="v3">${[0, 1, 2].map(i => lab[i] ? `<input data-k="size" data-i="${i}" type="number" step=".01" title="${lab[i]}" value="${r3(+size[i] || 1)}">` : '<span></span>').join('')}</div></div>`;
     }
@@ -278,7 +278,7 @@ const SceneEd = (() => {
       <label class="f"><span>Ink</span><input data-k="color" type="color" value="${P.color || '#f2f2f2'}"></label><label class="f"><span>Back</span><input data-k="background" type="color" value="${P.background || '#050505'}"></label>`;
     if (t === 'light') h += `<label class="f"><span>Kind</span><select data-k="light"><option value="point"${P.light !== 'spot' ? ' selected' : ''}>Point</option><option value="spot"${P.light === 'spot' ? ' selected' : ''}>Spot</option></select></label>
       <label class="f"><span>Colour</span><input data-k="color" type="color" value="${P.color || '#ffffff'}"></label>${num('power', P.power ?? 100, 5, 'Power')}${P.light === 'spot' ? num('angle', P.angle ?? 35, 1, 'Cone °') + num('soft', P.soft ?? 40, 5, 'Soft %') : ''}`;
-    if (t !== 'group' && t !== 'light' && t !== 'label') {
+    if (t !== 'group' && t !== 'light' && t !== 'label' && t !== 'model') {
       const fins = [...World.FINISHES, ...(World.extraFinishes?.() || [])];
       h += `<label class="f wide"><span>Finish</span><select data-k="finish">${fins.map(f => `<option value="${esc(f)}"${(P.finish || 'plastic') === f ? ' selected' : ''}>${esc(World.finishName?.(f) || f)}</option>`).join('')}</select></label>
         <label class="f"><span>Colour</span><input data-k="color" type="color" value="${P.color || '#' + World.lin(World.FINISH_LOOKS[P.finish || 'plastic']?.color || '#cccccc').getHexString(T.SRGBColorSpace)}"></label>${num('glow', P.glow || 0, .1, 'Glow')}`;
@@ -374,5 +374,7 @@ const SceneEd = (() => {
   function stopPlay() { playing = false; if (wrap) footer(); render(); }
 
   return { open, close, get layer() { return L; }, get open_() { return !!L; }, redraw() { dirty = true; }, extras, refreshUI() { if (L) { renderTree(); renderInsp(); dirty = true; } },
-    select, get selected() { return sel(); } };
+    select, get selected() { return sel(); },
+    // where a new prop goes: on the ground, where the view looks
+    spot() { const t = orbit?.target; return t ? [r3(t.x / M), 0, r3(t.z / M)] : [0, 0, 0]; } };
 })();

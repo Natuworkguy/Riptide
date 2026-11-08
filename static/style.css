@@ -615,7 +615,7 @@ body.recording .checker{box-shadow:0 0 0 2px #ff4d4f}
 canvas.graph{display:block;cursor:default}
 
 /* ---------- the scene editor ---------- */
-.sced{position:fixed;inset:0;z-index:60;display:grid;grid-template:44px 1fr 40px/220px 1fr 280px;background:var(--bg);color:var(--text)}
+.sced{position:fixed;inset:0;z-index:160;display:grid;grid-template:44px 1fr 40px/220px 1fr 280px;background:var(--bg);color:var(--text)}
 .sced[hidden]{display:none}
 .sced header{grid-column:1/-1;display:flex;align-items:center;gap:8px;padding:0 10px;border-bottom:1px solid var(--line);background:var(--panel)}
 .sced header .ttl{font-weight:600}.sced header .nm{color:var(--dim);margin-right:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}

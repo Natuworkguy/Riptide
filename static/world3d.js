@@ -746,7 +746,7 @@ const World = (() => {
   };
 
   const World = { RENDERS, SKIES, GROUNDS, FIELDS, DEFAULTS, LABELS, COLORS, NUMBERS, GROUPS, STEP, PRESETS, PARTS, FINISHES: Object.keys(FINISHES), FINISH_LOOKS: FINISHES,
-    shows, draw, stage, shoot, worldOf, camera, gl, ensureIds, findPart, finish, custom, M, lin, deg,
+    shows, draw, stage, shoot, worldOf, camera, gl, ensureIds, findPart, finish, custom, M, lin, deg, partGeometry,
     get renderer() { return renderer; }, get available() { return !!T; }, finalRender: null,
     // bumped when something props are built from finishes loading (a model, a texture), so they are built again
     version: 0 };

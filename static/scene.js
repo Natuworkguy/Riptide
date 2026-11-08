@@ -62,6 +62,11 @@ const SceneEd = (() => {
     wrap.querySelector('.insp').addEventListener('change', onInsp);
     wrap.querySelector('.insp').addEventListener('input', e => { if (e.target.type === 'color' || e.target.type === 'range') onInsp(e, false); });
     let down = null;
+    // a tool (editing a mesh, sculpting) takes the pointer first when it wants it
+    const hook = (type, e) => extras.some(x => x.pointer?.(type, e));
+    canvas.addEventListener('pointerdown', e => { if (hook('down', e)) { down = null; e.stopImmediatePropagation(); return; } }, true);
+    canvas.addEventListener('pointermove', e => { if (hook('move', e)) e.stopImmediatePropagation(); }, true);
+    canvas.addEventListener('pointerup', e => { if (hook('up', e)) { down = null; e.stopImmediatePropagation(); } }, true);
     canvas.addEventListener('pointerdown', e => { down = [e.clientX, e.clientY];
       if (view === 'ghost') { ghost.look = [e.clientX, e.clientY]; canvas.setPointerCapture(e.pointerId); } });
     canvas.addEventListener('pointermove', e => { if (view !== 'ghost' || !ghost.look) return;
@@ -135,11 +140,12 @@ const SceneEd = (() => {
     if (film) camera = staged.cam; else { cam.aspect = W / H; cam.updateProjectionMatrix(); }
     // what is picked: the gizmo on it and a box round it, in the free view
     const node = selId ? findNode(selId) : null;
-    if (view === 'ghost') { if (gizmo.object) gizmo.detach(); }
+    if (view === 'ghost' || extras.some(x => x.ownsGizmo?.())) { if (view === 'ghost' && gizmo.object) gizmo.detach(); }
     else if (node && gizmo.object !== node) gizmo.attach(node); else if (!node && gizmo.object) gizmo.detach();
     const helpers = [];
     // no grid or gizmo in a view drawn as filmed (path traced)
     if (!film && !extras.some(x => x.helpers && !x.helpers())) { grid.position.set(0, staged.ground + 1, 0); helpers.push(grid); if (node) { box.setFromObject(node); helpers.push(box); if (view !== 'ghost') helpers.push(gizmo.getHelper()); } }
+    if (!film) for (const x of extras) x.overlay?.(helpers, B);
     for (const x of helpers) B.scene.add(x);
     // the frame: as filmed (in the film view, or with a mode such as path tracing), else lit plainly and fast
     const fw = film ? Math.round(Math.min(W, H * S.w / S.h)) : W, fh = film ? Math.round(fw * S.h / S.w) : H;
@@ -202,6 +208,8 @@ const SceneEd = (() => {
   function writeBack() {
     const Y = selLayer(); if (Y) { if (gizmo.object) setLayer(Y, layerVals(gizmo.object)); return; }
     const P = sel(), n = gizmo.object; if (!P || !n) return;
+    // the gizmo on something else (points of a mesh being edited) moves only that
+    if (n.userData.partId !== P.id) return;
     setVal(P, 'at', [r3(n.position.x / M), r3(n.position.y / M), r3(n.position.z / M)]);
     const e = new T.Euler().setFromQuaternion(n.quaternion, 'YXZ');
     setVal(P, 'turn', [r3(rad(e.x)), r3(rad(e.y)), r3(rad(e.z))]);
@@ -269,7 +277,7 @@ const SceneEd = (() => {
     const size = P.size || [1, 1, 1], t = P.type || 'group';
     let h = `<div class="hd">${esc(nameOf(P))}</div><label class="f wide"><span>Name</span><input data-k="name" value="${esc(P.name || '')}" placeholder="${esc(nameOf(P))}"></label>`;
     h += vec('at', at, 'Position m', .01) + vec('turn', turn, 'Turn °', 1) + vec('scale', s3, 'Scale', .01);
-    if (t !== 'group' && t !== 'light' && t !== 'model') {
+    if (t !== 'group' && t !== 'light' && t !== 'model' && t !== 'mesh') {
       const lab = t === 'cylinder' || t === 'cone' ? ['Diameter', 'Height', ''] : t === 'torus' ? ['Ring', '', 'Tube'] : t === 'label' ? ['Width', 'Height', ''] : t === 'capsule' ? ['Diameter', 'Length', ''] : ['Width', 'Height', 'Depth'];
       h += `<div class="vec"><div class="vh"><span>Size m</span></div><div class="v3">${[0, 1, 2].map(i => lab[i] ? `<input data-k="size" data-i="${i}" type="number" step=".01" title="${lab[i]}" value="${r3(+size[i] || 1)}">` : '<span></span>').join('')}</div></div>`;
     }
@@ -350,6 +358,7 @@ const SceneEd = (() => {
   function onKey(e) {
     if (!wrap || wrap.hidden) return;
     if (e.target.closest?.('input, textarea, select')) { if (e.key === 'Escape') e.target.blur(); return; }
+    if (extras.some(x => x.key?.(e))) { e.preventDefault(); e.stopPropagation(); return; }
     const k = e.key.toLowerCase(), mod = e.metaKey || e.ctrlKey; let used = true;
     if (view === 'ghost' && !mod && /^(Key[WASDQE]|Shift(Left|Right))$/.test(e.code)) { ghost.keys.add(e.code); e.preventDefault(); e.stopPropagation(); return; }
     if (k === 'escape' && view === 'ghost') setView('free');
@@ -375,7 +384,10 @@ const SceneEd = (() => {
   function stopPlay() { playing = false; if (wrap) footer(); render(); }
 
   return { open, close, get layer() { return L; }, get open_() { return !!L; }, redraw() { dirty = true; }, extras, refreshUI() { if (L) { renderTree(); renderInsp(); dirty = true; } },
-    select, get selected() { return sel(); },
+    select, get selected() { return sel(); }, get selectedId() { return selId; },
+    // for tools that work in the viewport
+    get api() { return { cam: view === 'film' ? null : cam, canvas, gizmo, orbit, B, findNode, view }; },
+    record() { refresh(); renderTree(); renderInsp(); dirty = true; },
     // where a new prop goes: on the ground, where the view looks
     spot() { const t = orbit?.target; return t ? [r3(t.x / M), 0, r3(t.z / M)] : [0, 0, 0]; } };
 })();

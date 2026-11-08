@@ -36,10 +36,10 @@ const Actors = (() => {
     // lights: white at the front, red at the back
     const head = once('carHead', () => new T.BoxGeometry(.34, .09, .05)), tail = once('carTail', () => new T.BoxGeometry(.4, .08, .04));
     for (const x of [-.62, .62]) {
-      const h = new T.Mesh(head, light('#fff4dc', P.lights === false ? 0 : 6)); h.position.set(x, .62, 2.27); g.add(h);
+      const h = new T.Mesh(head, light('#fff4dc', P.lights === false ? 0 : 3)); h.position.set(x, .62, 2.27); g.add(h);
       const r = new T.Mesh(tail, light('#ff1a0c', P.lights === false ? .3 : 3.5)); r.position.set(x, .74, -2.28); g.add(r);
     }
-    if (P.beams) for (const x of [-.62, .62]) { const s = new T.SpotLight(0xfff1d8, 6, 40 * M, deg(26), .55, 0); s.position.set(x, .62, 2.3); s.target.position.set(x * 1.6, 0, 14); s.castShadow = false; g.add(s, s.target); }
+    if (P.beams) for (const x of [-.62, .62]) { const s = new T.SpotLight(0xfff1d8, 1.6, 30 * M, deg(26), .6, 0); s.position.set(x, .62, 2.3); s.target.position.set(x * 1.6, 0, 14); s.castShadow = false; g.add(s, s.target); }
     // wheels: turned by how far it has gone, the front ones steered into the bend
     const dist = travelled(P, t), spin = dist / .34;
     const h0 = World.heading(P, t - .15), h1 = World.heading(P, t + .15);

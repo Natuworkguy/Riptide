@@ -2790,7 +2790,9 @@ function addWorld(preset) {
 function applyWorld(L, name, announce = true) {
   const P = World.PRESETS[name]; if (!P) return;
   for (const k of World.FIELDS) delete L.keys[k];
-  Object.assign(L.p, structuredClone(P.p)); L.name = P.label;
+  Object.assign(L.p, structuredClone(P.p)); L.name = P.label; L.p.shots = [];
+  // a scene that builds its props for the composition's length, and films them with its own camera
+  if (P.objects) { L.p.objects = World.ensureIds(P.objects(S.dur)); const cam = L.p.objects.find(x => x.type === 'camera'); if (cam) L.p.shots = [{ t: 0, cam: cam.id }]; }
   for (const [k, ks] of Object.entries(P.keys?.(S.dur) || {})) for (const [t, v, ease] of ks) setKey(L, k, t, v, ease || 'easeInOut');
   if (P.camera) { const C = S.layers.find(x => x.type === 'camera') || addCamera(true); Object.assign(C.p, P.camera(S.h)); }
   if (announce) { refresh(); status(`${L.name}: ${P.hint}`); }

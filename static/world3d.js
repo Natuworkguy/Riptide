@@ -26,20 +26,20 @@ const World = (() => {
   };
   const FIELDS = ['sky', 'hdri', 'hdriTurn', 'hdriPower', 'sunEl', 'sunAz', 'sunPower', 'clouds', 'wind',
     'ground', 'groundColor', 'floorFinish', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH', 'sway', 'swayLoop',
-    'fog', 'dust', 'eye', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao', 'render', 'samples', 'pace', 'shutter', 'letterbox', 'objects', 'shots'];
+    'fog', 'dust', 'eye', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao', 'render', 'samples', 'pace', 'shutter', 'letterbox', 'godrays', 'flare', 'streaks', 'rain', 'wet', 'objects', 'shots'];
   const DEFAULTS = { hdri: '', hdriTurn: 0, hdriPower: 100, floorFinish: '', sky: 'sunset', sunEl: 8, sunAz: 10, sunPower: 100, clouds: 45, wind: 4, ground: 'ocean', groundColor: '#8a6a45',
     water: '#0b4a46', waves: .6, chop: 50, swell: 0, curl: .5, waveDist: 45, waveAngle: -20, plants: '#c09a48', grass: 60, grassH: .9, sway: 3, swayLoop: false,
-    fog: 8, dust: 0, eye: 1.7, heading: 0, pitch: 0, travel: 0, lens: 35, focus: 0, dof: 0, exposure: 0, bloom: 30, grain: 15, fringe: 10, ao: 0, render: 'preview', samples: 128, pace: 100, shutter: 0, letterbox: 'none' };
+    fog: 8, dust: 0, eye: 1.7, heading: 0, pitch: 0, travel: 0, lens: 35, focus: 0, dof: 0, exposure: 0, bloom: 30, grain: 15, fringe: 10, ao: 0, render: 'preview', samples: 128, pace: 100, shutter: 0, letterbox: 'none', godrays: 0, flare: 0, streaks: 0, rain: 0, wet: 0 };
   const LABELS = { hdri: 'Sky photo', hdriTurn: 'Photo turn°', hdriPower: 'Photo light %', floorFinish: 'Ground finish', sky: 'Sky', sunEl: 'Sun height°', sunAz: 'Sun around°', sunPower: 'Sun %', clouds: 'Clouds %', wind: 'Wind m/s',
     ground: 'Ground', groundColor: 'Ground colour', water: 'Water', waves: 'Waves m', chop: 'Chop %', swell: 'Breaker m', curl: 'Curl',
     waveDist: 'Breaker at m', waveAngle: 'Breaker turn°', plants: 'Plants', grass: 'Plants %', grassH: 'Plant height m', sway: 'Sway m/s', swayLoop: 'Loop sway',
     fog: 'Fog', dust: 'Dust', eye: 'Eye height m', heading: 'Look around°', pitch: 'Look up°', travel: 'Travel m', lens: 'Lens mm',
-    focus: 'Focus m', dof: 'Depth of field', exposure: 'Exposure', bloom: 'Bloom', grain: 'Grain', fringe: 'Fringe', ao: 'Contact shade', render: 'Render', samples: 'Samples', pace: 'World speed %', shutter: 'Motion blur°', letterbox: 'Letterbox' };
+    focus: 'Focus m', dof: 'Depth of field', exposure: 'Exposure', bloom: 'Bloom', grain: 'Grain', fringe: 'Fringe', ao: 'Contact shade', render: 'Render', samples: 'Samples', pace: 'World speed %', shutter: 'Motion blur°', letterbox: 'Letterbox', godrays: 'Light shafts', flare: 'Lens flare', streaks: 'Light streaks', rain: 'Rain', wet: 'Wet ground' };
   const COLORS = ['groundColor', 'water', 'plants'];
   const NUMBERS = FIELDS.filter(k => !['sky', 'ground', 'objects', 'shots', 'swayLoop', 'hdri', 'floorFinish', 'render', 'letterbox', ...COLORS].includes(k));
-  const GROUPS = [['World', ['hdri', 'hdriTurn', 'hdriPower', 'sky', 'sunEl', 'sunAz', 'sunPower', 'clouds', 'wind', 'fog', 'dust']],
+  const GROUPS = [['World', ['hdri', 'hdriTurn', 'hdriPower', 'sky', 'sunEl', 'sunAz', 'sunPower', 'clouds', 'wind', 'fog', 'dust', 'rain', 'wet']],
     ['Ground', ['ground', 'groundColor', 'floorFinish', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH', 'sway', 'swayLoop']],
-    ['Lens', ['render', 'samples', 'pace', 'shutter', 'letterbox', 'eye', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao']]];
+    ['Lens', ['render', 'samples', 'pace', 'shutter', 'letterbox', 'godrays', 'flare', 'streaks', 'eye', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao']]];
   const STEP = { waves: .05, curl: .01, grassH: .05, eye: .05, exposure: .05 };
   const deg = v => (+v || 0) * Math.PI / 180;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -415,7 +415,8 @@ const World = (() => {
     return Math.hypot(dx, dz) < 1e-5 ? null : Math.atan2(dx, dz);
   }
   const scale3 = v => Array.isArray(v) ? [0, 1, 2].map(i => +v[i] || 1) : [+v || 1, +v || 1, +v || 1];
-  // the lights a prop can be
+  // the lights a prop can be; what they are drawn with is kept, as props are built again each frame they move
+  const lightBits = new Map(), bulbGeo = new T.SphereGeometry(.03, 16, 8);
   function lightOf(P) {
     const c = lin(P.color || '#ffffff'), power = Math.max(0, +P.power || 100);
     let l;
@@ -423,7 +424,20 @@ const World = (() => {
       l.target.position.set(0, 0, 1); l.add(l.target); }
     else l = new T.PointLight(c, power * 40, 0, 2);
     l.castShadow = P.shadows !== false; l.shadow.mapSize.set(1024, 1024); l.shadow.bias = -.0005; l.shadow.radius = 3;
-    const bulb = new T.Mesh(new T.SphereGeometry(.03, 16, 8), new T.MeshBasicMaterial({ color: c })); bulb.scale.setScalar(M); bulb.userData.bulb = true; l.add(bulb);
+    const bk = c.getHexString(); if (!lightBits.has(bk)) lightBits.set(bk, new T.MeshBasicMaterial({ color: c }));
+    const bulb = new T.Mesh(bulbGeo, lightBits.get(bk)); bulb.scale.setScalar(M); bulb.userData.bulb = true; l.add(bulb);
+    // a beam: the light seen in the air, a soft cone fading away from the lamp
+    if (P.light === 'spot' && +P.beam > 0) {
+      const len = clamp(+P.reach || 8, .5, 60), a = deg(clamp(+P.angle || 35, 1, 89)), r = Math.tan(a) * len;
+      const gk = `cone|${len}|${r.toFixed(3)}`, mk = `beam|${gk}|${c.getHexString()}|${P.beam}|${power}`;
+      if (!lightBits.has(gk)) { const g = new T.ConeGeometry(r, len, 48, 1, true); g.translate(0, -len / 2, 0); g.rotateX(-Math.PI / 2); lightBits.set(gk, g); }
+      const g = lightBits.get(gk);
+      if (!lightBits.has(mk)) lightBits.set(mk, new T.ShaderMaterial({ transparent: true, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide, fog: false,
+        uniforms: { uCol: { value: c.clone().multiplyScalar(clamp(+P.beam / 100, 0, 3) * power / 100) }, uLen: { value: len } },
+        vertexShader: 'varying float vD; varying vec3 vN, vV; void main() { vD = position.z; vec4 mv = modelViewMatrix * vec4(position, 1.); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
+        fragmentShader: 'uniform vec3 uCol; uniform float uLen; varying float vD; varying vec3 vN, vV; void main() { float along = clamp(vD / uLen, 0., 1.); float edge = pow(abs(dot(vN, vV)), 1.5); gl_FragColor = vec4(uCol * (1. - along) * (1. - along) * edge * .35, 1.); }' }));
+      const cone = new T.Mesh(g, lightBits.get(mk)); cone.scale.setScalar(M); cone.userData.bulb = true; l.add(cone);
+    }
     return l;
   }
   function buildPart(P, t) {
@@ -621,12 +635,32 @@ const World = (() => {
     } catch (e) { failed = true; renderer = null; console.warn('3D worlds are off: this browser has no WebGL.', e); }
     return renderer;
   }
-  const FILM = { uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uGrain: { value: 0 }, uFringe: { value: 0 }, uAspect: { value: 1 } },
+  // Light shafts: the bright sky streaked out from the sun across what stands in front of it (in the light, before
+  // tone mapping).
+  const RAYS = { uniforms: { tDiffuse: { value: null }, uSun: { value: new T.Vector2(.5, .5) }, uOn: { value: 0 }, uTint: { value: new T.Color(1, .9, .7) } },
     vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }',
-    fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime, uGrain, uFringe, uAspect; varying vec2 vUv;
+    fragmentShader: `uniform sampler2D tDiffuse; uniform vec2 uSun; uniform float uOn; uniform vec3 uTint; varying vec2 vUv;
+      void main() { vec4 base = texture2D(tDiffuse, vUv); if (uOn <= 0.) { gl_FragColor = base; return; }
+        vec2 d = (uSun - vUv) / 48.; vec2 p = vUv; float w = 1.; vec3 acc = vec3(0.);
+        for (int i = 0; i < 48; i++) { p += d; vec3 c = texture2D(tDiffuse, p).rgb; float l = dot(c, vec3(.3, .59, .11)); acc += c * smoothstep(1., 3., l) * w; w *= .965; }
+        gl_FragColor = vec4(base.rgb + acc / 48. * uOn * 3. * uTint, base.a); }` };
+  const FILM = { uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uGrain: { value: 0 }, uFringe: { value: 0 }, uAspect: { value: 1 },
+      uSun: { value: new T.Vector2(.5, .5) }, uFlare: { value: 0 }, uStreak: { value: 0 } },
+    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }',
+    fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime, uGrain, uFringe, uAspect, uFlare, uStreak; uniform vec2 uSun; varying vec2 vUv;
       float h(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
       void main() { vec2 c = vUv - .5; vec2 off = c * dot(c, c) * uFringe * .06;
         vec3 col = vec3(texture2D(tDiffuse, vUv - off).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv + off).b);
+        // anamorphic streaks: bright lights smeared sideways, blue
+        if (uStreak > 0.) { vec3 s = vec3(0.); for (int i = -12; i <= 12; i++) { vec3 q = texture2D(tDiffuse, vUv + vec2(float(i) * .012, 0.)).rgb;
+            s += max(q - .96, 0.) * (1. - abs(float(i)) / 13.); } col += s * vec3(.35, .55, 1.) * uStreak * .9; }
+        // a flare: ghosts of the sun along the line through the middle, as bright as the sun shows
+        if (uFlare > 0.) { float vis = smoothstep(.75, 1., dot(texture2D(tDiffuse, uSun).rgb, vec3(.33)));
+          vec2 axis = vec2(.5) - uSun; vec3 f = vec3(0.);
+          for (int i = 1; i <= 5; i++) { float k = float(i) * .42 - .25; vec2 g = uSun + axis * k * 2.; float r = .02 + .03 * fract(float(i) * .37);
+            vec2 dd = (vUv - g) * vec2(uAspect, 1.); f += vec3(.9, .6 + .1 * float(i), .4 + .12 * float(i)) * smoothstep(r, r * .3, length(dd)) * .18; }
+          vec2 ds = (vUv - uSun) * vec2(uAspect, 1.); f += vec3(1., .85, .6) * .25 / (1. + 90. * length(ds)) + vec3(.4, .6, 1.) * smoothstep(.006, 0., abs(ds.y)) * smoothstep(.6, 0., abs(ds.x)) * .6;
+          col += f * vis * uFlare; }
         float n = h(vUv * vec2(1931., 1931. / uAspect) + fract(uTime * 7.31)) - .5;
         float l = dot(col, vec3(.299, .587, .114));
         col += n * uGrain * .16 * (1. - abs(l - .45) * 1.1);
@@ -636,9 +670,9 @@ const World = (() => {
       composer = new T.EffectComposer(renderer, new T.WebGLRenderTarget(W, H, { type: T.HalfFloatType }));
       const render = new T.RenderPass(scene, cam), ao = new T.GTAOPass(scene, cam, W, H),
         bokeh = new T.BokehPass(scene, cam, { focus: 1000, aperture: 0, maxblur: .01 }),
-        bloom = new T.UnrealBloomPass(new T.Vector2(W, H), .3, .6, .82), out = new T.OutputPass(), film = new T.ShaderPass(FILM);
-      for (const p of [render, ao, bokeh, bloom, out, film]) composer.addPass(p);
-      passes = { render, ao, bokeh, bloom, out, film };
+        bloom = new T.UnrealBloomPass(new T.Vector2(W, H), .3, .6, .82), out = new T.OutputPass(), film = new T.ShaderPass(FILM), rays = new T.ShaderPass(RAYS);
+      for (const p of [render, ao, bokeh, rays, bloom, out, film]) composer.addPass(p);
+      passes = { render, ao, bokeh, rays, bloom, out, film };
     }
     composer.setSize(W, H);
     for (const p of [passes.render, passes.ao, passes.bokeh]) { p.scene = scene; p.camera = cam; }
@@ -726,7 +760,7 @@ const World = (() => {
       u.uCol.value.copy(lin(pal.sun)).multiplyScalar(.6 * elev + .1); u.uSize.value = 1.4; }
     // props: built again when they change, or every frame when they move with time; not while one is held
     const pkey = JSON.stringify(o.objects || []) + (animated(o.objects) ? '@' + t : '') + '#' + World.version;
-    if (B.propsKey !== pkey && B.hold !== true) { if (B.props) B.scene.remove(B.props);
+    if (B.propsKey !== pkey && B.hold !== true) { if (B.props) { B.scene.remove(B.props); B.props.traverse(n => { if (n.isLight) n.dispose?.(); }); }
       B.props = buildProps(o.objects, t); B.propsKey = pkey; B.scene.add(B.props); }
     B.props.position.set(0, ground, 0);
     // guides (camera props) show only in the scene editor's own views
@@ -741,6 +775,7 @@ const World = (() => {
         obj.traverse(x => { if (x.isMesh) { x.castShadow = x.receiveShadow = true; } }); B.scene.add(obj); B.members.push(obj); }
     }
     Rr.toneMappingExposure = Math.pow(2, +o.exposure || 0);
+    for (const h of World.stageHooks) h({ L, B, o, t, ground, cam, k });
     return { B, cam, ground };
   }
   function draw(c, L, o, t) {
@@ -795,6 +830,12 @@ const World = (() => {
     P.bokeh.uniforms.maxblur.value = .004 + .016 * clamp(dof / 100, 0, 1.5);
     P.bloom.enabled = o.bloom > 0; P.bloom.strength = clamp(o.bloom / 100, 0, 3) * .6; P.bloom.radius = .55; P.bloom.threshold = 1.1;
     const fu = P.film.uniforms; fu.uTime.value = t; fu.uGrain.value = clamp(o.grain / 100, 0, 2); fu.uFringe.value = clamp(o.fringe / 100, 0, 3); fu.uAspect.value = W / H;
+    // where the sun is on the picture, for light shafts and a flare
+    const sp = cam.position.clone().addScaledVector(sunDir(o), 1e5).project(cam), seen = sp.z < 1 && Math.abs(sp.x) < 1.3 && Math.abs(sp.y) < 1.3;
+    const su = new T.Vector2((sp.x + 1) / 2, (sp.y + 1) / 2);
+    P.rays.enabled = (+o.godrays > 0) && seen; P.rays.uniforms.uSun.value.copy(su); P.rays.uniforms.uOn.value = clamp(+o.godrays / 100, 0, 2);
+    P.rays.uniforms.uTint.value.copy(lin((PALETTE[o.sky] || PALETTE.sunset).sun));
+    fu.uSun.value.copy(su); fu.uFlare.value = seen && !o.hdri ? clamp(+o.flare / 100, 0, 2) : 0; fu.uStreak.value = clamp(+o.streaks / 100, 0, 2);
     composer.render();
   }
   // the camera that films a 3D layer standing in a world, for where it lands on the canvas
@@ -863,6 +904,6 @@ const World = (() => {
     shows, draw, stage, shoot, worldOf, camera, gl, ensureIds, findPart, finish, custom, M, lin, deg, partGeometry, keyed, heading,
     get renderer() { return renderer; }, get available() { return !!T; }, prepareFrame, bars, worldTime, propCamera, shotAt, partMatrix,
     // bumped when something props are built from finishes loading (a model, a texture), so they are built again
-    version: 0 };
+    version: 0, stageHooks: [] };
   return World;
 })();

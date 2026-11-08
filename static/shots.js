@@ -8,13 +8,15 @@ const Shots = (() => {
 
   // what a camera prop looks like in the scene editor (never in a frame): a body, a lens, the way it points
   const guideMat = new T.MeshBasicMaterial({ color: 0xffb020 }), lineMat = new T.LineBasicMaterial({ color: 0xffb020, transparent: true, opacity: .7 });
+  const bodyGeo = new T.BoxGeometry(.18, .12, .22), lensGeo = new T.CylinderGeometry(.045, .055, .1, 16), frusta = new Map();
   World.custom.camera = P => {
-    const g = new T.Group(), body = new T.Mesh(new T.BoxGeometry(.18, .12, .22), guideMat), lens = new T.Mesh(new T.CylinderGeometry(.045, .055, .1, 16), guideMat);
+    const g = new T.Group(), body = new T.Mesh(bodyGeo, guideMat), lens = new T.Mesh(lensGeo, guideMat);
     lens.rotation.x = Math.PI / 2; lens.position.z = -.16; g.add(body, lens);
     const f = 2 * Math.tan(Math.atan(12 / Math.max(6, +P.lens || 35))) * .9, w = f * 16 / 9, z = -.9;
     const pts = [[0, 0, -.2], [-w / 2, -f / 2, z], [0, 0, -.2], [w / 2, -f / 2, z], [0, 0, -.2], [w / 2, f / 2, z], [0, 0, -.2], [-w / 2, f / 2, z],
       [-w / 2, -f / 2, z], [w / 2, -f / 2, z], [w / 2, -f / 2, z], [w / 2, f / 2, z], [w / 2, f / 2, z], [-w / 2, f / 2, z], [-w / 2, f / 2, z], [-w / 2, -f / 2, z]].flat();
-    g.add(new T.LineSegments(new T.BufferGeometry().setAttribute('position', new T.Float32BufferAttribute(pts, 3)), lineMat));
+    const fk = (+P.lens || 35); if (!frusta.has(fk)) frusta.set(fk, new T.BufferGeometry().setAttribute('position', new T.Float32BufferAttribute(pts, 3)));
+    g.add(new T.LineSegments(frusta.get(fk), lineMat));
     g.scale.setScalar(M); g.traverse(x => { x.userData.guide = true; x.castShadow = x.receiveShadow = false; }); g.userData.guide = true;
     return g;
   };

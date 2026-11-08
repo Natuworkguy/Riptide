@@ -138,7 +138,8 @@ const SceneEd = (() => {
     if (view === 'ghost') { if (gizmo.object) gizmo.detach(); }
     else if (node && gizmo.object !== node) gizmo.attach(node); else if (!node && gizmo.object) gizmo.detach();
     const helpers = [];
-    if (!film) { grid.position.set(0, staged.ground + 1, 0); helpers.push(grid); if (node) { box.setFromObject(node); helpers.push(box); if (view !== 'ghost') helpers.push(gizmo.getHelper()); } }
+    // no grid or gizmo in a view drawn as filmed (path traced)
+    if (!film && !extras.some(x => x.helpers && !x.helpers())) { grid.position.set(0, staged.ground + 1, 0); helpers.push(grid); if (node) { box.setFromObject(node); helpers.push(box); if (view !== 'ghost') helpers.push(gizmo.getHelper()); } }
     for (const x of helpers) B.scene.add(x);
     // the frame: as filmed (in the film view, or with a mode such as path tracing), else lit plainly and fast
     const fw = film ? Math.round(Math.min(W, H * S.w / S.h)) : W, fh = film ? Math.round(fw * S.h / S.w) : H;

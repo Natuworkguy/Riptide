@@ -106,7 +106,7 @@ const SceneEd = (() => {
   }
 
   function open(layer) {
-    if (!World.remote?.on && !World.gl()) return status('3D worlds need WebGL, which this browser does not have');
+    if (!World.remote?.on && !World.gl()) return noWebGL();
     if (!wrap) build();
     L = layer; World.ensureIds(objs()); selId = null; view = 'free'; orbit.enabled = true; ghost.keys.clear(); ghost.look = null; wrap.hidden = false; hint();
     // start where the film camera stands, looking where it looks
@@ -114,6 +114,17 @@ const SceneEd = (() => {
     wrap.querySelector('.nm').textContent = L.name;
     for (const x of extras) x.mount?.(wrap.querySelector('.extras'));
     renderTree(); renderInsp(); footer(); tools(); dirty = true; cancelAnimationFrame(raf); loop();
+  }
+  // Neither this tab nor the server can draw: say why, and what fixes it.
+  function noWebGL() {
+    const why = World.remote?.why, brave = !!navigator.brave;
+    UI.alert('3D needs a little setup', [
+      `This browser tab has WebGL turned off${brave ? ' (Brave can switch it off for privacy)' : ''}, and Riptide's server can't draw 3D for it${why ? `: ${why}` : ''}.`,
+      'Either fix works:',
+      '• Let the server draw: in the terminal, run  python -m pip install playwright  in Riptide\'s environment (the installer does this), then restart Riptide.',
+      brave ? '• Or turn WebGL back on in Brave: Settings > System > "Use graphics acceleration when available", and in the Shields panel for this page, set Fingerprinting to Allow, then reload.'
+            : '• Or turn on hardware acceleration in this browser\'s settings, then reload.',
+    ].join('\n'));
   }
   function close() { if (!wrap || wrap.hidden) return; unlockCursor(); stopPlay(); gizmo.detach(); wrap.hidden = true; cancelAnimationFrame(raf); L = null; refresh(); }
 

@@ -24,6 +24,7 @@ const Remote = (() => {
     host,
     get on() { return !host && pref !== 'off' && server?.available !== false && !down; },
     get why() { return down || server?.why || ''; },
+    get step() { return server?.setting_up ? server.step : ''; },
     get available() { return !!server?.available; },
     received: 0,          // pictures the server has sent
     set(on) { pref = on ? 'on' : 'off'; write(pref); down = ''; fails = 0; World.version++; redraw();
@@ -31,9 +32,19 @@ const Remote = (() => {
   };
   const redraw = () => { if (typeof render === 'function') render(); SceneEd.redraw?.(); };
 
-  if (!host) fetch('/api/render/status').then(r => r.ok ? r.json() : { available: false, why: 'This Riptide server cannot draw 3D' })
-    .catch(() => ({ available: false, why: 'Riptide\'s server is not answering' }))
-    .then(s => { server = s; if (!s.available && pref !== 'off' && S.layers.some(L => L.type === 'world')) status(`3D worlds are drawn in this tab: ${s.why}`); redraw(); });
+  // what the server says it can do; asked again while it sets itself up (installing Playwright, finding a browser)
+  function ask() {
+    fetch('/api/render/status').then(r => r.ok ? r.json() : { available: false, why: 'This Riptide server cannot draw 3D' })
+      .catch(() => ({ available: false, why: 'Riptide\'s server is not answering' }))
+      .then(s => {
+        const was = server; server = s;
+        if (s.setting_up) setTimeout(ask, 3000);
+        else if (was?.setting_up && s.available) status('Riptide\'s server can draw 3D now');
+        if (!s.available && pref !== 'off' && S.layers.some(L => L.type === 'world')) status(`3D worlds are drawn in this tab: ${s.why}`);
+        redraw();
+      });
+  }
+  if (!host) ask();
 
   // ----- the project, sent when it changes; its imported files sent once each -----
   const sent = new Map();     // asset id -> what was sent of it
@@ -105,7 +116,7 @@ const Remote = (() => {
     const v = view('layer:' + L.id, { kind: 'layer', layer: L.id, t, w: W, h: H }, () => typeof render === 'function' && render());
     if (v.img) c.drawImage(v.img, 0, 0, S.w, S.h);
     else { c.save(); c.fillStyle = '#14161c'; c.fillRect(0, 0, S.w, S.h); c.fillStyle = 'rgba(255,255,255,.55)'; c.font = `${Math.round(S.h / 30)}px system-ui, sans-serif`;
-      c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('Drawing on Riptide\'s server…', S.w / 2, S.h / 2); c.restore(); }
+      c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(R.step ? `${R.step}…` : 'Drawing on Riptide\'s server…', S.w / 2, S.h / 2); c.restore(); }
     return true;
   };
   // an export's frames: each drawn whole on the server (path traced, motion blurred) before it is used

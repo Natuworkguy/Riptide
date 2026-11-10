@@ -82,7 +82,9 @@ size and choose **Use this size for new projects** from the canvas size menu.
 when you have one, else Playwright's Chromium, which the installer fetches) and the editor shows the pictures it sends.
 A heavy scene can no longer take the editor down, and if that browser falls over the server starts another. Right-click
 the canvas and untick **Draw 3D on the server** to draw in the tab again. Set `RIPTIDE_BROWSER` to use a particular
-Chrome or Chromium.
+Chrome or Chromium. An install from before this sets itself up the first time the editor asks: the server installs
+Playwright into its own environment and drives Chrome, Edge, Brave or Chromium if one is installed, or downloads
+Chromium if none is. So a browser that has WebGL switched off (Brave can, for privacy) still gets 3D.
 
 ## Flash extension
 

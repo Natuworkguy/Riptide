@@ -19,6 +19,7 @@ from pathlib import Path
 
 from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory
 
+import render_host as render_host_module
 from render_host import RenderError, RenderHost
 
 ROOT = Path(__file__).parent
@@ -240,6 +241,8 @@ render_host = RenderHost(f"http://127.0.0.1:{PORT}")
 
 @app.get("/api/render/status")
 def render_status():
+    # the first look sets the server up to draw if it cannot yet (Playwright, a browser), in the background
+    render_host_module.start_setup()
     return jsonify(render_host.status())
 
 

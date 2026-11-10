@@ -14,9 +14,12 @@ from __future__ import annotations
 import base64
 import os
 import queue
+import shutil
+import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
 
 READY_SECONDS = 60
 FRAME_SECONDS = 600
@@ -29,11 +32,97 @@ class RenderError(Exception):
 def available() -> str:
     """'' when the server can draw, else why not."""
 
+    if SETUP["state"] == "running":
+        return ""
     try:
         import playwright.sync_api  # noqa: F401
     except ImportError:
         return "Playwright is not installed: run  python -m pip install playwright  in Riptide's environment"
     return ""
+
+
+# ----- getting ready to draw, by itself -----
+# An install from before the server drew 3D has no Playwright, and a computer may have no Chrome or Edge for it to
+# drive. Rather than leave the editor drawing in a tab that cannot (a browser with WebGL off), the server sets itself
+# up on its own, once, in the background: Playwright into its own environment, then a browser: Chrome, Edge, Brave
+# or Chromium if one is installed, else Playwright's own Chromium, downloaded.
+SETUP = {"state": "idle", "step": "", "error": ""}
+_setup_lock = threading.Lock()
+
+
+def browsers() -> list[str]:
+    """Chromium-family browsers on this computer that Playwright can drive by path, Brave among them."""
+
+    found = []
+    env = os.environ.get("RIPTIDE_BROWSER")
+    if env:
+        found.append(env)
+    if sys.platform == "darwin":
+        for app in ("Google Chrome", "Brave Browser", "Microsoft Edge", "Chromium", "Vivaldi", "Arc"):
+            found.append(f"/Applications/{app}.app/Contents/MacOS/{app}")
+            found.append(str(Path.home() / f"Applications/{app}.app/Contents/MacOS/{app}"))
+    elif os.name == "nt":
+        for base in filter(None, (os.environ.get("PROGRAMFILES"), os.environ.get("PROGRAMFILES(X86)"), os.environ.get("LOCALAPPDATA"))):
+            for rel in (r"Google\Chrome\Application\chrome.exe", r"BraveSoftware\Brave-Browser\Application\brave.exe",
+                        r"Microsoft\Edge\Application\msedge.exe", r"Chromium\Application\chrome.exe"):
+                found.append(str(Path(base) / rel))
+    else:
+        for name in ("google-chrome", "google-chrome-stable", "brave-browser", "brave", "microsoft-edge", "chromium", "chromium-browser"):
+            where = shutil.which(name)
+            if where:
+                found.append(where)
+    return [p for p in dict.fromkeys(found) if Path(p).exists()]
+
+
+def _can_launch() -> str:
+    """'' when a browser starts headless, else why none did."""
+
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        try:
+            RenderHost._launch(None, pw).close()
+            return ""
+        except Exception as error:  # noqa: BLE001
+            return str(error).splitlines()[0][:300]
+
+
+def setup() -> None:
+    """Make the server able to draw, if it is not: on a thread of its own, once at a time."""
+
+    if not _setup_lock.acquire(blocking=False):
+        return
+    try:
+        SETUP.update(state="running", error="")
+        try:
+            import playwright.sync_api  # noqa: F401
+        except ImportError:
+            SETUP["step"] = "Installing Playwright (once, about a minute)"
+            done = subprocess.run([sys.executable, "-m", "pip", "install", "-q", "playwright"],  # nosec B603
+                                  capture_output=True, text=True, check=False)
+            if done.returncode:
+                raise RuntimeError("could not install Playwright: " + (done.stderr or done.stdout).strip()[-300:])
+            import importlib
+            importlib.invalidate_caches()
+        SETUP["step"] = "Finding a browser to draw with"
+        why = _can_launch()
+        if why:
+            SETUP["step"] = "Downloading a browser to draw with (once, a few minutes)"
+            done = subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"],  # nosec B603
+                                  capture_output=True, text=True, check=False)
+            why = _can_launch() if done.returncode == 0 else (done.stderr or done.stdout).strip()[-300:]
+            if why:
+                raise RuntimeError("no browser could start: " + why)
+        SETUP.update(state="done", step="")
+    except Exception as error:  # noqa: BLE001 -- told to the editor
+        SETUP.update(state="failed", step="", error=str(error))
+    finally:
+        _setup_lock.release()
+
+
+def start_setup() -> None:
+    if SETUP["state"] in ("idle", "failed"):
+        threading.Thread(target=setup, name="riptide-render-setup", daemon=True).start()
 
 
 class RenderHost:
@@ -52,21 +141,25 @@ class RenderHost:
         self.sent_assets: set[str] = set()     # those the browser has
 
     # ----- the browser -----
-    def _launch(self, pw):
+    def _launch(self, pw):  # self unused: also called with None, to try a browser
         args = ["--ignore-gpu-blocklist", "--enable-gpu-rasterization", "--enable-zero-copy", "--disable-dev-shm-usage",
                 "--autoplay-policy=no-user-gesture-required",
                 "--enable-unsafe-swiftshader"]  # a computer with no graphics card still draws, slowly
         if sys.platform == "darwin":
             args.append("--use-angle=metal")
         tried = []
-        # RIPTIDE_BROWSER names a Chrome or Chromium to use instead
-        for channel in (("path",) if os.environ.get("RIPTIDE_BROWSER") else ()) + ("chrome", "msedge", None):
+        # RIPTIDE_BROWSER, then Chrome and Edge by channel, then any Chromium-family browser found by path (Brave,
+        # Chromium, Vivaldi...), then Playwright's own
+        tries = [("path", p) for p in browsers()[:1] if os.environ.get("RIPTIDE_BROWSER")]
+        tries += [("channel", "chrome"), ("channel", "msedge")] + [("path", p) for p in browsers()] + [("own", None)]
+        for how, what in tries:
+            channel = what or "chromium"
             try:
                 kw = {"headless": True, "args": args}
-                if channel == "path":
-                    kw["executable_path"] = os.environ["RIPTIDE_BROWSER"]
-                elif channel:
-                    kw["channel"] = channel
+                if how == "path":
+                    kw["executable_path"] = what
+                elif how == "channel":
+                    kw["channel"] = what
                 return pw.chromium.launch(**kw)
             except Exception as error:  # noqa: BLE001 -- try the next browser
                 tried.append(f"{channel or 'chromium'}: {str(error).splitlines()[0][:160]}")
@@ -133,6 +226,12 @@ class RenderHost:
                 self.thread.start()
 
     def frame(self, args: dict, timeout: float = FRAME_SECONDS) -> dict:
+        # still setting up: wait for it, so the editor shows a picture once it is ready rather than none
+        waited = time.monotonic()
+        while SETUP["state"] == "running" and time.monotonic() - waited < timeout:
+            time.sleep(0.5)
+        if SETUP["state"] == "failed":
+            raise RenderError(f"the server could not set up drawing: {SETUP['error']}")
         why = available()
         if why:
             raise RenderError(why)
@@ -176,9 +275,9 @@ class RenderHost:
         self.sent_assets.discard(asset_id)
 
     def status(self) -> dict:
-        why = available()
+        why = available() if SETUP["state"] != "failed" else f"the server could not set up drawing: {SETUP['error']}"
         return {"available": not why, "why": why, "running": bool(self.thread and self.thread.is_alive() and self.ready),
-                "error": self.error}
+                "error": self.error, "setting_up": SETUP["state"] == "running", "step": SETUP["step"]}
 
 
 def image_bytes(data_url: str) -> tuple[bytes, str]:

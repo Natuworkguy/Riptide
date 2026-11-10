@@ -83,6 +83,12 @@ say "Setting up Riptide's Python environment..."
 [ -x "$VENV/bin/python" ] || "$PYTHON" -m venv "$VENV"
 "$VENV/bin/python" -m pip install -q --upgrade pip
 "$VENV/bin/python" -m pip install -q -r "$APP/requirements.txt"
+# 3D worlds are drawn by the server's own windowless browser: Chrome or Edge when one is here, else Playwright's Chromium
+if [ ! -d "/Applications/Google Chrome.app" ] && [ ! -d "/Applications/Microsoft Edge.app" ] \
+  && ! command -v google-chrome >/dev/null 2>&1 && ! command -v google-chrome-stable >/dev/null 2>&1 && ! command -v microsoft-edge >/dev/null 2>&1; then
+  say "Fetching a browser for drawing 3D worlds..."
+  "$VENV/bin/python" -m playwright install chromium >/dev/null 2>&1 || say "  Could not fetch it: 3D worlds will be drawn in your browser tab instead."
+fi
 
 # ---------- the riptide command ----------
 mkdir -p "$BIN"

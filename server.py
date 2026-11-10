@@ -19,11 +19,14 @@ from pathlib import Path
 
 from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory
 
+from render_host import RenderError, RenderHost
+
 ROOT = Path(__file__).parent
 STATIC = ROOT / "static"
 EXPORTS = Path(tempfile.gettempdir()) / "riptide-exports"
 EXPORTS.mkdir(exist_ok=True)
 
+PORT = 5173
 app = Flask(__name__, static_folder=None)
 app.config["MAX_CONTENT_LENGTH"] = 400 * 1024 * 1024  # an 8K PNG frame can be tens of MB
 sessions: dict[str, dict] = {}
@@ -231,6 +234,35 @@ def mcp_proxy():
     return Response(r.read(), status=r.status, headers=keep)
 
 
+# ---------- 3D drawn here: worlds rendered by the server's own windowless browser (render_host.py) ----------
+render_host = RenderHost(f"http://127.0.0.1:{PORT}")
+
+
+@app.get("/api/render/status")
+def render_status():
+    return jsonify(render_host.status())
+
+
+@app.post("/api/render/asset")
+def render_asset():
+    d = request.get_json(force=True, silent=True) or {}
+    if not isinstance(d.get("id"), str) or not isinstance(d.get("asset"), dict):
+        return jsonify(error="send an id and an asset"), 400
+    render_host.add_asset(d["id"], d["asset"])
+    return jsonify(ok=True)
+
+
+@app.post("/api/render/frame")
+def render_frame():
+    d = request.get_json(force=True, silent=True) or {}
+    if not isinstance(d.get("frame"), dict):
+        return jsonify(error="send a frame to draw"), 400
+    try:
+        return jsonify(render_host.frame(d))
+    except RenderError as e:
+        return jsonify(error=str(e)), 503
+
+
 @app.get("/<path:p>")
 def static_file(p):
     return send_from_directory(STATIC, p)
@@ -347,5 +379,5 @@ if __name__ == "__main__":
     start_mcp()
     from version import __version__
     print(f" * Riptide {__version__}")
-    print(" * MCP endpoint: http://127.0.0.1:5173/mcp")
-    app.run(host="127.0.0.1", port=5173, debug=False, threaded=True)
+    print(f" * MCP endpoint: http://127.0.0.1:{PORT}/mcp")
+    app.run(host="127.0.0.1", port=PORT, debug=False, threaded=True)

@@ -56,9 +56,12 @@ const Library = (() => {
   // ----- what the world draws them with -----
   const texCache = new Map(), matCache = new Map(), envCache = new Map(), modelCache = new Map();
   const loaded = () => { World.version++; SceneEd.redraw(); if (typeof render === 'function') render(); };
+  // what is still loading, so the server's renderer can wait for it before it sends a picture
+  World.pending = 0;
+  const begin = () => { World.pending++; let open = true; return ok => { if (open) { open = false; World.pending--; } if (ok !== false) loaded(); }; };
   function tex(src, color) {
     let t = texCache.get(src);
-    if (!t) { t = new T.TextureLoader().load(src, loaded); t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = 8; texCache.set(src, t); }
+    if (!t) { const end = begin(); t = new T.TextureLoader().load(src, () => end(), undefined, () => end(false)); t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = 8; texCache.set(src, t); }
     if (color) t.colorSpace = T.SRGBColorSpace;
     return t;
   }
@@ -77,11 +80,13 @@ const Library = (() => {
   World.finishName = f => f.startsWith('lib:') ? (S.assets?.[f.slice(4)]?.name || 'Imported material') : f;
   World.hdriHook = (B, o) => {
     const a = S.assets?.[o.hdri]; if (!a || a.kind !== 'hdri') return false;
+    // drawn on the server: this tab never draws the sky, so it need not read the photo
+    if (!World.renderer) return false;
     let c = envCache.get(o.hdri);
-    if (!c) { c = {}; envCache.set(o.hdri, c);
+    if (!c) { c = {}; envCache.set(o.hdri, c); const end = begin();
       new T.HDRLoader().load(a.src, t => { t.mapping = T.EquirectangularReflectionMapping; c.tex = t;
-        const pm = new T.PMREMGenerator(World.renderer); c.env = pm.fromEquirectangular(t).texture; pm.dispose(); loaded(); },
-      undefined, () => { c.failed = true; status(`Could not read the sky photo ${a.name}`); }); }
+        const pm = new T.PMREMGenerator(World.renderer); c.env = pm.fromEquirectangular(t).texture; pm.dispose(); end(); },
+      undefined, () => { c.failed = true; end(false); status(`Could not read the sky photo ${a.name}`); }); }
     if (!c.tex) return false;
     const turn = World.deg(o.hdriTurn || 0), power = Math.max(0, (o.hdriPower ?? 100) / 100);
     B.scene.background = c.tex; B.scene.environment = c.env;
@@ -93,7 +98,7 @@ const Library = (() => {
   World.custom.model = (P, t = 0) => {
     const a = S.assets?.[P.asset]; if (!a?.src) return null;
     let c = modelCache.get(P.asset);
-    if (!c) { c = {}; modelCache.set(P.asset, c);
+    if (!c) { c = {}; modelCache.set(P.asset, c); const end = begin();
       (async () => {
         const buf = await (await fetch(a.src)).arrayBuffer();
         let g;
@@ -101,8 +106,8 @@ const Library = (() => {
           g.traverse(m => { if (m.isMesh) { if (!m.geometry.attributes.normal) m.geometry.computeVertexNormals(); m.material = World.finish('plastic', '#b8b8b8'); } }); }
         else { const gl = await new T.GLTFLoader().parseAsync(buf, ''); g = gl.scene; c.clips = gl.animations || []; }
         const b = new T.Box3().setFromObject(g), ctr = b.getCenter(new T.Vector3());
-        g.position.set(-ctr.x, -b.min.y, -ctr.z); const holder = new T.Group(); holder.add(g); c.group = holder; loaded();
-      })().catch(() => { c.failed = true; status(`Could not read the model ${a.name}`); });
+        g.position.set(-ctr.x, -b.min.y, -ctr.z); const holder = new T.Group(); holder.add(g); c.group = holder; end();
+      })().catch(() => { c.failed = true; end(false); status(`Could not read the model ${a.name}`); });
     }
     if (!c.group) return null;
     // a rigged model is copied with its skeleton, and plays the clip picked, at the world's time

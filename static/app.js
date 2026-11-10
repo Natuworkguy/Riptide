@@ -3675,7 +3675,10 @@ const panels = (() => {
 // ---------- intro ----------
 // The splash logo draws its wave while a short loader fills, then flies into the header's logo spot.
 (() => {
-  const sp = $('#splash'), done = () => { document.body.classList.remove('booting'); sp?.remove(); setTimeout(() => Tutorial.offer(), 600); };
+  // the server's own copy of the editor, drawing 3D worlds for it (static/remote.js), has no one to greet
+  const quiet = new URLSearchParams(location.search).get('renderhost') === '1';
+  const sp = $('#splash'), done = () => { document.body.classList.remove('booting'); sp?.remove(); if (!quiet) setTimeout(() => Tutorial.offer(), 600); };
+  if (quiet) return done();
   if (!sp || matchMedia('(prefers-reduced-motion: reduce)').matches) return done();
   setTimeout(() => {
     const from = sp.querySelector('.slogo'), to = $('.brand .mark');
@@ -3821,6 +3824,8 @@ function canvasItems(px, py) {
     '-',
     { label: 'Background', sub: [{ swatches: ['#ffffff', '#ece8e1', '#151515', '#0b1026', '#ff5a36', '#4c8dff', '#2fbf71', '#ffb020'], current: S.bg, act: c => { S.bg = c; refresh(); } }] },
     { label: 'Safe areas', check: guidesOn, kbd: "'", act: () => $('#guides').click() },
+    ...(typeof Remote !== 'undefined' && S.layers.some(L => L.type === 'world') ? [{ label: Remote.on || Remote.available ? 'Draw 3D on the server' : 'Draw 3D on the server (not available)', check: Remote.on,
+      disabled: !Remote.on && !Remote.available, act: () => Remote.set(!Remote.on) }] : []),
     { label: S.mode === 'image' ? 'Switch to video mode' : 'Switch to image mode', act: () => setMode(S.mode === 'image' ? 'video' : 'image') },
     '-',
     { label: 'Save frame as image…', act: () => exportStill({ img: 'png', q: 1, scale: 1 }) },
@@ -4113,6 +4118,8 @@ const LIVE = (() => {
 
   // This window, one of any number open: agents and Flash reach it by its id or its project's name, and otherwise
   // reach the window last used. A window opened for them (?window=…) starts the project they asked for.
+  // the server's own copy of the editor (static/remote.js) is not a window agents work in
+  if (new URLSearchParams(location.search).get('renderhost') === '1') return { ops };
   const here = new URLSearchParams(location.search), windowId = (here.get('window') || crypto.randomUUID().slice(0, 8)).slice(0, 64);
   if (here.get('window')) {
     if (here.has('name')) projectName = here.get('name') || 'Untitled';

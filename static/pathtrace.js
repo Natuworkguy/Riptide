@@ -99,6 +99,7 @@ const PathTrace = (() => {
       where.appendChild(seg);
     },
     busy: () => viewing && !lastDone,
+    tracing: () => viewing,
     render(L, o, t, B, cam, W, H) {
       if (!viewing || !World.renderer) return false;
       lastDone = trace(L, o, t, B, cam, W, H, Math.max(1, Math.round(+o.samples || 128)), 30);

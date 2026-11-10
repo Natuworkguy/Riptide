@@ -74,6 +74,12 @@ and `--uninstall` (`-Uninstall`) takes Riptide back out. ffmpeg is still yours t
 
 Projects save as `.rip` files (images and audio embedded; older `.wob` files still open) with the browser's own Save/Open dialogs.
 
+3D worlds are drawn by the server, not your browser tab: `server.py` keeps a windowless browser of its own (Chrome or Edge
+when you have one, else Playwright's Chromium, which the installer fetches) and the editor shows the pictures it sends.
+A heavy scene can no longer take the editor down, and if that browser falls over the server starts another. Right-click
+the canvas and untick **Draw 3D on the server** to draw in the tab again. Set `RIPTIDE_BROWSER` to use a particular
+Chrome or Chromium.
+
 ## Flash extension
 
 This repository is also a Flash extension: it lets Flash send the pictures and 3D models it makes to Riptide, as

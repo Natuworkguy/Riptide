@@ -106,7 +106,7 @@ const SceneEd = (() => {
   }
 
   function open(layer) {
-    if (!World.gl()) return status('3D worlds need WebGL, which this browser does not have');
+    if (!World.remote?.on && !World.gl()) return status('3D worlds need WebGL, which this browser does not have');
     if (!wrap) build();
     L = layer; World.ensureIds(objs()); selId = null; view = 'free'; orbit.enabled = true; ghost.keys.clear(); ghost.look = null; wrap.hidden = false; hint();
     // start where the film camera stands, looking where it looks
@@ -125,7 +125,8 @@ const SceneEd = (() => {
     if (playing) { const now = performance.now(); time += (now - lastT) / 1000; lastT = now; if (time > S.dur) time = loop_ ? 0 : (stopPlay(), S.dur); footer(); dirty = true; }
     const vp = wrap.querySelector('.vp'), w = vp.clientWidth, h = vp.clientHeight, pr = Math.min(2, devicePixelRatio || 1);
     if (canvas.width !== Math.round(w * pr) || canvas.height !== Math.round(h * pr)) { canvas.width = Math.round(w * pr); canvas.height = Math.round(h * pr); dirty = true; }
-    const keep = extras.some(x => x.busy?.());
+    // drawn on the server, a picture that is still clearing up asks for itself again
+    const keep = !World.remote?.on && extras.some(x => x.busy?.());
     if (!dirty && !keep) return;
     dirty = false;
     draw(w, h, pr);
@@ -168,7 +169,9 @@ const SceneEd = (() => {
     : 'Drag to orbit · right-drag to pan · scroll to zoom · click a prop to pick it'; }
   function draw(w, h, pr) {
     World.showGuides = view !== 'film' && !extras.some(x => x.helpers && !x.helpers());
+    const remote = !!World.remote?.on, guides = World.showGuides;
     const o = state(L, time), staged = World.stage(L, o, time); World.showGuides = false; B = staged.B; B.hold = holding; gnd = staged.ground;
+    if (remote) { B.scene.updateMatrixWorld(true); return drawRemote(o, staged, guides); }
     const R = World.renderer, film = view === 'film', W = canvas.width, H = canvas.height;
     let camera = cam;
     if (film) camera = staged.cam; else { cam.aspect = W / H; cam.updateProjectionMatrix(); }
@@ -190,16 +193,63 @@ const SceneEd = (() => {
     g2.fillStyle = '#0d0e11'; g2.fillRect(0, 0, W, H);
     g2.drawImage(R.domElement, (W - fw) / 2, (H - fh) / 2, fw, fh);
   }
+  // Drawn by Riptide's server: the scene is built here (to know what a click lands on) but drawn there; the grid and
+  // the box round what is picked come back in its picture, and only the handles (the gizmo, an edit's points and
+  // lines, a camera's guide) are drawn here, over it.
+  let shown = null;
+  function viewSpec(o, staged, guides, plain = false) {
+    const film = view === 'film', W = canvas.width, H = canvas.height, tracing = extras.some(x => x.tracing?.());
+    const fw = film ? Math.round(Math.min(W, H * S.w / S.h)) : W, fh = film ? Math.round(fw * S.h / S.w) : H;
+    const node = selId ? findNode(selId) : null, bare = plain || film || tracing;
+    if (!film) { cam.aspect = fw / fh; cam.updateProjectionMatrix(); }
+    return { layer: L.id, t: time, w: fw, h: fh, mode: tracing ? 'path' : film ? 'film' : 'free', guides: !bare && guides, grid: bare ? null : 1, box: !bare && node ? selId : null,
+      camera: film ? null : { position: cam.position.toArray(), quaternion: cam.quaternion.toArray(), fov: cam.fov, near: cam.near, far: cam.far } };
+  }
+  function drawRemote(o, staged, guides) {
+    const spec = viewSpec(o, staged, guides), film = view === 'film', W = canvas.width, H = canvas.height, { w: fw, h: fh } = spec;
+    const v = World.remote.sceneView(spec, () => { dirty = true; });
+    g2.fillStyle = '#0d0e11'; g2.fillRect(0, 0, W, H);
+    if (v.img) g2.drawImage(v.img, (W - fw) / 2, (H - fh) / 2, fw, fh);
+    else { g2.fillStyle = 'rgba(255,255,255,.5)'; g2.font = '13px system-ui, sans-serif'; g2.textAlign = 'center'; g2.fillText('Drawing on Riptide\'s server…', W / 2, H / 2); }
+    shown = { fw, fh };
+    // the handles, drawn here over the server's picture
+    const node = selId ? findNode(selId) : null;
+    if (view === 'ghost' || extras.some(x => x.ownsGizmo?.())) { if (view === 'ghost' && gizmo.object) gizmo.detach(); }
+    else if (node && gizmo.object !== node) gizmo.attach(node); else if (!node && gizmo.object) gizmo.detach();
+    if (film || spec.mode === 'path') return;
+    const helpers = []; if (node && view !== 'ghost') helpers.push(gizmo.getHelper());
+    for (const x of extras) x.overlay?.(helpers, B);
+    if (!helpers.length) return;
+    const R = World.remote.overlay(); if (!R) return;
+    if (R.domElement.width !== fw || R.domElement.height !== fh) R.setSize(fw, fh, false);
+    const s = new T.Scene(), was = helpers.map(x => x.parent);
+    for (const x of helpers) s.add(x);
+    R.clear(); R.render(s, cam);
+    helpers.forEach((x, i) => { s.remove(x); if (was[i]) was[i].add(x); });
+    g2.drawImage(R.domElement, (W - fw) / 2, (H - fh) / 2, fw, fh);
+  }
   // a screenshot: the view drawn again without the grid, box and handles, at the viewport's full pixel size
   // (the film view keeps only its frame, without the bars round it)
   let shooting = false;
   function shoot() {
     if (!L) return;
     const vp = wrap.querySelector('.vp'), pr = Math.min(2, devicePixelRatio || 1);
+    if (World.remote?.on) return shootRemote();
     shooting = true; try { draw(vp.clientWidth, vp.clientHeight, pr); } finally { shooting = false; }
     const R = World.renderer, fw = R.domElement.width, fh = R.domElement.height;
     const oc = document.createElement('canvas'); oc.width = fw; oc.height = fh;
     oc.getContext('2d').drawImage(canvas, (canvas.width - fw) / 2, (canvas.height - fh) / 2, fw, fh, 0, 0, fw, fh);
+    save(oc);
+  }
+  async function shootRemote() {
+    const o = state(L, time), spec = viewSpec(o, null, false, true);
+    status('Drawing the screenshot on Riptide\'s server…');
+    let out; try { out = await World.remote.sceneShot({ ...spec, final: true, budget: 1500 }); } catch (e) { return status('Could not make the screenshot: ' + e.message); }
+    const oc = document.createElement('canvas'); oc.width = spec.w; oc.height = spec.h; oc.getContext('2d').drawImage(out.img, 0, 0);
+    save(oc);
+  }
+  function save(oc) {
+    const fw = oc.width, fh = oc.height;
     dirty = true;   // put the grid and handles back
     const name = `${(typeof projectName !== 'undefined' && projectName) || 'Untitled'} - ${L.name} ${time.toFixed(2)}s.png`;
     oc.toBlob(blob => { if (!blob) return status('Could not make the screenshot');

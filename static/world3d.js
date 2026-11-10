@@ -706,6 +706,7 @@ const World = (() => {
   function environment(B, o) {
     const key = [o.sky, Math.round(o.sunEl), Math.round(o.sunAz), Math.round(o.clouds / 10)].join('|');
     if (B.envKey === key) return B.env;
+    if (!pmrem) return null;     // staged to be drawn elsewhere (the server): no light from the sky needed here
     const s = new T.Scene(), m = skyMesh(B.uniforms); m.scale.setScalar(100); s.add(m);
     const target = pmrem.fromScene(s, 0, .1, 1000); B.env?.dispose?.(); B.env = target.texture; B.envKey = key; m.geometry.dispose(); m.material.dispose();
     return B.env;
@@ -774,7 +775,7 @@ const World = (() => {
         obj.userData.layerId = M2.id;
         obj.traverse(x => { if (x.isMesh) { x.castShadow = x.receiveShadow = true; } }); B.scene.add(obj); B.members.push(obj); }
     }
-    Rr.toneMappingExposure = Math.pow(2, +o.exposure || 0);
+    if (Rr) Rr.toneMappingExposure = Math.pow(2, +o.exposure || 0);
     for (const h of World.stageHooks) h({ L, B, o, t, ground, cam, k });
     return { B, cam, ground };
   }

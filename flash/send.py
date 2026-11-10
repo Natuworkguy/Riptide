@@ -15,7 +15,9 @@ Standard library only, since it runs on Flash's own Python.
 
 import base64
 import json
+import math
 import os
+import re
 import shutil
 import subprocess  # nosec B404 -- the riptide launcher, with arguments
 import sys
@@ -23,6 +25,7 @@ import time
 import urllib.error
 import urllib.request
 import webbrowser
+import xml.etree.ElementTree as ET  # nosec B405 -- an SVG Flash made, parsed without fetching anything
 from pathlib import Path
 
 IMAGES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
@@ -31,7 +34,7 @@ MODELS = {".glb": "model/gltf-binary", ".gltf": "model/gltf+json", ".obj": "mode
 MOST_BYTES = {"image": 15_000_000, "model": 50_000_000}
 WAIT_SECONDS = 25
 
-DEFAULTS = {"url": "http://127.0.0.1:5173", "open": True}
+DEFAULTS = {"url": "http://127.0.0.1:5173", "open": True, "svg_layers": True}
 
 
 class SendError(Exception):
@@ -178,6 +181,203 @@ def where(answer: dict) -> str:
     return f' in the window with "{shown.get("name") or "Untitled"}"' if shown and count > 1 else ", in the project open there"
 
 
+# ----- an SVG as Riptide's own layers -----
+# A picture Flash drew as an SVG is shapes and words: sent as Riptide's own rectangles, ellipses and text, each stays
+# editable there (its colour, its words, its place, keyframed like any layer), not one flat picture. An SVG with
+# anything Riptide has no layer for (a path, a gradient, an embedded picture, a transform past a move) goes as one
+# image layer instead, so nothing in it is lost.
+
+NAMED = {"black": "#000000", "white": "#ffffff", "red": "#ff0000", "green": "#008000", "blue": "#0000ff",
+         "gray": "#808080", "grey": "#808080", "yellow": "#ffff00", "orange": "#ffa500", "purple": "#800080",
+         "pink": "#ffc0cb", "navy": "#000080", "teal": "#008080", "silver": "#c0c0c0", "maroon": "#800000"}
+
+
+class NotLayers(Exception):
+    """This SVG has something Riptide has no layer for."""
+
+
+def _colour(value, default="#000000"):
+    value = (value or "").strip().lower()
+    if not value:
+        return default
+    if value == "none" or value == "transparent":
+        return None
+    if value in NAMED:
+        return NAMED[value]
+    if re.fullmatch(r"#[0-9a-f]{3}", value):
+        return "#" + "".join(c * 2 for c in value[1:])
+    if re.fullmatch(r"#[0-9a-f]{6}", value):
+        return value
+    found = re.fullmatch(r"rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*[\d.]+\s*)?\)", value)
+    if found:
+        return "#" + "".join(f"{min(255, int(v)):02x}" for v in found.groups())
+    raise NotLayers(f"a colour Riptide cannot take: {value}")
+
+
+def _num(value, default=0.0) -> float:
+    found = re.match(r"^\s*(-?[\d.]+)", str(value or ""))
+    return float(found.group(1)) if found else default
+
+
+def _style(node, inherited: dict) -> dict:
+    """The element's painting, its own attributes and style= over what it inherits from its groups."""
+
+    out = dict(inherited)
+    for key in ("fill", "stroke", "stroke-width", "opacity", "fill-opacity", "font-size", "font-family", "font-weight",
+                "font-style", "text-anchor"):
+        if node.get(key) is not None:
+            out[key] = node.get(key)
+    for part in (node.get("style") or "").split(";"):
+        key, _, value = part.partition(":")
+        if key.strip() and value.strip():
+            out[key.strip()] = value.strip()
+    return out
+
+
+def _move(node, at: tuple) -> tuple:
+    """Where a group's or an element's transform puts its origin: only a move (translate) is taken."""
+
+    transform = (node.get("transform") or "").strip()
+    if not transform:
+        return at
+    found = re.fullmatch(r"translate\(\s*(-?[\d.]+)(?:[\s,]+(-?[\d.]+))?\s*\)", transform)
+    if not found:
+        raise NotLayers(f"a transform Riptide cannot take as layers: {transform}")
+    return at[0] + float(found.group(1)), at[1] + float(found.group(2) or 0)
+
+
+def svg_layers(text: str, width: float, height: float) -> list:
+    """The SVG TEXT as Riptide layers, fitted into a WIDTH by HEIGHT canvas: [{"type", "name", "props"}, ...] in
+    drawing order. Raises NotLayers when some of it would be lost."""
+
+    try:
+        root = ET.fromstring(text)  # nosec B314 -- no entities are fetched or expanded by ElementTree
+    except ET.ParseError as why:
+        raise NotLayers(f"not an SVG Riptide could read: {why}") from None
+    if not root.tag.endswith("svg"):
+        raise NotLayers("not an SVG")
+    view = [float(v) for v in re.split(r"[\s,]+", (root.get("viewBox") or "").strip()) if v] or None
+    if not view or len(view) != 4:
+        view = [0, 0, _num(root.get("width"), width), _num(root.get("height"), height)]
+    vx, vy, vw, vh = view
+    k = min(width / vw, height / vh) if vw and vh else 1
+    ox, oy = (width - vw * k) / 2, (height - vh * k) / 2
+    X = lambda x: round((x - vx) * k + ox, 2)
+    Y = lambda y: round((y - vy) * k + oy, 2)
+    layers = []
+
+    def paint(style: dict, props: dict, stroke_ok=True) -> dict:
+        fill = _colour(style.get("fill"), "#000000")
+        stroke = _colour(style.get("stroke"), None) if style.get("stroke") else None
+        sw = _num(style.get("stroke-width"), 1) * k if stroke else 0
+        if fill is None and not stroke:
+            return {}
+        if fill is None:
+            raise NotLayers("an outline with no fill")
+        props["fill"] = fill
+        if stroke and stroke_ok and sw > 0:
+            props.update(stroke=stroke, strokeWidth=round(sw, 2))
+        opacity = _num(style.get("opacity"), 1) * _num(style.get("fill-opacity"), 1)
+        if opacity < 1:
+            props["opacity"] = round(opacity, 3)
+        return props
+
+    def walk(node, at, inherited):
+        tag = node.tag.rsplit("}", 1)[-1]
+        if tag in ("title", "desc", "metadata", "style"):
+            return
+        if tag in ("defs", "linearGradient", "radialGradient", "pattern", "clipPath", "mask", "filter", "image",
+                   "use", "path", "polyline", "foreignObject", "symbol"):
+            raise NotLayers(f"a <{tag}>, which Riptide has no layer for")
+        style = _style(node, inherited)
+        if "url(" in (style.get("fill") or "") + (style.get("stroke") or ""):
+            raise NotLayers("a gradient or pattern fill")
+        at = _move(node, at)
+        name = node.get("id") or ""
+        if tag in ("svg", "g"):
+            for child in node:
+                walk(child, at, style)
+            return
+        if tag == "rect":
+            x, y = _num(node.get("x")) + at[0], _num(node.get("y")) + at[1]
+            w, h = _num(node.get("width")), _num(node.get("height"))
+            props = paint(style, {"x": X(x + w / 2), "y": Y(y + h / 2), "w": round(w * k, 2), "h": round(h * k, 2),
+                                  "radius": round(_num(node.get("rx") or node.get("ry")) * k, 2)})
+            whole = not layers and w >= vw and h >= vh
+            if props:
+                layers.append({"type": "rect", "name": name or ("Background" if whole else "Rectangle"),
+                               "props": props})
+        elif tag in ("circle", "ellipse"):
+            cx, cy = _num(node.get("cx")) + at[0], _num(node.get("cy")) + at[1]
+            rx = _num(node.get("r") if tag == "circle" else node.get("rx"))
+            ry = _num(node.get("r") if tag == "circle" else node.get("ry"))
+            props = paint(style, {"x": X(cx), "y": Y(cy), "w": round(2 * rx * k, 2), "h": round(2 * ry * k, 2)})
+            if props:
+                layers.append({"type": "ellipse", "name": name or "Ellipse", "props": props})
+        elif tag == "line":
+            x1, y1 = _num(node.get("x1")) + at[0], _num(node.get("y1")) + at[1]
+            x2, y2 = _num(node.get("x2")) + at[0], _num(node.get("y2")) + at[1]
+            stroke = _colour(style.get("stroke"), None)
+            if not stroke:
+                return
+            length = math.hypot(x2 - x1, y2 - y1) * k
+            layers.append({"type": "rect", "name": name or "Line", "props": {
+                "x": X((x1 + x2) / 2), "y": Y((y1 + y2) / 2), "w": round(length, 2),
+                "h": round(max(1, _num(style.get("stroke-width"), 1) * k), 2), "radius": 0, "fill": stroke,
+                "rotation": round(math.degrees(math.atan2(y2 - y1, x2 - x1)), 2)}})
+        elif tag == "text":
+            words = " ".join("".join(node.itertext()).split())
+            if not words:
+                return
+            if any(child.tag.rsplit("}", 1)[-1] == "tspan" and (child.get("x") or child.get("y") or child.get("dy"))
+                   for child in node):
+                raise NotLayers("text laid out in placed pieces")
+            size = _num(style.get("font-size"), 16)
+            x, y = _num(node.get("x")) + at[0], _num(node.get("y")) + at[1]
+            anchor = style.get("text-anchor") or "start"
+            wide = 0.55 * size * len(words)       # about how wide it sets, for where its middle is
+            middle = x + {"start": wide / 2, "end": -wide / 2}.get(anchor, 0)
+            weight = style.get("font-weight") or "400"
+            weight = 700 if weight == "bold" else int(_num(weight, 400))
+            family = (style.get("font-family") or "Inter").split(",")[0].strip(" '\"")
+            props = paint(style, {"text": words, "x": X(middle), "y": Y(y - size * 0.35), "size": round(size * k, 2),
+                                  "weight": weight, "font": family or "Inter",
+                                  "italic": (style.get("font-style") or "") == "italic"}, stroke_ok=False)
+            if props:
+                layers.append({"type": "text", "name": name or words[:24], "props": props})
+        else:
+            raise NotLayers(f"a <{tag}>, which Riptide has no layer for")
+
+    walk(root, (0.0, 0.0), {})
+    if not layers:
+        raise NotLayers("nothing in it Riptide draws as a layer")
+    return layers
+
+
+def canvas_size(window: str = "") -> tuple:
+    answer = ask("/api/live/op", {"op": "get_project", "args": {}, "timeout": 20, "window": window or None}, timeout=30)
+    canvas = (answer.get("result") or answer).get("canvas") or {}
+    return float(canvas.get("width") or 1080), float(canvas.get("height") or 1080)
+
+
+def send_svg_layers(path: Path, shown_as: str, window: str) -> str:
+    """PATH, an SVG, as Riptide layers in the project open there: what happened, in a line. Raises NotLayers when it
+    has to go as a picture instead."""
+
+    text = path.read_text(encoding="utf-8", errors="replace")
+    width, height = canvas_size(window)
+    layers = svg_layers(text, width, height)
+    for layer in layers:
+        answer = ask("/api/live/op", {"op": "add_layer", "args": {"type": layer["type"], "name": layer["name"],
+                                                                 "props": layer["props"]},
+                                      "timeout": 30, "window": window or None}, timeout=40)
+        if answer.get("ok") is False:
+            raise SendError(answer.get("error") or "Riptide would not take a layer of it.")
+    count = len(layers)
+    return (f"Added {shown_as} to Riptide as {count} editable layer{'s' if count != 1 else ''} (shapes and text you "
+            f"can change and animate){where(answer)}.")
+
+
 def send(path: Path, name: str = "", x=None, y=None, shown_as: str = "", window: str = "") -> str:
     """Add PATH to the project open in Riptide. What happened, in a line."""
 
@@ -197,6 +397,11 @@ def send(path: Path, name: str = "", x=None, y=None, shown_as: str = "", window:
     mime = (IMAGES if kind == "image" else MODELS)[suffix]
     src = f"data:{mime};base64," + base64.b64encode(path.read_bytes()).decode()
     window = target(window)
+    if suffix == ".svg" and x is None and setting("svg_layers"):
+        try:
+            return send_svg_layers(path, shown_as, window)
+        except NotLayers:
+            pass        # as one picture, below
     args = {"src": src, "file": shown_as, "name": name or Path(shown_as).stem}
     if kind == "image" and x is not None and y is not None:
         args.update(x=x, y=y)

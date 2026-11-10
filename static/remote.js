@@ -33,18 +33,18 @@ const Remote = (() => {
   const redraw = () => { if (typeof render === 'function') render(); SceneEd.redraw?.(); };
 
   // what the server says it can do; asked again while it sets itself up (installing Playwright, finding a browser)
-  function ask() {
+  function askStatus() {
     fetch('/api/render/status').then(r => r.ok ? r.json() : { available: false, why: 'This Riptide server cannot draw 3D' })
       .catch(() => ({ available: false, why: 'Riptide\'s server is not answering' }))
       .then(s => {
         const was = server; server = s;
-        if (s.setting_up) setTimeout(ask, 3000);
+        if (s.setting_up) setTimeout(askStatus, 3000);
         else if (was?.setting_up && s.available) status('Riptide\'s server can draw 3D now');
         if (!s.available && pref !== 'off' && S.layers.some(L => L.type === 'world')) status(`3D worlds are drawn in this tab: ${s.why}`);
         redraw();
       });
   }
-  if (!host) ask();
+  if (!host) askStatus();
 
   // ----- the project, sent when it changes; its imported files sent once each -----
   const sent = new Map();     // asset id -> what was sent of it

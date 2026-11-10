@@ -1,6 +1,6 @@
 {
   "name": "riptide",
-  "description": "Send Flash's pictures and 3D models to Riptide, and build 3D worlds there, as layers in the project open there, to animate and put in a video",
+  "description": "Send Flash's pictures and 3D models to Riptide, and build 3D worlds there, as layers in the project open there, to animate and put in a video. An SVG comes in as editable shapes and text.",
   "version": "0.1.0",
   "prompt": "flash/prompt.md",
   "tools": [
@@ -54,7 +54,7 @@
   ],
   "ui": {
     "buttons": [
-      {"id": "send", "label": "Send to Riptide", "icon": "cube", "where": ["model"],
+      {"id": "send", "label": "Send to Riptide", "icon": "cube", "where": ["model", "image"],
        "run": ["python", "./flash/send.py", "--button"]}
     ]
   },
@@ -62,6 +62,8 @@
     {"id": "url", "label": "Riptide's address", "type": "text", "default": "http://127.0.0.1:5173",
      "help": "Where Riptide runs. The installer's riptide command serves it here."},
     {"id": "open", "label": "Open Riptide when it is not open", "type": "switch", "default": true,
-     "help": "Starts it, or opens its editor in your browser, before sending."}
+     "help": "Starts it, or opens its editor in your browser, before sending."},
+    {"id": "svg_layers", "label": "SVGs as editable layers", "type": "switch", "default": true,
+     "help": "An SVG comes in as Riptide's own shapes and text, each one editable and animatable, when everything in it has a layer in Riptide; otherwise as one picture."}
   ]
 }

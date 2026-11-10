@@ -237,20 +237,23 @@ to the part both share, then type the rest of the new one (reveal 0-1 types, 1-2
 
 
 @mcp.tool()
-async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", ""] = "", name: str | None = None,
+async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "mountain", ""] = "", name: str | None = None,
                     props: dict | None = None) -> dict:
     """Add a 3D world at the bottom of the layers: a whole place to film, with a sky, a sun that casts shadows,
     the ground, the air, props, and a lens. 3D shapes and models above it stand inside it, lit and shadowed by
     it. `scene` starts from a ready-made one, keyed with a slow camera move: "wave" (a breaking wave at golden
     hour), "rig" (a worn film camera on a jib in a hazy wheat field, shallow focus), "studio" (a soft-lit floor
-    for your shapes and models), "desert" (dunes and a monolith at dusk), "night" (moonlit sea); "" is an empty
+    for your shapes and models), "desert" (dunes and a monolith at dusk), "night" (moonlit sea), "mountain" (a red car up a winding
+    road through pine forest under snowy peaks, filmed by a chase camera); "" is an empty
     world. `props` then changes any of its settings (all the numbers and colours animate, with update_layer or
     set_keyframes like any layer's):
 
     sky "sunset" | "day" | "dusk" | "haze" | "overcast" | "night" | "studio"; sunEl (degrees up), sunAz (degrees
     round: 0 is straight ahead of the camera, behind what it looks at), sunPower (%), clouds (%), wind (m/s:
-    clouds, plants, dust and the sea move with it). ground "ocean" | "field" | "desert" | "floor" | "none",
-    groundColor. The ocean: water (colour), waves (metres), chop (%), and a breaking wave: swell (its height, m;
+    clouds, plants, dust and the sea move with it). ground "ocean" | "field" | "desert" | "mountains" | "floor" |
+    "none", groundColor. Mountains: peaks (m), snow (snow line, % of the peaks), trees (pines, %), road (its width,
+    m; 0 for none). A prop on the road: road (metres along it; key it to drive, about 22 m/s), lane (m right of the
+    middle, 1.8 is the right-hand lane), lift (m above it, for a camera), and face "travel". The ocean: water (colour), waves (metres), chop (%), and a breaking wave: swell (its height, m;
     0 for none), curl (0 standing up to 1 thrown over and landing; key it to make the wave break), waveDist (m
     ahead) and waveAngle (degrees turned). A field: plants (colour), grass (%), grassH (m), sway (how hard
     the wheat sways, as wind m/s; 3 in the rig scene) and swayLoop (true fits the sway to the duration so it loops

@@ -13,7 +13,7 @@ const World = (() => {
   const RENDERS = [['preview', 'Preview: fast'], ['path', 'Path traced: real light']];
   const SKIES = [['sunset', 'Golden hour'], ['day', 'Clear day'], ['dusk', 'Dusk'], ['haze', 'Hazy'], ['overcast', 'Overcast'],
     ['night', 'Night'], ['studio', 'Studio']];
-  const GROUNDS = [['ocean', 'Ocean'], ['field', 'Wheat field'], ['desert', 'Desert'], ['floor', 'Studio floor'], ['none', 'None']];
+  const GROUNDS = [['ocean', 'Ocean'], ['field', 'Wheat field'], ['desert', 'Desert'], ['mountains', 'Mountain road'], ['floor', 'Studio floor'], ['none', 'None']];
   // sky palettes: the zenith, the horizon, the sun, clouds where the sun reaches them and where it does not
   const PALETTE = {
     sunset: { zen: '#8c5228', hor: '#ffae55', sun: '#ffc47a', lit: '#ffd497', shade: '#5c2f18', disk: 1, power: 1.4 },
@@ -26,19 +26,22 @@ const World = (() => {
   };
   const FIELDS = ['sky', 'hdri', 'hdriTurn', 'hdriPower', 'sunEl', 'sunAz', 'sunPower', 'clouds', 'wind',
     'ground', 'groundColor', 'floorFinish', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH', 'sway', 'swayLoop',
+    'peaks', 'snow', 'trees', 'road',
     'fog', 'dust', 'eye', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao', 'render', 'samples', 'pace', 'shutter', 'letterbox', 'godrays', 'flare', 'streaks', 'rain', 'wet', 'objects', 'shots'];
   const DEFAULTS = { hdri: '', hdriTurn: 0, hdriPower: 100, floorFinish: '', sky: 'sunset', sunEl: 8, sunAz: 10, sunPower: 100, clouds: 45, wind: 4, ground: 'ocean', groundColor: '#8a6a45',
     water: '#0b4a46', waves: .6, chop: 50, swell: 0, curl: .5, waveDist: 45, waveAngle: -20, plants: '#c09a48', grass: 60, grassH: .9, sway: 3, swayLoop: false,
+    peaks: 900, snow: 62, trees: 70, road: 7,
     fog: 8, dust: 0, eye: 1.7, heading: 0, pitch: 0, travel: 0, lens: 35, focus: 0, dof: 0, exposure: 0, bloom: 30, grain: 15, fringe: 10, ao: 0, render: 'preview', samples: 128, pace: 100, shutter: 0, letterbox: 'none', godrays: 0, flare: 0, streaks: 0, rain: 0, wet: 0 };
   const LABELS = { hdri: 'Sky photo', hdriTurn: 'Photo turn°', hdriPower: 'Photo light %', floorFinish: 'Ground finish', sky: 'Sky', sunEl: 'Sun height°', sunAz: 'Sun around°', sunPower: 'Sun %', clouds: 'Clouds %', wind: 'Wind m/s',
     ground: 'Ground', groundColor: 'Ground colour', water: 'Water', waves: 'Waves m', chop: 'Chop %', swell: 'Breaker m', curl: 'Curl',
     waveDist: 'Breaker at m', waveAngle: 'Breaker turn°', plants: 'Plants', grass: 'Plants %', grassH: 'Plant height m', sway: 'Sway m/s', swayLoop: 'Loop sway',
+    peaks: 'Peaks m', snow: 'Snow line %', trees: 'Pines %', road: 'Road width m',
     fog: 'Fog', dust: 'Dust', eye: 'Eye height m', heading: 'Look around°', pitch: 'Look up°', travel: 'Travel m', lens: 'Lens mm',
     focus: 'Focus m', dof: 'Depth of field', exposure: 'Exposure', bloom: 'Bloom', grain: 'Grain', fringe: 'Fringe', ao: 'Contact shade', render: 'Render', samples: 'Samples', pace: 'World speed %', shutter: 'Motion blur°', letterbox: 'Letterbox', godrays: 'Light shafts', flare: 'Lens flare', streaks: 'Light streaks', rain: 'Rain', wet: 'Wet ground' };
   const COLORS = ['groundColor', 'water', 'plants'];
   const NUMBERS = FIELDS.filter(k => !['sky', 'ground', 'objects', 'shots', 'swayLoop', 'hdri', 'floorFinish', 'render', 'letterbox', ...COLORS].includes(k));
   const GROUPS = [['World', ['hdri', 'hdriTurn', 'hdriPower', 'sky', 'sunEl', 'sunAz', 'sunPower', 'clouds', 'wind', 'fog', 'dust', 'rain', 'wet']],
-    ['Ground', ['ground', 'groundColor', 'floorFinish', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH', 'sway', 'swayLoop']],
+    ['Ground', ['ground', 'groundColor', 'floorFinish', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH', 'sway', 'swayLoop', 'peaks', 'snow', 'trees', 'road']],
     ['Lens', ['render', 'samples', 'pace', 'shutter', 'letterbox', 'godrays', 'flare', 'streaks', 'eye', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao']]];
   const STEP = { waves: .05, curl: .01, grassH: .05, eye: .05, exposure: .05 };
   const deg = v => (+v || 0) * Math.PI / 180;
@@ -49,6 +52,7 @@ const World = (() => {
     if (['water', 'waves', 'chop', 'swell'].includes(k)) return o.ground === 'ocean';
     if (['curl', 'waveDist', 'waveAngle'].includes(k)) return o.ground === 'ocean' && (o.swell > 0 || keyed);
     if (['plants', 'grass', 'grassH', 'sway', 'swayLoop'].includes(k)) return o.ground === 'field';
+    if (['peaks', 'snow', 'trees', 'road'].includes(k)) return o.ground === 'mountains';
     if (k === 'groundColor') return o.ground !== 'ocean' && o.ground !== 'none';
     if (k === 'clouds') return o.sky !== 'studio' && !o.hdri;
     if (k === 'hdriTurn' || k === 'hdriPower') return !!o.hdri;
@@ -408,8 +412,20 @@ const World = (() => {
     }
     return ks[ks.length - 1].v;
   }
+  // Where a prop is at T. One on a road (a mountain road world's: see terrain.js) is placed by how far along it is,
+  // `road` in metres (keyed to drive it), `lane` metres to the right of the middle and `lift` above it; any other by
+  // its place, `at`.
+  function placeOf(P, t) {
+    if (P.road != null && World.roadAt) { const r = World.roadAt(+keyed(P, 'road', t, +P.road || 0) || 0, +P.lane || 0);
+      return [r[0], r[1] + (+P.lift || 0), r[2]]; }
+    return keyed(P, 'at', t, P.at || [0, 0, 0]);
+  }
   // which way a prop is going at T: for 'face the way it travels'
   function heading(P, t) {
+    if (P.road != null && World.roadAt) {
+      const s0 = +keyed(P, 'road', t - .05, +P.road || 0) || 0, s1 = +keyed(P, 'road', t + .05, +P.road || 0) || 0;
+      const y = World.roadAt(s0, +P.lane || 0).yaw; return s1 < s0 ? y + Math.PI : y;
+    }
     const a = keyed(P, 'at', t - .05, P.at || [0, 0, 0]), b = keyed(P, 'at', t + .05, P.at || [0, 0, 0]);
     const dx = (+b[0] || 0) - (+a[0] || 0), dz = (+b[2] || 0) - (+a[2] || 0);
     return Math.hypot(dx, dz) < 1e-5 ? null : Math.atan2(dx, dz);
@@ -442,7 +458,7 @@ const World = (() => {
   }
   function buildPart(P, t) {
     if (!P || typeof P !== 'object' || P.hidden) return null;
-    const node = new T.Group(), at = keyed(P, 'at', t, P.at || [0, 0, 0]), turn = keyed(P, 'turn', t, P.turn || [0, 0, 0]), spin = P.spin || [0, 0, 0];
+    const node = new T.Group(), at = placeOf(P, t), turn = keyed(P, 'turn', t, P.turn || [0, 0, 0]), spin = P.spin || [0, 0, 0];
     node.position.set((+at[0] || 0) * M, ((+at[1] || 0) + (+P.bob || 0) * Math.sin(t * 2.1 + (+at[0] || 0))) * M, (+at[2] || 0) * M);
     node.rotation.set(deg((+turn[0] || 0) + (+spin[0] || 0) * t), deg((+turn[1] || 0) + (+spin[1] || 0) * t), deg((+turn[2] || 0) + (+spin[2] || 0) * t), 'YXZ');
     if (P.face === 'travel') { const h = heading(P, t); if (h != null) node.rotation.y = h + deg(+turn[1] || 0); }
@@ -549,7 +565,7 @@ const World = (() => {
     const parts = chain(o.objects, id); if (!parts) return null;
     const m = new T.Matrix4().makeTranslation(0, -(+o.eye || 1.7) * M, 0), q = new T.Quaternion(), e = new T.Euler();
     for (const P of parts) {
-      const at = keyed(P, 'at', tw, P.at || [0, 0, 0]), turn = keyed(P, 'turn', tw, P.turn || [0, 0, 0]), spin = P.spin || [0, 0, 0];
+      const at = placeOf(P, tw), turn = keyed(P, 'turn', tw, P.turn || [0, 0, 0]), spin = P.spin || [0, 0, 0];
       e.set(deg((+turn[0] || 0) + (+spin[0] || 0) * tw), deg((+turn[1] || 0) + (+spin[1] || 0) * tw), deg((+turn[2] || 0) + (+spin[2] || 0) * tw), 'YXZ');
       if (P.face === 'travel') { const h = heading(P, tw); if (h != null) e.y = h + deg(+turn[1] || 0); }
       q.setFromEuler(e);
@@ -902,7 +918,7 @@ const World = (() => {
   };
 
   const World = { LETTERBOXES, RENDERS, SKIES, GROUNDS, FIELDS, DEFAULTS, LABELS, COLORS, NUMBERS, GROUPS, STEP, PRESETS, PARTS, FINISHES: Object.keys(FINISHES), FINISH_LOOKS: FINISHES,
-    shows, draw, stage, shoot, worldOf, camera, gl, ensureIds, findPart, finish, custom, M, lin, deg, partGeometry, keyed, heading,
+    shows, draw, stage, shoot, worldOf, camera, gl, ensureIds, findPart, finish, custom, M, lin, deg, partGeometry, keyed, heading, placeOf, rng, rebuild,
     get renderer() { return renderer; }, get available() { return !!T; }, prepareFrame, bars, worldTime, propCamera, shotAt, partMatrix,
     // bumped when something props are built from finishes loading (a model, a texture), so they are built again
     version: 0, stageHooks: [] };

@@ -13,6 +13,8 @@ const Actors = (() => {
 
   // how far a prop has gone along its keyed path by world time T (metres), for wheels and footsteps
   function travelled(P, t) {
+    // on a road: how far along it, from where its drive starts
+    if (P.road != null) { const rk = P.keys?.road; return rk?.length ? Math.abs((+World.keyed(P, 'road', t, 0) || 0) - (+rk[0].v || 0)) : 0; }
     const ks = P.keys?.at; if (!ks?.length) return 0;
     const t0 = ks[0].t; let d = 0, last = World.keyed(P, 'at', t0, P.at);
     for (let x = t0 + .05; x <= t; x += .05) { const p = World.keyed(P, 'at', x, P.at); d += Math.hypot(p[0] - last[0], p[1] - last[1], p[2] - last[2]); last = p; }

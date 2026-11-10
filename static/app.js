@@ -1039,6 +1039,7 @@ function commit() {
   const s = JSON.stringify(S);
   if (hist[hi] === s) return;
   hist = hist.slice(0, hi + 1); hist.push(s); if (hist.length > 150) hist.shift(); hi = hist.length - 1;
+  if (typeof Keep !== 'undefined') Keep.later();
   if (hist.length > 1) setDirty(true);
   updateHistoryButtons();
 }
@@ -1048,7 +1049,7 @@ function undoRedo(d) {
   refresh(true, false); updateHistoryButtons();
 }
 function updateHistoryButtons() { $('#undo').disabled = hi <= 0; $('#redo').disabled = hi >= hist.length - 1; }
-function resetHistory() { hist = [JSON.stringify(S)]; hi = 0; updateHistoryButtons(); }
+function resetHistory() { hist = [JSON.stringify(S)]; hi = 0; updateHistoryButtons(); if (typeof Keep !== 'undefined') Keep.later(); }
 
 // ---------- layers panel ----------
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -2756,9 +2757,16 @@ $('#avars')?.addEventListener('click', async e => {
 });
 $('#asize').onclick = e => UI.menu(e.currentTarget,
   [...SIZES.map(([g, l, w, h]) => ({ group: g, value: l, label: l, hint: `${w}×${h}` })),
-   { group: 'Custom', value: '__custom', label: 'Custom size…', hint: 'W × H' }],
+   { group: 'Custom', value: '__custom', label: 'Custom size…', hint: 'W × H' },
+   { group: 'New projects', value: '__default', label: 'Use this size for new projects', hint: `${S.w}×${S.h}` },
+   ...(defaultSize().w !== 1080 || defaultSize().h !== 1080 ? [{ group: 'New projects', value: '__undefault', label: 'Start new projects at 1080×1080' }] : [])],
   SIZES.find(s => s[2] == S.w && s[3] == S.h)?.[1],
   async v => {
+    if (v === '__default' || v === '__undefault') {
+      try { if (v === '__default') localStorage.setItem('riptide.defaultSize', `${S.w}x${S.h}`); else localStorage.removeItem('riptide.defaultSize'); }
+      catch { return status('This browser will not keep it'); }
+      return status(v === '__default' ? `New projects start at ${S.w}×${S.h}` : 'New projects start at 1080×1080');
+    }
     if (v !== '__custom') { const [, , w, h] = SIZES.find(s => s[1] === v); return resizeComp(w, h); }
     const r = await UI.prompt('Canvas size (width × height)', `${S.w} × ${S.h}`, 'Resize'); if (!r) return;
     const m = r.match(/(\d+)\s*[x×*, ]\s*(\d+)/i); if (!m) return status('Type a size like 1920 × 1080');
@@ -2861,7 +2869,7 @@ async function openFile() {
 }
 async function newFile() {
   if (!await confirmDiscard()) return;
-  S = { w: 1080, h: 1080, bg: '#ffffff', dur: 5, layers: [], assets: {}, sounds: {}, audioTracks: [] }; selClip = null; projectName = 'Untitled'; fileHandle = null;
+  S = { ...defaultSize(), bg: '#ffffff', dur: 5, layers: [], assets: {}, sounds: {}, audioTracks: [] }; selClip = null; projectName = 'Untitled'; fileHandle = null;
   sel = null; selKey = null; selKeys = []; time = 0; refresh(true, false); resetHistory(); setDirty(false);
 }
 $('#new').onclick = newFile; $('#open').onclick = openFile; $('#save').onclick = () => save(false);
@@ -3317,7 +3325,12 @@ $('#scrim').onclick = () => document.body.classList.remove('show-layers', 'show-
 document.querySelectorAll('[data-icon]').forEach(b => b.insertAdjacentHTML('afterbegin', ICON[b.dataset.icon]));
 
 // ---------- start-up project: a blank white canvas ----------
-function blank() { S = { w: 1080, h: 1080, bg: '#ffffff', dur: 5, layers: [], assets: {}, markers: [], sounds: {}, audioTracks: [] }; sel = null; selKey = null; selKeys = []; time = 0; }
+// The size a new project starts at: the one set with "Use this size for new projects", kept in this browser.
+function defaultSize() {
+  try { const m = String(localStorage.getItem('riptide.defaultSize') || '').match(/^(\d+)x(\d+)$/); if (m) return { w: +m[1], h: +m[2] }; } catch { /* storage blocked */ }
+  return { w: 1080, h: 1080 };
+}
+function blank() { S = { ...defaultSize(), bg: '#ffffff', dur: 5, layers: [], assets: {}, markers: [], sounds: {}, audioTracks: [] }; sel = null; selKey = null; selKeys = []; time = 0; }
 
 // ---------- drag animations onto layers ----------
 // Pick up an animation from the library and drop it on a layer in the viewer (applies at the playhead)
@@ -4112,7 +4125,7 @@ const LIVE = (() => {
     undo: () => { undoRedo(-1); return { ok: true }; },
     redo: () => { undoRedo(1); return { ok: true }; },
     get_project_json: () => JSON.parse(JSON.stringify({ ...S, assets: Object.fromEntries(Object.entries(S.assets || {}).map(([id, a]) => [id, { ...a, src: undefined }])) })),
-    new_project: a => { S = { w: +a.width || 1080, h: +a.height || 1080, bg: a.background || '#ffffff', dur: +a.duration || 5, layers: [], assets: {}, markers: [] };
+    new_project: a => { S = { w: +a.width || defaultSize().w, h: +a.height || defaultSize().h, bg: a.background || '#ffffff', dur: +a.duration || 5, layers: [], assets: {}, markers: [] };
       projectName = a.name || 'Untitled'; fileHandle = null; sel = null; selKey = null; selKeys = []; time = 0; return done('started a new project'); },
   };
 
@@ -4163,5 +4176,55 @@ document.addEventListener('click', e => { const h = e.target.closest('.sech'); i
   const s = h.parentElement, k = h.textContent; s.classList.toggle('closed'); closedSecs[s.classList.contains('closed') ? 'add' : 'delete'](k); });
 new MutationObserver(() => document.querySelectorAll('.sech').forEach(h => { if (closedSecs.has(h.textContent)) h.parentElement.classList.add('closed'); }))
   .observe($('#props'), { childList: true });
+// ---------- this window's work, kept across a reload ----------
+// Each window has its own id in its address (?window=…), which a reload keeps. What is open in it is saved to
+// IndexedDB under that id a moment after each change (the project, its video files and sounds, the file name and
+// whether it was saved), and a reload of the same window opens it again, unsaved changes and all. A new window,
+// or one opened for an agent's new project, starts fresh. Kept for two weeks.
+const Keep = (() => {
+  const here = new URLSearchParams(location.search), id = here.get('window');
+  const on = !!id && here.get('renderhost') !== '1' && !here.has('name') && !here.has('width') && 'indexedDB' in window;
+  const DAYS = 14;
+  let db = null, timer = 0, ready = false;
+  const open = () => db || (db = new Promise((ok, no) => {
+    const r = indexedDB.open('riptide-keep', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('windows');
+    r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error);
+  }));
+  const run = async (mode, fn) => { const d = await open(); return new Promise((ok, no) => {
+    const t = d.transaction('windows', mode), r = fn(t.objectStore('windows'));
+    t.oncomplete = () => ok(r && r.result); t.onerror = () => no(t.error); }); };
+  async function save() {
+    if (!on || !ready) return;
+    const sounds = {}; for (const sid of Object.keys(S.sounds || {})) if (SND[sid]) sounds[sid] = SND[sid];
+    const videos = {}; for (const [vid, b] of Object.entries(VBLOB)) if (S.assets?.[vid]) videos[vid] = b;
+    try { await run('readwrite', st => st.put({ at: Date.now(), project: JSON.stringify(S), name: projectName, dirty, time, sounds, videos }, id)); }
+    catch (e) { console.warn('Could not keep this window\'s project', e); }
+  }
+  async function restore() {
+    if (!on) return false;
+    try {
+      const old = Date.now() - DAYS * 864e5;
+      run('readwrite', st => { const c = st.openCursor(); c.onsuccess = () => { const k = c.result; if (!k) return; if ((k.value?.at || 0) < old) k.delete(); k.continue(); }; return c; }).catch(() => {});
+      const rec = await run('readonly', st => st.get(id));
+      if (!rec || !rec.project) return false;
+      const p = JSON.parse(rec.project);
+      for (const [sid, src] of Object.entries(rec.sounds || {})) if (p.sounds?.[sid]) p.sounds[sid].src = src;
+      loadText(JSON.stringify({ format: 'riptide', version: 3, project: p }), (rec.name || 'Untitled') + '.rip');
+      for (const [vid, b] of Object.entries(rec.videos || {})) { VBLOB[vid] = b; VURL[vid] = URL.createObjectURL(b); }
+      if (Object.keys(rec.videos || {}).length) { assetSig = ''; refresh(true, false); }
+      time = Math.max(0, Math.min(S.dur, +rec.time || 0)); setDirty(!!rec.dirty); refresh(true, false);
+      status(`Restored ${projectName}.rip as it was before the reload`);
+      return true;
+    } catch (e) { console.warn('Could not restore this window\'s project', e); return false; }
+  }
+  // a moment after a change, and when the page is going away
+  function later() { if (!on || !ready) return; clearTimeout(timer); timer = setTimeout(save, 400); }
+  addEventListener('pagehide', () => { clearTimeout(timer); save(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(timer); save(); } });
+  return { later, save, restore, start() { ready = true; }, get on() { return on; } };
+})();
+
 blank();
 refresh(true, false); resetHistory(); setDirty(false);
+Keep.restore().finally(() => { Keep.start(); Keep.later(); });

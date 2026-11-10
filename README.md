@@ -74,6 +74,10 @@ and `--uninstall` (`-Uninstall`) takes Riptide back out. ffmpeg is still yours t
 
 Projects save as `.rip` files (images and audio embedded; older `.wob` files still open) with the browser's own Save/Open dialogs.
 
+Reload a window and it comes back as it was, unsaved changes included: each window keeps its work in the browser,
+under the window's own id, for two weeks. A new window starts fresh. New projects start at 1080×1080 unless you pick a
+size and choose **Use this size for new projects** from the canvas size menu.
+
 3D worlds are drawn by the server, not your browser tab: `server.py` keeps a windowless browser of its own (Chrome or Edge
 when you have one, else Playwright's Chromium, which the installer fetches) and the editor shows the pictures it sends.
 A heavy scene can no longer take the editor down, and if that browser falls over the server starts another. Right-click

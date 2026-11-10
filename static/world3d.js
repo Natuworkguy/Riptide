@@ -475,7 +475,7 @@ const World = (() => {
     return null;
   }
   // props that move by themselves: keyed, spinning, bobbing, playing a clip, or alive (cars, people, crowds, effects)
-  const animated = list => JSON.stringify(list || []).match(/"(keys|spin|bob|clip)"|"type":"(car|person|crowd|fx|rain)"/);
+  const animated = list => JSON.stringify(list || []).match(/"(keys|spin|bob|clip|poseKeys)"|"type":"(car|person|crowd|fx|rain)"/);
   function buildProps(list, t) {
     const root = new T.Group();
     for (const P of Array.isArray(list) ? list : []) { const n = buildPart(P, t); if (n) root.add(n); }

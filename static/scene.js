@@ -262,6 +262,8 @@ const SceneEd = (() => {
   // snapping: what was moved comes down (or up) onto the highest surface under it, else the ground; lights stay where they are
   function drop() {
     const n = gizmo.object; if (!n || !B || sel()?.type === 'light') return;
+    // the gizmo on a bone (a pose) or an edit's points: nothing to drop
+    if (n.isBone || (n.userData.partId == null && n.userData.layerId == null)) return;
     n.updateMatrixWorld(true);
     const b3 = new T.Box3().setFromObject(n); if (b3.isEmpty()) return;
     const mine = new Set(); n.traverse(x => mine.add(x));

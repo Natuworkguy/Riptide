@@ -115,6 +115,8 @@ const Library = (() => {
     const clip = P.clip && c.clips?.find(x => x.name === P.clip);
     if (clip) { const mix = new T.AnimationMixer(g.children[0]); mix.clipAction(clip).play();
       const len = clip.duration || 1, at = t * (+P.clipSpeed || 1) + (+P.clipOffset || 0); mix.setTime(P.clipOnce ? Math.min(at, len - 1e-3) : ((at % len) + len) % len); }
+    // then the pose it was given, bone by bone, over its rest pose or its clip (static/pose.js)
+    World.poseHook?.(g, P, t);
     return g;
   };
   World.clipsOf = id => modelCache.get(id)?.clips?.map(x => x.name) || [];

@@ -21,6 +21,17 @@ jobs:
         with:
           node-version: "22"
       - name: Python compiles
-        run: python -m py_compile server.py mcp_server.py version.py
+        run: python -m py_compile server.py mcp_server.py version.py launch.py flash/send.py native/*.py
       - name: JavaScript parses
         run: for f in static/*.js; do node --check "$f"; done
+
+  mac-app:
+    name: Mac app builds
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Compile the Riptide app
+        run: |
+          mkdir -p build
+          xcrun swiftc -O -target "$(uname -m)-apple-macos12.0" -o build/Riptide macos/Riptide.swift -framework Cocoa -framework WebKit
+          file build/Riptide

@@ -45,7 +45,7 @@ const SceneEd = (() => {
     wrap.innerHTML = `<header><b class="ttl">Scene</b><span class="nm"></span>
       <div class="seg tools"><button data-tool="translate" title="Move  G / W">Move</button><button data-tool="rotate" title="Turn  R / E">Turn</button><button data-tool="scale" title="Scale  S">Scale</button></div>
       <button class="tb small" data-act="add">+ Add</button><span class="extras"></span>
-      <div class="seg"><button data-act="snap" class="on" title="Drop what you move onto the ground, or onto the top of what it is over">Snap</button></div>
+      <div class="seg"><button data-act="snap" class="on" title="Drop what you move onto the ground, or onto the top of what it is over (cameras and lights stay where you put them)">Snap</button></div>
       <div class="seg"><button data-act="speedlock"${ghost.speedLock ? ' class="on"' : ''} title="Ghost view: scrolling changes the speed in steady, fixed steps, for trackpads and Magic Mice">Speed lock</button></div>
       <div class="seg views"><button data-view="free" title="Fly round the scene">Free</button><button data-view="ghost" title="Fly through the scene  V">Ghost</button><button data-view="film" title="Look through the film camera">Film camera</button></div>
       <span class="sp"></span><button class="tb small" data-act="shot" title="Save this view as a PNG, without the grid or handles">Screenshot</button><button class="tb primary" data-act="done">Done</button></header>
@@ -270,9 +270,13 @@ const SceneEd = (() => {
   }
   function findNode(id) { if (isLay(id)) return B?.members?.find(n => n.userData.layerId === id.slice(2)) || null;
     let hit = null; B?.props?.traverse(n => { if (!hit && n.userData.partId === id && !n.isMesh) hit = n; }); return hit; }
-  // snapping: what was moved comes down (or up) onto the highest surface under it, else the ground; lights stay where they are
+  // a camera prop (or any part of one): it floats where it is put, and nothing lands on it
+  const cameraPart = n => { for (let x = n; x; x = x.parent) { if (x.userData?.guide) return true;
+    if (x.userData?.partId != null) { const f = World.findPart(objs(), x.userData.partId); if (f?.P?.type === 'camera') return true; } } return false; };
+  // snapping: what was moved comes down (or up) onto the highest surface under it, else the ground; lights and
+  // cameras stay where they are put
   function drop() {
-    const n = gizmo.object; if (!n || !B || sel()?.type === 'light') return;
+    const n = gizmo.object; if (!n || !B || sel()?.type === 'light' || sel()?.type === 'camera' || cameraPart(n)) return;
     // the gizmo on a bone (a pose) or an edit's points: nothing to drop
     if (n.isBone || (n.userData.partId == null && n.userData.layerId == null)) return;
     n.updateMatrixWorld(true);
@@ -283,7 +287,7 @@ const SceneEd = (() => {
     // the middle and four points in from the corners, cast down from halfway up it
     for (const [fx, fz] of [[0, 0], [-.35, -.35], [.35, -.35], [-.35, .35], [.35, .35]]) {
       ray.set(new T.Vector3(c.x + fx * sz.x, b3.min.y + sz.y / 2, c.z + fz * sz.z), new T.Vector3(0, -1, 0));
-      const hit = ray.intersectObjects(others, true).find(h => !mine.has(h.object) && h.object.visible);
+      const hit = ray.intersectObjects(others, true).find(h => !mine.has(h.object) && h.object.visible && !cameraPart(h.object));
       if (hit && hit.point.y > top) top = hit.point.y;
     }
     n.position.y += top - b3.min.y; n.updateMatrixWorld(true);

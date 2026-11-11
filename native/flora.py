@@ -152,10 +152,16 @@ def _frond(b: Builder, pts, side, L, rng, main):
 
 
 # ----- grass -----
+def ww_fold(w: float, t: float) -> float:
+    """How deep a blade's V fold is, T of the way up: about half its width at the base, nothing at the tip."""
+    return w * .55 * (1 - t) ** 1.2
+
+
 def grass_clump(seed: int, blades: int = 56):
     """A tuft of meadow grass: thin blades a few millimetres wide, from short and curled to knee high, leaning
-    out from the middle and bending under their own weight; a few taller stems with seed heads. Each blade's
-    UV u is a number of its own (for its colour), v runs up it."""
+    out from the middle and bending under their own weight, each folded along its midrib; a few taller stems with
+    seed heads. UV u is the blade's number (0 to 99; 100 a stem, 101 a seed head) plus where across it, v runs up
+    it."""
     rng = np.random.default_rng(seed)
     b = Builder()
     for _ in range(blades):
@@ -168,18 +174,26 @@ def grass_clump(seed: int, blades: int = 56):
         face = np.array([-dirn[1], dirn[0], 0])
         twist = rng.normal(0, .5)
         w = .0022 + rng.random() * .0025
-        left, right = [], []
+        left, mid, right = [], [], []
         segs = 6
+        prev = base
         for i in range(segs + 1):
             t = i / segs
             # bending further over towards the tip, as a long blade does
             p = base + dirn * lean * h * t ** 2.2 + np.array([0, 0, h * t * (1 - .45 * lean * t * t)])
             f = _unit(face * math.cos(twist * t) + np.array([0, 0, 1.0]) * math.sin(twist * t) * .3)
+            along = _unit(p - prev) if i else np.array([0, 0, 1.0])
+            prev = p
+            # folded along its midrib into a shallow V, as a grass blade is, the fold flattening towards the tip
+            fold = _unit(np.cross(f, along)) * ww_fold(w, t)
             ww = w * (1 - t ** 1.5) + .0003
             left.append(p - f * ww)
+            mid.append(p - fold)
             right.append(p + f * ww)
-        u = rng.random()
-        b.strip(left, right, u, u + 1e-4)
+        # UV u: the blade's own number (whole part, for its colour) and where across it (fraction, for its veins)
+        k = float(int(rng.random() * 100))
+        b.strip(left, mid, k, k + .5)
+        b.strip(mid, right, k + .5, k + .999)
     for _ in range(int(rng.integers(0, 4))):
         # a seed stem: a thin stalk and an oat-like head
         a = rng.random() * 2 * math.pi
@@ -188,10 +202,10 @@ def grass_clump(seed: int, blades: int = 56):
         mid = (base + top) / 2 + np.array([0, 0, .03])
         face = _unit(np.array([-math.sin(a), math.cos(a), 0]))
         pts = [base + (mid - base) * t * 2 if t < .5 else mid + (top - mid) * (t - .5) * 2 for t in np.linspace(0, 1, 6)]
-        b.strip([p - face * .0012 for p in pts], [p + face * .0012 for p in pts], .995, .9951)
+        b.strip([p - face * .0012 for p in pts], [p + face * .0012 for p in pts], 100.0, 100.999)
         head = [top + np.array([math.cos(a) * .015, math.sin(a) * .015, -.02]) * t * 4 for t in np.linspace(0, 1, 4)]
         b.strip([p - face * .006 * (1 - abs(i - 1.5) / 2) for i, p in enumerate(head)],
-                [p + face * .006 * (1 - abs(i - 1.5) / 2) for i, p in enumerate(head)], .999, .9991)
+                [p + face * .006 * (1 - abs(i - 1.5) / 2) for i, p in enumerate(head)], 101.0, 101.999)
     return b.v, b.f, b.uv
 
 

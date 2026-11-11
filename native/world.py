@@ -727,15 +727,34 @@ class World:
         k.l(uv, sep.inputs[0])
         # each tuft its own green, from deep to yellowing, and a few dry; darker where the meadow is lush
         gp = k.n("ShaderNodeNewGeometry").outputs["Position"]
-        blade = sep.outputs["X"]
+        # UV u: the blade's number (whole) and where across it (fraction); 100 and up, seed stems and heads
+        u = sep.outputs["X"]
+        blade = k.math("DIVIDE", k.math("FLOOR", u), 100)
+        across = k.math("FRACT", u)
+        up = sep.outputs["Y"]
         mixed = k.math("FRACT", k.math("ADD", blade, k.math("MULTIPLY", rnd, 3.7)))
         base = k.mix(mixed, srgb("#2c4416"), srgb("#55702a"))
         base = k.mix(k.math("MULTIPLY", k.ramp(mixed, .8, .97), .8), base, srgb("#8d8450"))
-        base = k.mix(k.ramp(blade, .99, .995), base, srgb("#a39466"))   # seed stems and heads
+        base = k.mix(k.ramp(blade, .995, 1.0), base, srgb("#a39466"))   # seed stems and heads
         base = k.mix(k.math("MULTIPLY", k.ramp(k.noise(gp, .06, 3), .4, .65), .45), base, srgb("#26371a"))
-        col = k.mix(k.ramp(sep.outputs["Y"], .0, .6), k.mix(.5, base, srgb("#22300f")), base)
+        # a blade's lines: a pale midrib down the middle, fine parallel veins either side, edges a shade lighter,
+        # and on some the tip drying to straw
+        off = k.math("ABSOLUTE", k.math("SUBTRACT", across, .5))
+        rib = k.ramp(off, .045, .015)
+        cells = k.math("FRACT", k.math("MULTIPLY", across, 11))
+        vein = k.ramp(k.math("MINIMUM", cells, k.math("SUBTRACT", 1, cells)), .16, .04)
+        edge = k.ramp(off, .43, .5)
+        base = k.mix(k.math("MULTIPLY", vein, .32), base, k.mix(.6, base, srgb("#141f08")))
+        base = k.mix(k.math("MULTIPLY", rib, .5), base, k.mix(.5, base, srgb("#c4cf8a")))
+        base = k.mix(k.math("MULTIPLY", edge, .3), base, srgb("#9aa860"))
+        base = k.mix(k.math("MULTIPLY", k.ramp(up, .8, 1), k.ramp(mixed, .45, .7)), base, srgb("#a69a62"))
+        col = k.mix(k.ramp(up, .0, .6), k.mix(.5, base, srgb("#22300f")), base)
         bsdf = k.n("ShaderNodeBsdfPrincipled", inputs={"Roughness": .55, "Specular IOR Level": .45})
         k.l(col, bsdf.inputs["Base Color"])
+        # the ridges of the veins and the raised midrib, in the light
+        ridge = k.n("ShaderNodeBump", inputs={"Strength": .6, "Distance": .00035})
+        k.l(k.math("SUBTRACT", k.math("MULTIPLY", rib, .8), k.math("MULTIPLY", vein, .5)), ridge.inputs["Height"])
+        k.l(ridge.outputs["Normal"], bsdf.inputs["Normal"])
         tr = k.n("ShaderNodeBsdfTranslucent")
         k.l(col, tr.inputs["Color"])
         mixs = k.n("ShaderNodeMixShader", inputs={"Fac": .18})

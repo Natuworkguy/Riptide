@@ -65,8 +65,13 @@ Windows (PowerShell):
 The installer puts Riptide in its own Python environment, adds a `riptide` command, an applications menu (or Start
 menu) entry with Riptide's icon (and a Riptide app in Applications on a Mac), and registers `riptide://open` links.
 
-Riptide is a desktop app: each of these opens it in a window of its own, with no address bar or tabs, and starts its
-server if it is not running. Nothing to set up: the window is Chrome, Edge, Brave or Chromium in app mode with a profile
+On a Mac, Riptide is a real app: the installer builds it (macos/Riptide.swift) with Xcode's command line tools
+(`xcode-select --install` if you do not have them) into `~/Applications/Riptide.app`, a native window with Apple's own
+WebKit, menus, full screen and Cmd+Q, no browser involved. It starts Riptide's server when it opens and stops it when it
+quits; exports land in Downloads; windows Flash or an agent opens for a project open in the app too.
+
+Elsewhere Riptide is a desktop app too: each of these opens it in a window of its own, with no address bar or tabs, and
+starts its server if it is not running. Nothing to set up: the window is Chrome, Edge, Brave or Chromium in app mode with a profile
 of its own, so it sits in the dock or taskbar as Riptide and remembers its size; on a computer with none of those it is
 a native window when pywebview is installed, else a browser tab. `riptide --tab` (or `RIPTIDE_OPEN=tab`) opens a tab
 instead, and from a tab, the browser's Install app button makes it an app too. `riptide --stop` stops the server. Run the installer again to update. `--dev` installs the dev branch,

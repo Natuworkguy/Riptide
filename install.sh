@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Riptide installer for Linux.
+# Riptide installer for macOS and Linux.
 #
 #   curl -fsSL https://raw.githubusercontent.com/Natuworkguy/Riptide/main/install.sh | bash
 #   ... | bash -s -- --dev         the dev branch, where changes land before a release
@@ -119,12 +119,32 @@ command -v xdg-mime >/dev/null 2>&1 && xdg-mime default riptide.desktop x-scheme
 command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$(dirname "$DESKTOP")" >/dev/null 2>&1 || true
 
 # ---------- a Mac app: Riptide in Applications, Launchpad and the Dock ----------
+# A real app: a native window with Apple's WebKit (macos/Riptide.swift), built here with Xcode's command line tools,
+# which starts Riptide's server and stops it on quit. Without the tools, a small launcher instead.
 if [ "$(uname -s)" = "Darwin" ]; then
     MACAPP="$HOME/Applications/Riptide.app"
+    rm -rf "$MACAPP"
     mkdir -p "$MACAPP/Contents/MacOS" "$MACAPP/Contents/Resources"
-    printf '#!/bin/sh\nexec "%s" "$@"\n' "$LAUNCHER" > "$MACAPP/Contents/MacOS/Riptide"
-    chmod +x "$MACAPP/Contents/MacOS/Riptide"
-    cat > "$MACAPP/Contents/Info.plist" <<'PLIST'
+    NATIVE=""
+    if command -v swiftc >/dev/null 2>&1 || xcrun --find swiftc >/dev/null 2>&1; then
+        say "Building the Riptide app..."
+        if xcrun swiftc -O -target "$(uname -m)-apple-macos12.0" -o "$MACAPP/Contents/MacOS/Riptide" \
+            "$APP/macos/Riptide.swift" -framework Cocoa -framework WebKit >/dev/null 2>&1; then
+            NATIVE=1
+            touch "$MACAPP/Contents/Resources/native"
+        else
+            say "  Could not build it: Riptide opens in a browser window instead."
+        fi
+    else
+        say "  Xcode's command line tools are not installed (xcode-select --install): Riptide opens in a browser window."
+        say "  Install them and run this again for the Riptide app."
+    fi
+    if [ -z "$NATIVE" ]; then
+        printf '#!/bin/sh\nexec "%s" "$@"\n' "$LAUNCHER" > "$MACAPP/Contents/MacOS/Riptide"
+        chmod +x "$MACAPP/Contents/MacOS/Riptide"
+    fi
+    BACKGROUND=$([ -n "$NATIVE" ] && echo false || echo true)
+    cat > "$MACAPP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -134,15 +154,28 @@ if [ "$(uname -s)" = "Darwin" ]; then
 <key>CFBundleExecutable</key><string>Riptide</string>
 <key>CFBundleIconFile</key><string>Riptide</string>
 <key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleShortVersionString</key><string>1.0</string>
+<key>LSMinimumSystemVersion</key><string>12.0</string>
+<key>LSApplicationCategoryType</key><string>public.app-category.video</string>
+<key>NSHighResolutionCapable</key><true/>
+<key>NSSupportsAutomaticGraphicsSwitching</key><true/>
+<key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
+<key>NSMicrophoneUsageDescription</key><string>Riptide records voiceovers and listens to music for beat edits.</string>
+<key>NSCameraUsageDescription</key><string>Riptide can record from your camera into a project.</string>
+<key>RiptideLauncher</key><string>$LAUNCHER</string>
 <key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>Riptide link</string><key>CFBundleURLSchemes</key><array><string>riptide</string></array></dict></array>
-<key>LSUIElement</key><true/>
+<key>LSUIElement</key><$BACKGROUND/>
 </dict></plist>
 PLIST
     # its icon, from the logo, with the tools every Mac has
     if command -v sips >/dev/null 2>&1; then
         sips -s format icns "$APP/brand/riptide-icon-512.png" --out "$MACAPP/Contents/Resources/Riptide.icns" >/dev/null 2>&1 || true
     fi
+    # signed for this Mac only (no account needed), so Apple Silicon runs it
+    command -v codesign >/dev/null 2>&1 && codesign --force --deep -s - "$MACAPP" >/dev/null 2>&1 || true
     touch "$MACAPP"
+    command -v /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister >/dev/null 2>&1 \
+        && /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$MACAPP" >/dev/null 2>&1 || true
 fi
 
 # ---------- what is still missing ----------
@@ -157,4 +190,8 @@ case ":$PATH:" in
     *) say "$BIN is not on your PATH yet: open a new terminal, or add it, to use the riptide command." ;;
 esac
 say "Open it from your applications menu, with a riptide://open link, or by running: riptide"
-say "It opens in a window of its own (Chrome, Edge, Brave or Chromium in app mode); riptide --tab opens a browser tab."
+if [ "$(uname -s)" = "Darwin" ] && [ -f "$HOME/Applications/Riptide.app/Contents/Resources/native" ]; then
+    say "On this Mac it is an app: Riptide in Applications, Launchpad and Spotlight, no browser needed."
+else
+    say "It opens in a window of its own (Chrome, Edge, Brave or Chromium in app mode); riptide --tab opens a browser tab."
+fi

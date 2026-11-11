@@ -109,8 +109,29 @@ def chromium_family() -> list[str]:
     return found
 
 
+def mac_app() -> str:
+    """The Riptide app on this Mac (built by install.sh with a window of its own), or "" where there is none."""
+    app = Path.home() / "Applications" / "Riptide.app"
+    return str(app) if sys.platform == "darwin" and (app / "Contents" / "Resources" / "native").exists() else ""
+
+
+def open_link(url: str) -> None:
+    """URL in Riptide: in the Riptide app on a Mac that has it, else in the browser."""
+    app = mac_app()
+    if app:
+        subprocess.Popen(["open", "-a", app, url], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,  # nosec B603 B607
+                         stderr=subprocess.DEVNULL)
+        return
+    webbrowser.open(url)
+
+
 def app_window(url: str) -> bool:
     """URL in a window of its own. Whether one opened."""
+
+    # the Riptide app, on a Mac that has it: no browser at all
+    if mac_app():
+        open_link(url)
+        return True
 
     # a Linux with no screen (a server, a container): no window can open
     if sys.platform.startswith("linux") and not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):

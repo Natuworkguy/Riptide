@@ -113,12 +113,28 @@ def ask(path: str, body: dict = None, timeout: float = 10) -> dict:
             return {"ok": False, "error": f"Riptide answered {error.code}"}
 
 
+def mac_app() -> str:
+    """The Riptide app on this Mac (built by install.sh with a window of its own), or "" where there is none."""
+    app = Path.home() / "Applications" / "Riptide.app"
+    return str(app) if sys.platform == "darwin" and (app / "Contents" / "Resources" / "native").exists() else ""
+
+
+def open_link(url: str) -> None:
+    """URL in Riptide: in the Riptide app on a Mac that has it, else in the browser."""
+    app = mac_app()
+    if app:
+        subprocess.Popen(["open", "-a", app, url], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,  # nosec B603 B607
+                         stderr=subprocess.DEVNULL)
+        return
+    webbrowser.open(url)
+
+
 def open_window(window: str) -> None:
     """Open the window WINDOW (the server started first if need be) and wait until it is ready."""
     if not setting("open"):
         raise SendError(f"Riptide's window for this chat is not open. Open {window_link(window)}, then send it again.")
     ensure_server()
-    webbrowser.open(window_link(window))
+    open_link(window_link(window))
     deadline = time.monotonic() + WAIT_SECONDS
     while time.monotonic() < deadline:
         if any(w.get("id") == window for w in open_windows()):
@@ -154,7 +170,7 @@ def open_riptide() -> None:
         raise SendError(f"Riptide is not open. Open {riptide_url()} in a browser, then send it again.")
     launcher = shutil.which("riptide")
     if server_up():
-        webbrowser.open(riptide_url() + "/")
+        open_link(riptide_url() + "/")
     elif launcher:
         subprocess.Popen([launcher, "riptide://open"], stdin=subprocess.DEVNULL,  # nosec B603
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
@@ -206,7 +222,7 @@ def ensure_server() -> None:
         if server_up():
             return
         time.sleep(0.4)
-    raise SendError(f"Riptide's server did not start. Run riptide --serve, or python server.py in its folder.")
+    raise SendError("Riptide's server did not start. Run riptide --serve, or python server.py in its folder.")
 
 
 def window_link(window: str) -> str:

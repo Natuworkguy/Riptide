@@ -14,7 +14,6 @@ import threading
 import time
 import urllib.parse
 import uuid
-import webbrowser
 import zipfile
 from io import BytesIO
 from pathlib import Path
@@ -22,6 +21,7 @@ from pathlib import Path
 from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory
 
 import native
+from launch import open_link
 import render_host as render_host_module
 from render_host import RenderError, RenderHost
 
@@ -199,7 +199,7 @@ def live_open():
     for key in ("name", "width", "height", "duration", "background"):
         if body.get(key) not in (None, ""):
             query[key] = str(body[key])
-    webbrowser.open(f"{request.host_url.rstrip('/')}/?{urllib.parse.urlencode(query)}")
+    open_link(f"{request.host_url.rstrip('/')}/?{urllib.parse.urlencode(query)}")
     deadline = time.monotonic() + float(body.get("timeout", 20))
     while time.monotonic() < deadline:
         with live_lock:

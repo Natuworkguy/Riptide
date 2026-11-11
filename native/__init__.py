@@ -25,6 +25,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 BPY = "bpy==5.3.0"
+# what the renderer imports besides bpy; installed with it, and again into its Python if one is found missing
+NEEDS = ("numpy", "OpenEXR")
 PY = (3, 13)
 SETUP = {"state": "idle", "step": "", "error": ""}
 _setup_lock = threading.Lock()
@@ -35,7 +37,7 @@ def python() -> str:
     renderer environment once set up."""
     if os.environ.get("RIPTIDE_NATIVE_PYTHON"):
         return os.environ["RIPTIDE_NATIVE_PYTHON"]
-    if importlib.util.find_spec("bpy") and importlib.util.find_spec("OpenEXR"):
+    if all(importlib.util.find_spec(m) for m in ("bpy", "numpy", "OpenEXR")):
         return sys.executable
     own = _own_env()
     return str(own) if own.exists() else ""
@@ -97,7 +99,7 @@ def setup() -> None:
         if done.returncode:
             raise RuntimeError("could not make its environment: " + (done.stderr or done.stdout).strip()[-300:])
         SETUP["step"] = "Downloading the native renderer (once, about 250 MB)"
-        done = subprocess.run([str(_own_env()), "-m", "pip", "install", "-q", BPY, "OpenEXR"],  # nosec B603
+        done = subprocess.run([str(_own_env()), "-m", "pip", "install", "-q", BPY, *NEEDS],  # nosec B603
                               capture_output=True, text=True, check=False)
         if done.returncode:
             raise RuntimeError("could not install it: " + (done.stderr or done.stdout).strip()[-300:])
@@ -131,10 +133,31 @@ class Renderer:
         self.dir = Path(tempfile.mkdtemp(prefix="riptide-native-"))
         self.log: list[str] = []
 
+    def _complete(self, exe: str) -> None:
+        """The renderer's Python with all it imports: what is missing (numpy, OpenEXR) installed into it, once."""
+        if getattr(self, "_checked", "") == exe:
+            return
+        probe = "import importlib.util as u; print(' '.join(m for m in %r if not u.find_spec(m)))" % (NEEDS,)
+        try:
+            missing = subprocess.run([exe, "-c", probe], capture_output=True, text=True, timeout=60,  # nosec B603
+                                     check=False).stdout.split()
+        except (OSError, subprocess.SubprocessError):
+            missing = []
+        if missing:
+            SETUP.update(state="running", step=f"Installing {', '.join(missing)} for the native renderer (once)")
+            done = subprocess.run([exe, "-m", "pip", "install", "-q", *missing],  # nosec B603
+                                  capture_output=True, text=True, check=False)
+            SETUP.update(state="idle", step="")
+            if done.returncode:
+                raise NativeError(f"the native renderer needs {', '.join(missing)}, and installing it failed: "
+                                  + (done.stderr or done.stdout).strip()[-300:])
+        self._checked = exe
+
     def _start(self):
         exe = python()
         if not exe:
             raise NativeError(available())
+        self._complete(exe)
         env = {**os.environ, "PYTHONPATH": str(ROOT) + os.pathsep + os.environ.get("PYTHONPATH", "")}
         self.proc = subprocess.Popen([exe, "-u", "-m", "native.worker"], cwd=str(ROOT), env=env,  # nosec B603
                                      stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -153,7 +176,7 @@ class Renderer:
             if line.startswith(self.MARK):
                 return json.loads(line[len(self.MARK):])
             line = line.rstrip()
-            if line.startswith("[native]") or "rror" in line:
+            if (line.startswith("[native]") or "rror" in line) and line not in self.log[-6:]:
                 self.log = (self.log + [line])[-40:]
         raise NativeError("the native renderer took too long")
 

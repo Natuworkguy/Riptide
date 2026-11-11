@@ -63,12 +63,16 @@
     // turned and warped, so its ridges and gullies do not line up with the noise's own grid
     const wx = x * .8 - z * .6 + (fbm(x * .0015, z * .0015, 3) - .5) * 700, wz = x * .6 + z * .8 + (fbm(x * .0015 + 9, z * .0015, 3) - .5) * 700;
     const detail = ridged(wx * .0011 + 3.1, wz * .0011 - 1.7, 4);
-    const rise = smooth(600, 3300, d);
-    return base + meadow + hills + peaks * rise * (mass * (.55 + detail * .75) + detail * .18);
+    // where the mountains begin wanders in and out along the valley, and they climb over kilometres, not from a line
+    const onset = 380 + 1100 * fbm(z * .0006 + 17, x * .0002 + 3, 3) + 260 * (fbm(x * .002, z * .002 + 40, 2) - .5);
+    const rise = smooth(onset, onset + 2600, d) ** 1.35;
+    // past the edge of the land the mountains sink into the horizon rather than ending in a wall
+    const edge = smooth(SPAN * .97, SPAN * .72, Math.max(Math.abs(x), Math.abs(z - CZ)));
+    return base + meadow + hills + peaks * rise * edge * (mass * (.55 + detail * .75) + detail * .18);
   }
 
-  // a grid fine near the road and coarse far off: ±9 km round the valley
-  const N = 520, SPAN = 9000, CZ = -500, FINE = .12;
+  // a grid fine near the road and coarse far off: ±24 km round the valley, so its edge is past the horizon haze
+  const N = 640, SPAN = 24000, CZ = -500, FINE = .055;
   const spread = u => Math.sign(u) * SPAN * (FINE * Math.abs(u) + (1 - FINE) * Math.abs(u) ** 2);
   function landMesh(o) {
     const g = new T.PlaneGeometry(1, 1, N, N); g.rotateX(-Math.PI / 2);
@@ -204,13 +208,77 @@
     const group = new T.Group(); group.add(foliage, trunks); return group;
   }
 
+  // ----- up close: grass along the road, swaying in the wind, and rocks in it and on the slopes -----
+  // a tuft: a dozen blades from one spot, leaning out, each its own height, darker at the root
+  function bladeGeometry() {
+    const g = new T.BufferGeometry(), segs = 3, pos = [], idx = [], col = [], rand = World.rng(9);
+    for (let b = 0; b < 12; b++) {
+      const a = rand() * Math.PI * 2, lean = .15 + rand() * .45, h = .55 + rand() * .45, w = .025 + rand() * .02, ox = (rand() - .5) * .25, oz = (rand() - .5) * .25, base = pos.length / 3;
+      const cx = Math.cos(a), sz = Math.sin(a);
+      for (let i = 0; i <= segs; i++) { const f = i / segs, bend = lean * f * f, ww = w * (1 - f * .9);
+        const x = ox + cx * bend, z = oz + sz * bend, y = h * f;
+        pos.push(x - sz * ww, y, z + cx * ww, x + sz * ww, y, z - cx * ww); const c = .45 + .55 * f; col.push(c, c, c, c, c, c); }
+      for (let i = 0; i < segs; i++) { const q = base + i * 2; idx.push(q, q + 1, q + 2, q + 1, q + 3, q + 2); }
+    }
+    g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new T.Float32BufferAttribute(col, 3));
+    g.setIndex(idx); g.computeVertexNormals(); return g;
+  }
+  function rockGeometry(seed) {
+    const g = new T.IcosahedronGeometry(1, 2), p = g.attributes.position, rand = World.rng(seed), v = new T.Vector3();
+    const lumps = Array.from({ length: 5 }, () => [new T.Vector3(rand() - .5, rand() - .5, rand() - .5).normalize(), .15 + rand() * .3]);
+    for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i); const n = v.clone().normalize();
+      let r = 1; for (const [d, k] of lumps) r -= Math.max(0, n.dot(d)) ** 3 * k;   // flat faces knocked off it
+      v.multiplyScalar(r * (.92 + rand() * .08)); v.y *= .62; p.setXYZ(i, v.x, v.y, v.z); }
+    g.computeVertexNormals(); return g;
+  }
+  function meadow(o) {
+    const rand = World.rng(77), half = (+o.road > 0 ? +o.road / 2 : 0) + 1.2, group = new T.Group();
+    // grass: thickest by the road, thinning out across the meadow, none on the road or the steep
+    const n = 60000, blades = new T.InstancedMesh(bladeGeometry(), new T.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: .85, side: T.DoubleSide }), n);
+    const uniforms = { uTime: { value: 0 }, uWind: { value: 3 } };
+    blades.material.onBeforeCompile = sh => { Object.assign(sh.uniforms, uniforms);
+      sh.vertexShader = 'uniform float uTime, uWind;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+        vec4 ip = instanceMatrix * vec4(0., 0., 0., 1.);
+        float sway = (sin(uTime * 1.9 + ip.x * .011 + ip.z * .007) * .7 + sin(uTime * 3.3 + ip.z * .04) * .3) * uWind * .05 * position.y * position.y;
+        transformed.x += sway; transformed.z += sway * .5;`); };
+    const m4 = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), c = new T.Color(), greens = ['#5f7f34', '#6d8a3a', '#7d8f45', '#55702f', '#8a9152'].map(World.lin);
+    let k = 0;
+    for (let i = 0; i < n * 3 && k < n; i++) {
+      const sAt = -40 + rand() * 360, side = rand() < .5 ? -1 : 1, off = half + Math.pow(rand(), 1.6) * 40;
+      const p = roadAt(sAt, side * off), x = p[0] + (rand() - .5) * 1.5, z = p[2] + (rand() - .5) * 1.5, y = height(x, z, o);
+      if (Math.abs(height(x + 1, z, o) - y) + Math.abs(height(x, z + 1, o) - y) > 1.2) continue;
+      const h = (.25 + rand() * .4) * (off < half + 3 ? .7 : 1), w = .7 + rand() * .8;
+      e.set((rand() - .5) * .5, rand() * 6.28, (rand() - .5) * .5); q.setFromEuler(e);
+      m4.compose(new T.Vector3(x * M, (y - .02) * M, z * M), q, new T.Vector3(w * M, h * M, w * M));
+      blades.setMatrixAt(k, m4); c.copy(greens[(rand() * greens.length) | 0]).offsetHSL((rand() - .5) * .03, (rand() - .5) * .1, (rand() - .5) * .08); blades.setColorAt(k, c); k++;
+    }
+    blades.count = k; blades.receiveShadow = true; blades.frustumCulled = false; blades.userData.uniforms = uniforms; group.add(blades);
+    // rocks: a few by the road, more up the slopes, half sunk in the ground
+    const shapes = [11, 23, 37].map(rockGeometry), mat = new T.MeshStandardMaterial({ color: 0xffffff, roughness: .95, flatShading: true });
+    const per = 260, greys = ['#7d7a74', '#8e8a83', '#6a6761', '#9a958c'].map(World.lin);
+    shapes.forEach((geo, si) => {
+      const rocks = new T.InstancedMesh(geo, mat, per); let j = 0;
+      for (let i = 0; i < per * 4 && j < per; i++) {
+        const sAt = -80 + rand() * 1400, side = rand() < .5 ? -1 : 1, off = half + 2 + Math.pow(rand(), 1.3) * 160;
+        const p = roadAt(sAt, side * off), x = p[0], z = p[2], y = height(x, z, o), r = (.25 + Math.pow(rand(), 3) * 2.6) * (off < half + 12 ? .6 : 1);
+        e.set(rand() * .4, rand() * 6.28, rand() * .4); q.setFromEuler(e);
+        m4.compose(new T.Vector3(x * M, (y - r * .25) * M, z * M), q, new T.Vector3(r * M * (.8 + rand() * .5), r * M, r * M * (.8 + rand() * .5)));
+        rocks.setMatrixAt(j, m4); rocks.setColorAt(j, c.copy(greys[(rand() * greys.length) | 0])); j++;
+      }
+      rocks.count = j; rocks.castShadow = rocks.receiveShadow = true; rocks.frustumCulled = false; group.add(rocks); void si;
+    });
+    return group;
+  }
+
   // ----- each frame: the land, the road and the pines, built when what they are made from changes -----
-  World.stageHooks.push(({ B, o, ground }) => {
+  World.stageHooks.push(({ B, o, ground, t }) => {
     const on = o.ground === 'mountains', key = on ? [o.peaks, o.snow, o.groundColor].join('|') : null;
     const land = World.rebuild(B, 'mountainLand', key, () => landMesh(o));
     const road = World.rebuild(B, 'mountainRoad', on && +o.road > 0 ? [o.road, key].join('|') : null, () => roadMesh(o));
     const pines = World.rebuild(B, 'mountainPines', on && +o.trees > 0 ? [o.trees, o.road, key].join('|') : null, () => forest(o));
-    for (const m of [land, road, pines]) if (m) m.position.set(0, ground, 0);
+    const near = World.rebuild(B, 'mountainMeadow', on ? [o.road, key].join('|') : null, () => meadow(o));
+    for (const m of [land, road, pines, near]) if (m) m.position.set(0, ground, 0);
+    if (near) { const u = near.children[0].userData.uniforms; u.uTime.value = t; u.uWind.value = Math.max(0, +o.wind || 0); }
     // the sun's shadows reach further here: a car on a road is seen from further off than a prop in a field
     if (on) { const sc = B.sun.shadow.camera; if (sc.right !== 6000) { sc.left = sc.bottom = -6000; sc.right = sc.top = 6000; sc.far = 60000; sc.updateProjectionMatrix(); } }
   });
@@ -218,7 +286,7 @@
   // ----- the scene to start from: a car on the road up the valley, filmed from behind and above -----
   World.PRESETS.mountain = { label: 'Mountain road', hint: 'A car up a winding road through pines, under snowy peaks',
     p: { sky: 'day', sunEl: 28, sunAz: 58, sunPower: 105, clouds: 28, wind: 3, ground: 'mountains', groundColor: '#58723a',
-      peaks: 1000, snow: 66, trees: 75, road: 7, fog: .6, dust: 0, eye: 1.7, heading: 0, pitch: 0, travel: 0, lens: 35, focus: 0, dof: 0,
+      peaks: 1000, snow: 66, trees: 75, road: 7, fog: .15, haze: 6, hazeFall: 350, hazeGlow: 75, dust: 0, eye: 1.7, heading: 0, pitch: 0, travel: 0, lens: 35, focus: 0, dof: 0,
       exposure: 0, bloom: 25, grain: 12, fringe: 6, ao: 0, godrays: 0, flare: 0, letterbox: '2.39' },
     objects: d => [
       { id: 'car', name: 'Car', type: 'car', color: '#a3101a', finish: 'paint', face: 'travel', lane: 1.8, road: 40,

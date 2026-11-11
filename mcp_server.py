@@ -258,7 +258,8 @@ async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "
     ahead) and waveAngle (degrees turned). A field: plants (colour), grass (%), grassH (m), sway (how hard
     the wheat sways, as wind m/s; 3 in the rig scene) and swayLoop (true fits the sway to the duration so it loops
     seamlessly). fog and dust (0 to
-    100). The camera: eye (its height above the ground, m), heading (degrees looked round), pitch (degrees up),
+    100). haze is height fog, thick low down and thinning upwards, lit by the sun (0 to 100; about 6 for a
+    clear mountain day), with hazeFall (metres over which it thins) and hazeGlow (how much the sun lights it, %). The camera: eye (its height above the ground, m), heading (degrees looked round), pitch (degrees up),
     travel (m moved forwards), lens (mm). A camera layer also moves it: orbit, tilt, dolly (pixels) and zoom.
     The lens: dof (depth of field, 0 off), focus (m from the camera; 0 is the point it looks at), exposure
     (stops), bloom, grain, fringe (colour fringing at the edges) and ao (contact shadows), 0 to 100. The layer's

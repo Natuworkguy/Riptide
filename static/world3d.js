@@ -27,20 +27,20 @@ const World = (() => {
   const FIELDS = ['sky', 'hdri', 'hdriTurn', 'hdriPower', 'sunEl', 'sunAz', 'sunPower', 'clouds', 'wind',
     'ground', 'groundColor', 'floorFinish', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH', 'sway', 'swayLoop',
     'peaks', 'snow', 'trees', 'road',
-    'fog', 'dust', 'eye', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao', 'render', 'samples', 'pace', 'shutter', 'letterbox', 'godrays', 'flare', 'streaks', 'rain', 'wet', 'objects', 'shots'];
+    'fog', 'haze', 'hazeFall', 'hazeGlow', 'dust', 'eye', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao', 'render', 'samples', 'pace', 'shutter', 'letterbox', 'godrays', 'flare', 'streaks', 'rain', 'wet', 'objects', 'shots'];
   const DEFAULTS = { hdri: '', hdriTurn: 0, hdriPower: 100, floorFinish: '', sky: 'sunset', sunEl: 8, sunAz: 10, sunPower: 100, clouds: 45, wind: 4, ground: 'ocean', groundColor: '#8a6a45',
     water: '#0b4a46', waves: .6, chop: 50, swell: 0, curl: .5, waveDist: 45, waveAngle: -20, plants: '#c09a48', grass: 60, grassH: .9, sway: 3, swayLoop: false,
     peaks: 900, snow: 62, trees: 70, road: 7,
-    fog: 8, dust: 0, eye: 1.7, heading: 0, pitch: 0, travel: 0, lens: 35, focus: 0, dof: 0, exposure: 0, bloom: 30, grain: 15, fringe: 10, ao: 0, render: 'preview', samples: 128, pace: 100, shutter: 0, letterbox: 'none', godrays: 0, flare: 0, streaks: 0, rain: 0, wet: 0 };
+    fog: 8, haze: 0, hazeFall: 250, hazeGlow: 60, dust: 0, eye: 1.7, heading: 0, pitch: 0, travel: 0, lens: 35, focus: 0, dof: 0, exposure: 0, bloom: 30, grain: 15, fringe: 10, ao: 0, render: 'preview', samples: 128, pace: 100, shutter: 0, letterbox: 'none', godrays: 0, flare: 0, streaks: 0, rain: 0, wet: 0 };
   const LABELS = { hdri: 'Sky photo', hdriTurn: 'Photo turn°', hdriPower: 'Photo light %', floorFinish: 'Ground finish', sky: 'Sky', sunEl: 'Sun height°', sunAz: 'Sun around°', sunPower: 'Sun %', clouds: 'Clouds %', wind: 'Wind m/s',
     ground: 'Ground', groundColor: 'Ground colour', water: 'Water', waves: 'Waves m', chop: 'Chop %', swell: 'Breaker m', curl: 'Curl',
     waveDist: 'Breaker at m', waveAngle: 'Breaker turn°', plants: 'Plants', grass: 'Plants %', grassH: 'Plant height m', sway: 'Sway m/s', swayLoop: 'Loop sway',
     peaks: 'Peaks m', snow: 'Snow line %', trees: 'Pines %', road: 'Road width m',
-    fog: 'Fog', dust: 'Dust', eye: 'Eye height m', heading: 'Look around°', pitch: 'Look up°', travel: 'Travel m', lens: 'Lens mm',
+    fog: 'Fog', haze: 'Height fog', hazeFall: 'Fog thins over m', hazeGlow: 'Sun in fog %', dust: 'Dust', eye: 'Eye height m', heading: 'Look around°', pitch: 'Look up°', travel: 'Travel m', lens: 'Lens mm',
     focus: 'Focus m', dof: 'Depth of field', exposure: 'Exposure', bloom: 'Bloom', grain: 'Grain', fringe: 'Fringe', ao: 'Contact shade', render: 'Render', samples: 'Samples', pace: 'World speed %', shutter: 'Motion blur°', letterbox: 'Letterbox', godrays: 'Light shafts', flare: 'Lens flare', streaks: 'Light streaks', rain: 'Rain', wet: 'Wet ground' };
   const COLORS = ['groundColor', 'water', 'plants'];
   const NUMBERS = FIELDS.filter(k => !['sky', 'ground', 'objects', 'shots', 'swayLoop', 'hdri', 'floorFinish', 'render', 'letterbox', ...COLORS].includes(k));
-  const GROUPS = [['World', ['hdri', 'hdriTurn', 'hdriPower', 'sky', 'sunEl', 'sunAz', 'sunPower', 'clouds', 'wind', 'fog', 'dust', 'rain', 'wet']],
+  const GROUPS = [['World', ['hdri', 'hdriTurn', 'hdriPower', 'sky', 'sunEl', 'sunAz', 'sunPower', 'clouds', 'wind', 'fog', 'haze', 'hazeFall', 'hazeGlow', 'dust', 'rain', 'wet']],
     ['Ground', ['ground', 'groundColor', 'floorFinish', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH', 'sway', 'swayLoop', 'peaks', 'snow', 'trees', 'road']],
     ['Lens', ['render', 'samples', 'pace', 'shutter', 'letterbox', 'godrays', 'flare', 'streaks', 'eye', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao']]];
   const STEP = { waves: .05, curl: .01, grassH: .05, eye: .05, exposure: .05 };
@@ -58,6 +58,7 @@ const World = (() => {
     if (k === 'hdriTurn' || k === 'hdriPower') return !!o.hdri;
     if (k === 'floorFinish') return o.ground === 'floor' || o.ground === 'desert' || o.ground === 'field';
     if (k === 'focus') return o.dof > 0 || keyed;
+    if (k === 'hazeFall' || k === 'hazeGlow') return o.haze > 0 || keyed;
     if (k === 'samples') return o.render === 'path';
     return true;
   }
@@ -681,14 +682,42 @@ const World = (() => {
         float l = dot(col, vec3(.299, .587, .114));
         col += n * uGrain * .16 * (1. - abs(l - .45) * 1.1);
         gl_FragColor = vec4(col, 1.); }` };
+  // Exponential height fog, as film and game engines draw air: thick low down, thinning with height, so a valley
+  // fills with haze while the peaks stand clear of it, and lit by the sun where one looks towards it. Worked out
+  // for every pixel from its depth: how much air lies along the ray to it, with the density falling off with
+  // height (the integral of a e^-b(h) along the ray, in closed form), in the light, before tone mapping.
+  const HAZE = { uniforms: { tDiffuse: { value: null }, tDepth: { value: null }, uOn: { value: 0 }, uDensity: { value: 0 }, uFall: { value: 250 },
+      uGround: { value: 0 }, uGlow: { value: 0 }, uProjInv: { value: new T.Matrix4() }, uCamWorld: { value: new T.Matrix4() }, uCamPos: { value: new T.Vector3() },
+      uSunDir: { value: new T.Vector3(0, 1, 0) }, uFogCol: { value: new T.Color() }, uSunCol: { value: new T.Color() } },
+    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }',
+    fragmentShader: `uniform sampler2D tDiffuse, tDepth; uniform float uOn, uDensity, uFall, uGround, uGlow; uniform mat4 uProjInv, uCamWorld;
+      uniform vec3 uCamPos, uSunDir, uFogCol, uSunCol; varying vec2 vUv;
+      void main() { vec4 base = texture2D(tDiffuse, vUv); if (uOn <= 0.) { gl_FragColor = base; return; }
+        float z = texture2D(tDepth, vUv).x; bool sky = z >= 1.;
+        vec4 v = uProjInv * vec4(vUv * 2. - 1., (sky ? .5 : z) * 2. - 1., 1.); v /= v.w;
+        vec3 dir = normalize((uCamWorld * vec4(v.xyz, 1.)).xyz - uCamPos);
+        float dist = sky ? 1e5 : length((uCamWorld * v).xyz - uCamPos) / 100.;     // metres; the sky is as far as the air goes
+        float b = 1. / max(uFall, 1.), h = (uCamPos.y - uGround) / 100., dh = dir.y * dist;
+        float k = abs(b * dh) > 1e-4 ? (1. - exp(-b * dh)) / (b * dh) : 1.;
+        float amount = 1. - exp(-uDensity * exp(-b * max(h, 0.)) * dist * k);
+        // the sky is fogged only where it meets the land, so its clouds and blue overhead stay
+        if (sky) amount *= smoothstep(.3, 0., dir.y) * .85;
+        float toSun = max(dot(dir, uSunDir), 0.);
+        vec3 fogc = uFogCol + uSunCol * (pow(toSun, 6.) * .6 + pow(toSun, 40.) * 1.4) * uGlow;
+        gl_FragColor = vec4(mix(base.rgb, fogc, clamp(amount, 0., 1.)), base.a); }` };
   function lens(W, H, scene, cam) {
     if (!composer) {
       composer = new T.EffectComposer(renderer, new T.WebGLRenderTarget(W, H, { type: T.HalfFloatType }));
+      // the depth of what was drawn, for the height fog to know how far each pixel is: in full floats, as a mountain
+      // 20 km off is a hair's breadth from the sky in an ordinary depth buffer, and would be fogged as sky
+      for (const rt of [composer.renderTarget1, composer.renderTarget2]) rt.depthTexture = new T.DepthTexture(W, H, T.FloatType);
       const render = new T.RenderPass(scene, cam), ao = new T.GTAOPass(scene, cam, W, H),
         bokeh = new T.BokehPass(scene, cam, { focus: 1000, aperture: 0, maxblur: .01 }),
         bloom = new T.UnrealBloomPass(new T.Vector2(W, H), .3, .6, .82), out = new T.OutputPass(), film = new T.ShaderPass(FILM), rays = new T.ShaderPass(RAYS);
-      for (const p of [render, ao, bokeh, rays, bloom, out, film]) composer.addPass(p);
-      passes = { render, ao, bokeh, rays, bloom, out, film };
+      const haze = new T.ShaderPass(HAZE), drawHaze = haze.render.bind(haze);
+      haze.render = (rr, w, r, dt, m) => { haze.uniforms.tDepth.value = r.depthTexture; drawHaze(rr, w, r, dt, m); };
+      for (const p of [render, haze, ao, bokeh, rays, bloom, out, film]) composer.addPass(p);
+      passes = { render, haze, ao, bokeh, rays, bloom, out, film };
     }
     composer.setSize(W, H);
     for (const p of [passes.render, passes.ao, passes.bokeh]) { p.scene = scene; p.camera = cam; }
@@ -845,6 +874,14 @@ const World = (() => {
     const dof = cam.userData.dof ?? o.dof, focus = cam.userData.focus ?? (o.focus > 0 ? o.focus * M : cam.userData.d);
     P.bokeh.enabled = dof > 0; P.bokeh.uniforms.focus.value = focus; P.bokeh.uniforms.aperture.value = clamp(dof / 100, 0, 2) * 3e-5;
     P.bokeh.uniforms.maxblur.value = .004 + .016 * clamp(dof / 100, 0, 1.5);
+    // height fog: the sky's horizon colour, lit by how high the sun is; brighter towards the sun
+    const hz = P.haze.uniforms, pal = PALETTE[o.sky] || PALETTE.sunset, elev = clamp(sunDir(o).y * 4 + .15, 0, 1);
+    P.haze.enabled = +o.haze > 0; hz.uOn.value = +o.haze > 0 ? 1 : 0; hz.uDensity.value = clamp(+o.haze || 0, 0, 100) * 4e-5;
+    hz.uFall.value = Math.max(1, +o.hazeFall || 250); hz.uGlow.value = clamp((o.hazeGlow == null ? 60 : +o.hazeGlow) / 100, 0, 3);
+    hz.uGround.value = -(+o.eye || 1.7) * M; cam.updateMatrixWorld(); hz.uProjInv.value.copy(cam.projectionMatrixInverse); hz.uCamWorld.value.copy(cam.matrixWorld);
+    hz.uCamPos.value.setFromMatrixPosition(cam.matrixWorld); hz.uSunDir.value.copy(sunDir(o));
+    hz.uFogCol.value.copy(lin(pal.hor)).lerp(lin(pal.zen), .15).multiplyScalar((.35 + .9 * elev) * pal.power * .75);
+    hz.uSunCol.value.copy(lin(pal.sun)).multiplyScalar(pal.power * elev * (o.sunPower ?? 100) / 100);
     P.bloom.enabled = o.bloom > 0; P.bloom.strength = clamp(o.bloom / 100, 0, 3) * .6; P.bloom.radius = .55; P.bloom.threshold = 1.1;
     const fu = P.film.uniforms; fu.uTime.value = t; fu.uGrain.value = clamp(o.grain / 100, 0, 2); fu.uFringe.value = clamp(o.fringe / 100, 0, 3); fu.uAspect.value = W / H;
     // where the sun is on the picture, for light shafts and a flare

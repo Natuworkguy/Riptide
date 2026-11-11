@@ -112,12 +112,11 @@ last, or in one they name by its project or open themselves: `riptide_windows` i
 `use_window` and `open_window` over MCP. Flash's `send_to_riptide` and `riptide_world` take a `window` (a project's
 name, `new`, or `empty` for a window with nothing in it yet, opening one if there is none).
 
-**Riptide in a Flash chat.** The **Riptide** button at the top of a chat in Flash's web UI (also in its command
-palette) starts Riptide's server if it is not running (`riptide --serve`: no window of its own) and docks its editor
-beside the chat, as that chat's own window. Work Flash does for that chat lands there without asking which window,
-switching chats switches windows, and each keeps its project. **Open on its own** in the dock's corner opens the same
-window in a tab. The dock reaches Riptide at the extension's address setting, so it works on the computer Riptide runs
-on.
+**Riptide in a Flash chat.** Each Flash chat has a Riptide window of its own, `flash-` and the chat's id. The
+**Riptide link** button at the top of a chat in Flash's web UI (also in its command palette) starts Riptide's server
+if it is not running (`riptide --serve`: no window of its own) and gives you that window's address, to open and watch.
+Work Flash does for the chat goes to that window without asking which (opened first if it is not open yet), and its
+answers end with the link.
 
 ## Tutorial
 Help in the header (or **F1**) opens a tutorial in 14 sections, from the first layer to 3D, the camera, exporting and working with an agent, with buttons that try each thing on the spot. It is offered once on a first visit.

@@ -113,6 +113,21 @@ def ask(path: str, body: dict = None, timeout: float = 10) -> dict:
             return {"ok": False, "error": f"Riptide answered {error.code}"}
 
 
+def open_window(window: str) -> None:
+    """Open the window WINDOW (the server started first if need be) and wait until it is ready."""
+    if not setting("open"):
+        raise SendError(f"Riptide's window for this chat is not open. Open {window_link(window)}, then send it again.")
+    ensure_server()
+    webbrowser.open(window_link(window))
+    deadline = time.monotonic() + WAIT_SECONDS
+    while time.monotonic() < deadline:
+        if any(w.get("id") == window for w in open_windows()):
+            time.sleep(0.5)     # the editor's first draw
+            return
+        time.sleep(0.5)
+    raise SendError(f"Riptide did not open in {WAIT_SECONDS} seconds. Open {window_link(window)} and send it again.")
+
+
 def editor_open() -> bool:
     """Whether Riptide answers, with its editor open in a browser."""
 
@@ -162,14 +177,11 @@ def chat_window() -> str:
 
 
 def attached(window: str = "") -> str:
-    """WINDOW as given; or, with none named, the chat's own window when it is open: work asked for in a chat goes
-    to the Riptide docked beside it."""
+    """WINDOW as given; or, with none named, the chat's own window: work asked for in a chat goes to the window its
+    link opens (opened here first if it is not open yet)."""
     if (window or "").strip():
         return window
-    own = chat_window()
-    if own and any(w.get("id") == own for w in open_windows()):
-        return own
-    return window or ""
+    return chat_window() or window or ""
 
 
 def empty_window() -> str:
@@ -197,14 +209,27 @@ def ensure_server() -> None:
     raise SendError(f"Riptide's server did not start. Run riptide --serve, or python server.py in its folder.")
 
 
+def window_link(window: str) -> str:
+    """Riptide's address, opening WINDOW."""
+    return f"{riptide_url()}/?{urllib.parse.urlencode({'window': window})}"
+
+
 def session(chat: str = "") -> dict:
-    """Flash's Riptide button: the server started, and its editor docked beside the chat, as the chat's own window."""
+    """Flash's Riptide button: the server started, and a link to this chat's own window, where what Flash makes for
+    the chat appears."""
     ensure_server()
     chat = (chat or os.environ.get("FLASH_CHAT") or "")[:8]
-    query = {"riptide": riptide_url()}
-    if re.fullmatch(r"[0-9a-f]{8}", chat):
-        query["window"] = f"flash-{chat}"
-    return {"dock": "session", "query": urllib.parse.urlencode(query)}
+    if not re.fullmatch(r"[0-9a-f]{8}", chat):
+        return {"say": f"Riptide is at [{riptide_url()}]({riptide_url()})."}
+    link = window_link(f"flash-{chat}")
+    return {"say": f"**Riptide for this chat:** [{link}]({link})\n\nOpen it to watch: what Flash makes in this chat "
+                   "goes to that window, and it keeps its project."}
+
+
+def watch_line() -> str:
+    """Where to watch, for a tool's answer in a chat: its window's link."""
+    own = chat_window()
+    return f" Watch it at {window_link(own)}" if own else ""
 
 
 def target(window: str = "") -> str:
@@ -215,6 +240,10 @@ def target(window: str = "") -> str:
     window = attached((window or "").strip())
     if window.lower() in ("empty", "an empty window", "empty window"):
         window = empty_window() or "new"
+    own = chat_window()
+    if own and window == own and not any(w.get("id") == own for w in open_windows()):
+        open_window(own)
+        return own
     if window.lower() in ("new", "a new window", "new window"):
         if not server_up():
             open_riptide()
@@ -545,7 +574,8 @@ def main(argv: list) -> int:
             asked = json.load(sys.stdin) if not sys.stdin.isatty() else {}
             asked["window"] = attached(str(asked.get("window") or ""))
             need_window(str(asked.get("window") or ""))
-            print(world(str(asked.get("scene") or ""), str(asked.get("name") or ""), asked.get("props"), str(asked.get("window") or "")))
+            print(world(str(asked.get("scene") or ""), str(asked.get("name") or ""), asked.get("props"), str(asked.get("window") or ""))
+                  + watch_line())
         except SendError as why:
             print(f"Error: {why}")
         except (urllib.error.URLError, OSError) as why:
@@ -582,7 +612,7 @@ def main(argv: list) -> int:
             asked["window"] = attached(str(asked.get("window") or ""))
             need_window(str(asked.get("window") or ""))
         print(send(Path(str(asked["path"])), str(asked.get("name") or ""), asked.get("x"), asked.get("y"),
-                   window=str(asked.get("window") or "")))
+                   window=str(asked.get("window") or "")) + (watch_line() if mode == "--tool" else ""))
         return 0
     except SendError as why:
         if mode == "--button":

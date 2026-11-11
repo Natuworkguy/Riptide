@@ -10,7 +10,7 @@ const World = (() => {
   const T = window.RiptideThree, M = 100;
   const R = () => R3D._;
   const LETTERBOXES = [['none', 'None'], ['2.39', '2.39 : 1 (scope)'], ['2', '2 : 1'], ['1.85', '1.85 : 1']];
-  const RENDERS = [['preview', 'Preview: fast'], ['path', 'Path traced: real light']];
+  const RENDERS = [['preview', 'Preview: fast'], ['path', 'Path traced: real light'], ['native', 'Photoreal: rendered natively']];
   const SKIES = [['sunset', 'Golden hour'], ['day', 'Clear day'], ['dusk', 'Dusk'], ['haze', 'Hazy'], ['overcast', 'Overcast'],
     ['night', 'Night'], ['studio', 'Studio']];
   const GROUNDS = [['ocean', 'Ocean'], ['field', 'Wheat field'], ['desert', 'Desert'], ['mountains', 'Mountain road'], ['floor', 'Studio floor'], ['none', 'None']];
@@ -59,7 +59,7 @@ const World = (() => {
     if (k === 'floorFinish') return o.ground === 'floor' || o.ground === 'desert' || o.ground === 'field';
     if (k === 'focus') return o.dof > 0 || keyed;
     if (k === 'hazeFall' || k === 'hazeGlow') return o.haze > 0 || keyed;
-    if (k === 'samples') return o.render === 'path';
+    if (k === 'samples') return o.render === 'path' || o.render === 'native';
     return true;
   }
 

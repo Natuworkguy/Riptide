@@ -127,6 +127,7 @@ const Remote = (() => {
     for (const L of S.layers) {
       if (L.type !== 'world' || L.hidden || !visibleAt(L, t)) continue;
       const o = state(L, t), W = Math.max(1, Math.min(8192, Math.round(S.w * k))), H = Math.max(1, Math.min(8192, Math.round(S.h * k)));
+      if (o.render === 'native') continue;     // rendered natively instead (native.js)
       try { const out = await ask({ kind: 'layer', layer: L.id, t, w: W, h: H, final: true, fps }); finals.set(L.id, { key: plainKey(L, o, t), img: out.img }); }
       catch (e) { down = e.message; status(`3D worlds are drawn in this tab for now: ${down}`); return local.prepareFrame(t); }
     }

@@ -46,8 +46,10 @@
   function ridged(x, y, oct = 6) { let s = 0, a = .5, f = 1, n = 0, w = 1; for (let i = 0; i < oct; i++) { let r = 1 - Math.abs(noise(x * f, y * f) * 2 - 1); r *= r * w; w = clamp(r * 1.6, 0, 1); s += a * r; n += a; a *= .5; f *= 2.1; } return s / n; }
   // how far a place is from the road's middle, across it (near enough: the road mostly runs along z)
   // past either end, the distance to that end, so the valley goes on rather than stopping at a wall
-  const roadDist = (x, z) => z > Z0 ? Math.hypot(x - roadX(Z0), z - Z0) : z < Z1 ? Math.hypot(x - roadX(Z1), z - Z1)
-    : Math.abs(x - roadX(z)) * Math.cos(Math.atan(Math.abs(Math.cos(z * .0105) * .4 + Math.cos(z * .027 + 1.3) * .43)));
+  // (the turn of the road is allowed for only near it: far off, it would ripple the mountains every hundred metres)
+  const roadDist = (x, z) => { if (z > Z0) return Math.hypot(x - roadX(Z0), z - Z0); if (z < Z1) return Math.hypot(x - roadX(Z1), z - Z1);
+    const across = Math.abs(x - roadX(z)), turn = Math.cos(Math.atan(Math.abs(Math.cos(z * .0105) * .4 + Math.cos(z * .027 + 1.3) * .43)));
+    return across * (turn + (1 - turn) * smooth(40, 400, across)); };
   function height(x, z, o) {
     const half = (+o.road > 0 ? +o.road / 2 : 0) + 1.5, d = roadDist(x, z), zz = clamp(z, Z1, Z0);
     const base = roadY(zz) + (z < Z1 ? (Z1 - z) * .028 : 0);
@@ -59,16 +61,18 @@
     const far = 1 + .6 * smooth(2500, 7000, Math.hypot(x, z + 600));
     const peaks = Math.max(0, +o.peaks || 0) * far;
     // broad massifs where the low noise is high, carved into ridges and gullies by the ridged noise
-    const mass = smooth(.32, .72, fbm(x * .00032 + 5.3, z * .00032 - 2.1, 4));
+    // whole ranges, kilometres across, with a few great summits: where the broad noise is high
+    const mass = smooth(.28, .74, fbm(x * .00016 + 5.3, z * .00016 - 2.1, 4));
     // turned and warped, so its ridges and gullies do not line up with the noise's own grid
-    const wx = x * .8 - z * .6 + (fbm(x * .0015, z * .0015, 3) - .5) * 700, wz = x * .6 + z * .8 + (fbm(x * .0015 + 9, z * .0015, 3) - .5) * 700;
-    const detail = ridged(wx * .0011 + 3.1, wz * .0011 - 1.7, 4);
+    const wx = x * .8 - z * .6 + (fbm(x * .0004, z * .0004, 3) - .5) * 1800, wz = x * .6 + z * .8 + (fbm(x * .0004 + 9, z * .0004, 3) - .5) * 1800;
+    // arêtes: sharp crests a couple of kilometres apart, with side ridges and gullies finer and finer down them
+    const detail = ridged(wx * .00042 + 3.1, wz * .00042 - 1.7, 7);
     // where the mountains begin wanders in and out along the valley, and they climb over kilometres, not from a line
     const onset = 380 + 1100 * fbm(z * .0006 + 17, x * .0002 + 3, 3) + 260 * (fbm(x * .002, z * .002 + 40, 2) - .5);
-    const rise = smooth(onset, onset + 2600, d) ** 1.35;
+    const rise = smooth(onset, onset + 1700, d) ** 1.15;
     // past the edge of the land the mountains sink into the horizon rather than ending in a wall
     const edge = smooth(SPAN * .97, SPAN * .72, Math.max(Math.abs(x), Math.abs(z - CZ)));
-    return base + meadow + hills + peaks * rise * edge * (mass * (.55 + detail * .75) + detail * .18);
+    return base + meadow + hills + peaks * rise * edge * (.5 + .7 * mass) * (detail ** 1.3 * 1.5 + .15);
   }
 
   // a grid fine near the road and coarse far off: ±24 km round the valley, so its edge is past the horizon haze
@@ -287,7 +291,7 @@
   World.PRESETS.mountain = { label: 'Mountain road', hint: 'A car up a winding road through pines, under snowy peaks',
     p: { sky: 'day', sunEl: 28, sunAz: 58, sunPower: 105, clouds: 28, wind: 3, ground: 'mountains', groundColor: '#58723a',
       peaks: 1000, snow: 66, trees: 75, road: 7, fog: .15, haze: 6, hazeFall: 350, hazeGlow: 75, dust: 0, eye: 1.7, heading: 0, pitch: 0, travel: 0, lens: 35, focus: 0, dof: 0,
-      exposure: 0, bloom: 25, grain: 12, fringe: 6, ao: 0, godrays: 0, flare: 0, letterbox: '2.39' },
+      exposure: 0, bloom: 25, grain: 12, fringe: 6, ao: 0, godrays: 0, flare: 0, letterbox: '2.39', render: 'native', samples: 160 },
     objects: d => [
       { id: 'car', name: 'Car', type: 'car', color: '#a3101a', finish: 'paint', face: 'travel', lane: 1.8, road: 40,
         keys: { road: [{ t: 0, v: 40, ease: 'linear' }, { t: d, v: 40 + 22 * d }] } },

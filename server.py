@@ -3,6 +3,7 @@
 Projects are .rip files saved by the browser; the server only handles exports:
 MP4 (H.264/AAC), WebM (VP9/Opus), MOV (ProRes) and GIF through ffmpeg, or a zip of PNG frames (no ffmpeg needed).
 """
+import base64
 import json
 import mimetypes
 import queue
@@ -20,6 +21,7 @@ from pathlib import Path
 
 from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory
 
+import native
 import render_host as render_host_module
 from render_host import RenderError, RenderHost
 
@@ -238,6 +240,27 @@ def mcp_proxy():
 
 # ---------- 3D drawn here: worlds rendered by the server's own windowless browser (render_host.py) ----------
 render_host = RenderHost(f"http://127.0.0.1:{PORT}")
+native_renderer = native.Renderer()
+
+
+@app.get("/api/native/status")
+def native_status():
+    # asked with ?setup=1 when a world is set to Photoreal: installs the renderer the first time (about 250 MB)
+    if request.args.get("setup"):
+        native.start_setup()
+    return jsonify(native_renderer.status())
+
+
+@app.post("/api/native/frame")
+def native_frame():
+    d = request.get_json(force=True, silent=True) or {}
+    if not isinstance(d.get("world"), dict) or not isinstance(d.get("camera"), dict):
+        return jsonify(error="send the world and its camera"), 400
+    glb = d.pop("glb", None)
+    try:
+        return jsonify(native_renderer.frame(d, base64.b64decode(glb) if glb else None))
+    except native.NativeError as e:
+        return jsonify(error=str(e)), 503
 
 
 @app.get("/api/render/status")

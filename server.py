@@ -4,6 +4,7 @@ Projects are .rip files saved by the browser; the server only handles exports:
 MP4 (H.264/AAC), WebM (VP9/Opus), MOV (ProRes) and GIF through ffmpeg, or a zip of PNG frames (no ffmpeg needed).
 """
 import json
+import mimetypes
 import queue
 import shutil
 import subprocess
@@ -264,6 +265,10 @@ def render_frame():
         return jsonify(render_host.frame(d))
     except RenderError as e:
         return jsonify(error=str(e)), 503
+
+
+# installing Riptide as an app reads its manifest by this type
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 
 @app.get("/<path:p>")

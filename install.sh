@@ -28,6 +28,7 @@ uninstall() {
         "$VENV/bin/python" "$APP/launch.py" --stop >/dev/null 2>&1 || true
     fi
     rm -f "$LAUNCHER" "$DESKTOP"
+    rm -rf "$HOME/Applications/Riptide.app"
     command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$DATA/applications" >/dev/null 2>&1 || true
     rm -rf "$HOME_DIR"
     say "Riptide is uninstalled. Your projects (.rip files) are where you saved them, untouched."
@@ -105,16 +106,44 @@ cat > "$DESKTOP" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Riptide
-Comment=Motion graphics and image editor
+Comment=Video, motion graphics and 3D editor
 Exec=$LAUNCHER %u
-Icon=$APP/brand/riptide-icon.svg
+Icon=$APP/brand/riptide-icon-512.png
 Terminal=false
-Categories=Graphics;Video;AudioVideo;
+Categories=Graphics;Video;AudioVideo;3DGraphics;
 MimeType=x-scheme-handler/riptide;
 StartupNotify=false
+StartupWMClass=Riptide
 EOF
 command -v xdg-mime >/dev/null 2>&1 && xdg-mime default riptide.desktop x-scheme-handler/riptide || true
 command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$(dirname "$DESKTOP")" >/dev/null 2>&1 || true
+
+# ---------- a Mac app: Riptide in Applications, Launchpad and the Dock ----------
+if [ "$(uname -s)" = "Darwin" ]; then
+    MACAPP="$HOME/Applications/Riptide.app"
+    mkdir -p "$MACAPP/Contents/MacOS" "$MACAPP/Contents/Resources"
+    printf '#!/bin/sh\nexec "%s" "$@"\n' "$LAUNCHER" > "$MACAPP/Contents/MacOS/Riptide"
+    chmod +x "$MACAPP/Contents/MacOS/Riptide"
+    cat > "$MACAPP/Contents/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleName</key><string>Riptide</string>
+<key>CFBundleDisplayName</key><string>Riptide</string>
+<key>CFBundleIdentifier</key><string>com.natuworkguy.riptide</string>
+<key>CFBundleExecutable</key><string>Riptide</string>
+<key>CFBundleIconFile</key><string>Riptide</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>Riptide link</string><key>CFBundleURLSchemes</key><array><string>riptide</string></array></dict></array>
+<key>LSUIElement</key><true/>
+</dict></plist>
+PLIST
+    # its icon, from the logo, with the tools every Mac has
+    if command -v sips >/dev/null 2>&1; then
+        sips -s format icns "$APP/brand/riptide-icon-512.png" --out "$MACAPP/Contents/Resources/Riptide.icns" >/dev/null 2>&1 || true
+    fi
+    touch "$MACAPP"
+fi
 
 # ---------- what is still missing ----------
 say ""
@@ -128,3 +157,4 @@ case ":$PATH:" in
     *) say "$BIN is not on your PATH yet: open a new terminal, or add it, to use the riptide command." ;;
 esac
 say "Open it from your applications menu, with a riptide://open link, or by running: riptide"
+say "It opens in a window of its own (Chrome, Edge, Brave or Chromium in app mode); riptide --tab opens a browser tab."

@@ -117,7 +117,17 @@ $Link = $Shell.CreateShortcut($Shortcut)
 $Link.TargetPath = $PythonW
 $Link.Arguments = "`"$App\launch.py`""
 $Link.WorkingDirectory = $App
-$Link.Description = "Riptide: motion graphics and image editor"
+$Link.Description = "Riptide: video, motion graphics and 3D editor"
+# its icon, made from the logo with what every Windows has
+try {
+    Add-Type -AssemblyName System.Drawing
+    $Png = Join-Path $App "brand\riptide-icon-512.png"
+    $Ico = Join-Path $Home_ "riptide.ico"
+    $Bitmap = New-Object System.Drawing.Bitmap((New-Object System.Drawing.Bitmap($Png)), 256, 256)
+    $Icon = [System.Drawing.Icon]::FromHandle($Bitmap.GetHicon())
+    $Stream = [System.IO.File]::Create($Ico); $Icon.Save($Stream); $Stream.Close()
+    $Link.IconLocation = "$Ico,0"
+} catch { }
 $Link.Save()
 
 # ---------- riptide:// links ----------

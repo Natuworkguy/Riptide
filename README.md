@@ -53,7 +53,7 @@ Adjust colour, apply looks (Vivid, Warm, Cool, Faded, Vintage, Noir, Mono, Punch
 
 ## Install
 
-Linux:
+Linux and macOS:
 
     curl -fsSL https://raw.githubusercontent.com/Natuworkguy/Riptide/main/install.sh | bash
 
@@ -62,8 +62,13 @@ Windows (PowerShell):
     irm https://raw.githubusercontent.com/Natuworkguy/Riptide/main/install.ps1 | iex
 
 The installer puts Riptide in its own Python environment, adds a `riptide` command, an applications menu (or Start
-menu) entry, and registers `riptide://open` links, which open the editor in your browser and start its server if it is
-not running. `riptide --stop` stops that server. Run the installer again to update. `--dev` installs the dev branch,
+menu) entry with Riptide's icon (and a Riptide app in Applications on a Mac), and registers `riptide://open` links.
+
+Riptide is a desktop app: each of these opens it in a window of its own, with no address bar or tabs, and starts its
+server if it is not running. Nothing to set up: the window is Chrome, Edge, Brave or Chromium in app mode with a profile
+of its own, so it sits in the dock or taskbar as Riptide and remembers its size; on a computer with none of those it is
+a native window when pywebview is installed, else a browser tab. `riptide --tab` (or `RIPTIDE_OPEN=tab`) opens a tab
+instead, and from a tab, the browser's Install app button makes it an app too. `riptide --stop` stops the server. Run the installer again to update. `--dev` installs the dev branch,
 where changes land first (on Windows: `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Natuworkguy/Riptide/main/install.ps1))) -Dev`),
 and `--uninstall` (`-Uninstall`) takes Riptide back out. ffmpeg is still yours to install, for video export.
 

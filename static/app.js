@@ -4125,6 +4125,11 @@ const LIVE = (() => {
     undo: () => { undoRedo(-1); return { ok: true }; },
     redo: () => { undoRedo(1); return { ok: true }; },
     get_project_json: () => JSON.parse(JSON.stringify({ ...S, assets: Object.fromEntries(Object.entries(S.assets || {}).map(([id, a]) => [id, { ...a, src: undefined }])) })),
+    // another window is taking this session: keep its work, then close (or, if a window cannot close itself, move
+    // on to a new empty session)
+    hand_over: async () => { await Keep.save(); setTimeout(() => { window.close();
+      setTimeout(() => { location.href = `${location.pathname}?window=${crypto.randomUUID().slice(0, 8)}`; }, 300); }, 50);
+      return { ok: true, handed: true }; },
     new_project: a => { S = { w: +a.width || defaultSize().w, h: +a.height || defaultSize().h, bg: a.background || '#ffffff', dur: +a.duration || 5, layers: [], assets: {}, markers: [] };
       projectName = a.name || 'Untitled'; fileHandle = null; sel = null; selKey = null; selKeys = []; time = 0; return done('started a new project'); },
   };
@@ -4136,8 +4141,10 @@ const LIVE = (() => {
   const here = new URLSearchParams(location.search), windowId = (here.get('window') || crypto.randomUUID().slice(0, 8)).slice(0, 64);
   if (here.get('window')) {
     if (here.has('name')) projectName = here.get('name') || 'Untitled';
-    if (here.has('name') || here.has('width')) setTimeout(() => ops.new_project({ name: here.get('name') || 'Untitled', width: here.get('width'),
-      height: here.get('height'), duration: here.get('duration'), background: here.get('background') || undefined }));
+    if (here.has('name') || here.has('width')) setTimeout(() => { ops.new_project({ name: here.get('name') || 'Untitled', width: here.get('width'),
+      height: here.get('height'), duration: here.get('duration'), background: here.get('background') || undefined });
+      // started: from now on this window's address is just its session, so a reload or a swap back keeps its work
+      history.replaceState(null, '', `${location.pathname}?window=${encodeURIComponent(windowId)}${location.hash}`); });
   } else history.replaceState(null, '', `${location.pathname}?window=${windowId}${location.hash}`);
   let saidName = null, saidLayers = -1;
   // its name, whether it is the one in use, and how many layers it has (none: an empty window, free for new work)
@@ -4148,8 +4155,12 @@ const LIVE = (() => {
   addEventListener('pointerdown', () => { if (Date.now() - lastUsed > 2000) { lastUsed = Date.now(); hello(true); } }, true);
   setInterval(() => hello(false), 3000);
   let es = null, retry = 0;
+  // this page, as against a reload of it: its goodbye ends only its own connection
+  const pageId = crypto.randomUUID().slice(0, 12);
+  addEventListener('pagehide', () => { es?.close();
+    navigator.sendBeacon?.('/api/live/bye', new Blob([JSON.stringify({ window: windowId, page: pageId })], { type: 'application/json' })); });
   function connect() {
-    es = new EventSource(`/api/live/events?window=${encodeURIComponent(windowId)}&name=${encodeURIComponent(projectName)}`); saidName = projectName;
+    es = new EventSource(`/api/live/events?window=${encodeURIComponent(windowId)}&name=${encodeURIComponent(projectName)}&page=${pageId}`); saidName = projectName;
     es.onopen = () => { retry = 0; $('#live').classList.add('on'); $('#live').title = 'Live link on: agents connected through the Riptide MCP server can see and edit this project'; };
     es.onerror = () => {
       $('#live').classList.remove('on'); $('#live').title = 'Live link offline (is server.py running?)';
@@ -4157,7 +4168,9 @@ const LIVE = (() => {
       if (es.readyState === EventSource.CLOSED) { es.close(); setTimeout(connect, Math.min(10000, 1000 * 2 ** retry++)); }
     };
     es.onmessage = async m => {
-      const { id, op, args } = JSON.parse(m.data); let result;
+      const msg = JSON.parse(m.data);
+      if (msg.notice === 'wants') { Sessions.wants(msg.window, msg.name, msg.by); return; }
+      const { id, op, args } = msg; let result;
       $('#live').classList.add('busy');
       try { if (!ops[op]) throw new Error(`Unknown operation "${op}"`); if (playing && op !== 'get_project') togglePlay(); result = await ops[op](args || {}); }
       catch (e) { result = { ok: false, error: e.message }; }
@@ -4184,7 +4197,8 @@ new MutationObserver(() => document.querySelectorAll('.sech').forEach(h => { if 
 // or one opened for an agent's new project, starts fresh. Kept for two weeks.
 const Keep = (() => {
   const here = new URLSearchParams(location.search), id = here.get('window');
-  const on = !!id && here.get('renderhost') !== '1' && !here.has('name') && !here.has('width') && 'indexedDB' in window;
+  // every window keeps its work; one opened for a new project (?name=…) starts with that, not with what it kept
+  const on = !!id && here.get('renderhost') !== '1' && 'indexedDB' in window, fresh = here.has('name') || here.has('width');
   const DAYS = 14;
   let db = null, timer = 0, ready = false;
   const open = () => db || (db = new Promise((ok, no) => {
@@ -4199,11 +4213,24 @@ const Keep = (() => {
     if (!on || !ready) return;
     const sounds = {}; for (const sid of Object.keys(S.sounds || {})) if (SND[sid]) sounds[sid] = SND[sid];
     const videos = {}; for (const [vid, b] of Object.entries(VBLOB)) if (S.assets?.[vid]) videos[vid] = b;
-    try { await run('readwrite', st => st.put({ at: Date.now(), project: JSON.stringify(S), name: projectName, dirty, time, sounds, videos }, id)); }
+    try { await run('readwrite', st => st.put({ at: Date.now(), project: JSON.stringify(S), name: projectName, dirty, time, sounds, videos, layers: S.layers.length }, id)); }
     catch (e) { console.warn('Could not keep this window\'s project', e); }
   }
+  // every session kept in this browser: its id, name, layer count and when it was last saved
+  async function list() {
+    if (!('indexedDB' in window)) return [];
+    try {
+      const out = [];
+      await run('readonly', st => { const c = st.openCursor(); c.onsuccess = () => { const k = c.result; if (!k) return;
+        const v = k.value || {}; let layers = v.layers;
+        if (layers == null) { try { layers = JSON.parse(v.project).layers.length; } catch { layers = null; } }
+        out.push({ id: k.key, name: v.name || 'Untitled', at: v.at || 0, layers }); k.continue(); }; return c; });
+      return out;
+    } catch { return []; }
+  }
+  async function forget(key) { try { await run('readwrite', st => st.delete(key)); } catch { /* nothing kept to forget */ } }
   async function restore() {
-    if (!on) return false;
+    if (!on || fresh) return false;
     try {
       const old = Date.now() - DAYS * 864e5;
       run('readwrite', st => { const c = st.openCursor(); c.onsuccess = () => { const k = c.result; if (!k) return; if ((k.value?.at || 0) < old) k.delete(); k.continue(); }; return c; }).catch(() => {});
@@ -4223,7 +4250,74 @@ const Keep = (() => {
   function later() { if (!on || !ready) return; clearTimeout(timer); timer = setTimeout(save, 400); }
   addEventListener('pagehide', () => { clearTimeout(timer); save(); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(timer); save(); } });
-  return { later, save, restore, start() { ready = true; }, get on() { return on; } };
+  return { later, save, restore, list, forget, start() { ready = true; }, get on() { return on; } };
+})();
+
+// ---------- sessions: every project worked on, swapped in this one window ----------
+// A session is a window's project, kept by its id (above), whoever made it: you, Flash for a chat, or an agent.
+// The Sessions menu (the project's name in the top bar) lists them all, newest first, and swaps this window to
+// one: what is open now is kept first, so swapping back finds it as it was. A session open in another window is
+// handed over by that window first, so one is never open twice. An agent that works in a session this window is
+// not showing asks for it here, and you choose whether to swap.
+const Sessions = (() => {
+  const me = new URLSearchParams(location.search).get('window');
+  if (!me || new URLSearchParams(location.search).get('renderhost') === '1') return { open() {}, wants() {} };
+  const ago = t => { const m = Math.max(0, (Date.now() - t) / 6e4); return m < 1 ? 'just now' : m < 60 ? `${Math.round(m)} min ago`
+    : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`; };
+  async function list() {
+    const [kept, live] = await Promise.all([Keep.list(), fetch('/api/live/status').then(r => r.json()).catch(() => ({ windows: [] }))]);
+    const by = new Map(kept.map(k => [k.id, { ...k }]));
+    for (const w of live.windows || []) by.set(w.id, { ...(by.get(w.id) || { at: Date.now() }), id: w.id, name: w.name, layers: w.layers ?? by.get(w.id)?.layers, live: true });
+    by.set(me, { ...(by.get(me) || {}), id: me, name: projectName, layers: S.layers.length, at: Date.now(), current: true });
+    // empty, unnamed sessions are not worth a row, except this one
+    return [...by.values()].filter(x => x.current || x.layers || x.name !== 'Untitled')
+      .sort((a, b) => (b.current ? 1 : 0) - (a.current ? 1 : 0) || (b.at || 0) - (a.at || 0));
+  }
+  const url = id => `${location.pathname}?window=${encodeURIComponent(id)}`;
+  async function go(id, live) {
+    if (id === me) return;
+    status('Swapping session…');
+    await Keep.save();
+    if (live) {   // open in another window: it lets go of it (keeping its work) before this one takes it
+      await fetch('/api/live/op', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ window: id, op: 'hand_over', args: {}, timeout: 4 }) }).catch(() => {});
+    }
+    location.href = url(id);
+  }
+  async function fresh() { await Keep.save(); location.href = url(crypto.randomUUID().slice(0, 8)); }
+  async function open(anchor = $('#docname')) {
+    const all = await list();
+    const items = [{ value: '@new', label: 'New session', hint: '⌥⌘N' }, ...all.map(x => ({ value: x.id, group: 'Sessions',
+      label: esc(x.name) + (x.id.startsWith('flash-') ? ' <b class="sess-tag">Flash</b>' : ''),
+      hint: x.current ? 'this window' : `${x.layers == null ? '' : `${x.layers} layer${x.layers === 1 ? '' : 's'} · `}${x.live ? 'open in a window' : ago(x.at)}` }))];
+    UI.menu(anchor, items, me, v => v === '@new' ? fresh() : go(v, all.find(x => x.id === v)?.live));
+  }
+  async function step(d) {
+    const all = (await list()).sort((a, b) => (b.at || 0) - (a.at || 0)), i = all.findIndex(x => x.id === me);
+    const next = all[(i + d + all.length) % all.length]; if (next && next.id !== me) go(next.id, next.live);
+  }
+  // an agent wants a session that is not on screen: say so, and swap if asked
+  let bar = null;
+  function wants(id, name, by) {
+    bar?.remove();
+    bar = document.createElement('div'); bar.className = 'sess-wants';
+    bar.innerHTML = `<span></span><button class="btn primary" data-go>Swap to it</button><button class="btn" data-no>Not now</button>`;
+    bar.querySelector('span').textContent = `${by || 'An agent'} is working in “${name || id}”`;
+    bar.querySelector('[data-go]').onclick = () => go(id, false);
+    bar.querySelector('[data-no]').onclick = () => { bar.remove(); bar = null; };
+    document.body.appendChild(bar);
+    clearTimeout(wants.t); wants.t = setTimeout(() => { bar?.remove(); bar = null; }, 60000);
+  }
+  $('#docname').title = 'Sessions: swap this window to another project (⌥⌘[ and ⌥⌘])';
+  $('#docname').classList.add('sess-btn');
+  $('#docname').addEventListener('click', () => open());
+  addEventListener('keydown', e => {
+    if (!(e.metaKey || e.ctrlKey) || !e.altKey) return;
+    if (e.code === 'BracketRight') { e.preventDefault(); step(1); }
+    else if (e.code === 'BracketLeft') { e.preventDefault(); step(-1); }
+    else if (e.code === 'KeyN') { e.preventDefault(); fresh(); }
+  });
+  return { open, wants, go, fresh, list, step };
 })();
 
 blank();

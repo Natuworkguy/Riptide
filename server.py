@@ -63,6 +63,7 @@ def index():
 live_lock = threading.Lock()
 live_tabs: dict[str, dict] = {}              # window id -> {"q": Queue, "name", "opened", "used"}
 live_waiting: dict[str, dict] = {}           # op id -> {"event": Event, "result": ...}
+live_known: dict[str, str] = {}              # every session a window has shown since the server started: id -> name
 
 
 def _windows() -> list[dict]:
@@ -103,7 +104,8 @@ def live_events():
     with live_lock:
         old = live_tabs.get(wid)
         live_tabs[wid] = {"q": q, "name": (request.args.get("name") or "Untitled")[:200], "opened": old["opened"] if old else now,
-                          "used": old["used"] if old else now}
+                          "used": old["used"] if old else now, "page": (request.args.get("page") or "")[:40]}
+        live_known[wid] = live_tabs[wid]["name"]
 
     def stream():
         try:
@@ -114,6 +116,8 @@ def live_events():
                 except queue.Empty:
                     yield ": ping\n\n"           # keeps the connection open and detects closed windows
                     continue
+                if msg is None:                  # the page said goodbye
+                    return
                 yield f"data: {json.dumps(msg)}\n\n"
         finally:
             with live_lock:
@@ -121,6 +125,20 @@ def live_events():
                     live_tabs.pop(wid, None)
 
     return Response(stream(), mimetype="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.post("/api/live/bye")
+def live_bye():
+    """A page leaving its session (closed, reloaded, swapped to another): no longer open, at once, rather than when
+    its connection is next found closed."""
+
+    body = request.get_json(force=True, silent=True) or {}
+    with live_lock:
+        tab = live_tabs.get(str(body.get("window") or ""))
+        if tab and tab.get("page") and tab.get("page") == str(body.get("page") or ""):
+            live_tabs.pop(str(body["window"]), None)
+            tab["q"].put(None)
+    return jsonify(ok=True)
 
 
 @app.post("/api/live/hello")
@@ -133,6 +151,7 @@ def live_hello():
         if tab:
             if isinstance(body.get("name"), str):
                 tab["name"] = body["name"][:200] or "Untitled"
+                live_known[str(body.get("window"))] = tab["name"]
             if body.get("used"):
                 tab["used"] = time.time()
             if isinstance(body.get("layers"), int):
@@ -150,8 +169,14 @@ def live_op():
     if wid is None:
         return jsonify(ok=False, error="Riptide is not open in a browser. Open http://127.0.0.1:5173 and try again."), 503
     if not wid:
+        # a session a window showed before, swapped out of view: ask the window in use to swap back to it, and
+        # wait (the user decides)
+        wid = _held_session(body)
+    if not wid:
         names = ", ".join(f'"{w["name"]}" ({w["id"]})' for w in _windows())
-        return jsonify(ok=False, error=f"No Riptide window is called {body.get('window')!r}. Open ones: {names}."), 404
+        return jsonify(ok=False, error=f"No Riptide window is showing {body.get('window')!r}. Open ones: {names}. "
+                                       "If it is a session swapped out of view, the user can swap back to it from "
+                                       "the Sessions menu (the project's name in the top bar)."), 404
     with live_lock:
         tab = live_tabs.get(wid)
     if tab is None:
@@ -169,6 +194,30 @@ def live_op():
         return jsonify(result)
     finally:
         live_waiting.pop(oid, None)
+
+
+def _held_session(body: dict) -> str:
+    """The session BODY's window names, once the user has swapped a window to it; "" if it is not a known session,
+    or the user did not swap in time."""
+
+    want = str(body.get("window") or "")
+    with live_lock:
+        sid = want if want in live_known else next((k for k, n in live_known.items() if n.lower() == want.lower()), "")
+        name = live_known.get(sid, "")
+    found = _windows()
+    if not sid or not found:
+        return ""
+    with live_lock:
+        tab = live_tabs.get(found[0]["id"])
+    if tab:
+        tab["q"].put({"notice": "wants", "window": sid, "name": name, "by": str(body.get("by") or "An agent")[:60]})
+    deadline = time.monotonic() + min(float(body.get("timeout", 60)), 120)
+    while time.monotonic() < deadline:
+        with live_lock:
+            if sid in live_tabs:
+                return sid
+        time.sleep(0.25)
+    return ""
 
 
 @app.post("/api/live/result/<oid>")

@@ -335,11 +335,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
             item("Reload", #selector(reload), "r"),
             item("Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)), "f", [.command, .control]),
         ])
+        // sessions: every project, swapped in this one window (the page does the work; see Sessions in app.js)
+        menu("Sessions", [
+            item("Show Sessions…", #selector(showSessions), "s", [.command, .option]),
+            item("New Session", #selector(newSession), "n", [.command, .option]),
+            .separator(),
+            item("Next Session", #selector(nextSession), "]", [.command, .option]),
+            item("Previous Session", #selector(previousSession), "[", [.command, .option]),
+        ])
         let windowMenu = NSMenuItem(); let wm = NSMenu(title: "Window")
         wm.addItem(item("Minimize", #selector(NSWindow.performMiniaturize(_:)), "m"))
         wm.addItem(item("Zoom", #selector(NSWindow.performZoom(_:)), ""))
         windowMenu.submenu = wm; main.addItem(windowMenu); NSApp.windowsMenu = wm
         NSApp.mainMenu = main
+    }
+
+    func inPage(_ js: String) {
+        (NSApp.keyWindow?.contentView as? WKWebView)?.evaluateJavaScript("typeof Sessions !== 'undefined' && \(js)")
+    }
+    @objc func showSessions() { inPage("Sessions.open()") }
+    @objc func newSession() { inPage("Sessions.fresh()") }
+    @objc func nextSession() { inPage("Sessions.step(1)") }
+    @objc func previousSession() { inPage("Sessions.step(-1)") }
+
+    // a page that closes itself (a window handing its session to another) closes its window
+    func webViewDidClose(_ webView: WKWebView) {
+        webView.window?.close()
     }
 
     @objc func newWindow() {

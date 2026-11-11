@@ -110,7 +110,10 @@ const Remote = (() => {
   const plainKey = (L, o, t) => `${L.id}|${t}|${JSON.stringify(o)}`;
   World.draw = (c, L, o, t) => {
     if (!R.on) return local.draw(c, L, o, t);
-    const k = c.getTransform().a || 1, W = Math.max(1, Math.min(8192, Math.round(S.w * k))), H = Math.max(1, Math.min(8192, Math.round(S.h * k)));
+    // while playing, a smaller picture (the server draws and sends it faster); full size once stopped
+    const playing = document.body.classList.contains('is-playing');
+    let k = c.getTransform().a || 1; if (playing) k = Math.min(k, 960 / Math.max(S.w, S.h));
+    const W = Math.max(1, Math.min(8192, Math.round(S.w * k))), H = Math.max(1, Math.min(8192, Math.round(S.h * k)));
     const fin = finals.get(L.id);
     if (fin && fin.key === plainKey(L, o, t)) { c.drawImage(fin.img, 0, 0, S.w, S.h); return true; }
     const v = view('layer:' + L.id, { kind: 'layer', layer: L.id, t, w: W, h: H }, () => typeof render === 'function' && render());

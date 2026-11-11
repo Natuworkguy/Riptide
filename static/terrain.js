@@ -291,7 +291,7 @@
   World.PRESETS.mountain = { label: 'Mountain road', hint: 'A car up a winding road through pines, under snowy peaks',
     p: { sky: 'day', sunEl: 28, sunAz: 58, sunPower: 105, clouds: 28, wind: 3, ground: 'mountains', groundColor: '#58723a',
       peaks: 1000, snow: 66, trees: 75, road: 7, fog: .15, haze: 6, hazeFall: 350, hazeGlow: 75, dust: 0, eye: 1.7, heading: 0, pitch: 0, travel: 0, lens: 35, focus: 0, dof: 0,
-      exposure: 0, bloom: 25, grain: 12, fringe: 6, ao: 0, godrays: 0, flare: 0, letterbox: '2.39', render: 'native', samples: 160 },
+      exposure: 0, bloom: 25, grain: 12, fringe: 6, ao: 0, godrays: 0, flare: 0, letterbox: '2.39', render: 'native', samples: 64 },
     objects: d => [
       { id: 'car', name: 'Car', type: 'car', color: '#a3101a', finish: 'paint', face: 'travel', lane: 1.8, road: 40,
         keys: { road: [{ t: 0, v: 40, ease: 'linear' }, { t: d, v: 40 + 22 * d }] } },

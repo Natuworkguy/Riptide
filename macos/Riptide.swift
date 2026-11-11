@@ -12,7 +12,66 @@ import WebKit
 
 let address = URL(string: "http://127.0.0.1:5173/")!
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
+// The editor's top bar is the window's title bar: the window's buttons sit at its left, and its empty space moves
+// the window (double-click zooms it, as the Mac is set to). The page tells this view how tall the bar is and where
+// its buttons and fields are; a click anywhere else in the bar drags the window.
+final class RiptideWebView: WKWebView {
+    var barHeight: CGFloat = 0
+    var controls: [CGRect] = []
+
+    override func mouseDown(with event: NSEvent) {
+        let p = convert(event.locationInWindow, from: nil)
+        let y = isFlipped ? p.y : bounds.height - p.y
+        if y >= 0, y < barHeight, !controls.contains(where: { $0.insetBy(dx: -2, dy: -2).contains(CGPoint(x: p.x, y: y)) }) {
+            if event.clickCount == 2 {
+                let action = UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick") ?? "Maximize"
+                if action == "Minimize" { window?.performMiniaturize(nil) } else if action != "None" { window?.zoom(nil) }
+            } else {
+                window?.performDrag(with: event)
+            }
+            return
+        }
+        super.mouseDown(with: event)
+    }
+}
+
+// Run in every page of the app: marks it as the Mac app (room for the window's buttons), and reports the top bar.
+let barScript = """
+(() => {
+  const mark = () => {
+    const css = document.createElement('style');
+    css.textContent = 'html.mac-app header#top{padding-left:84px}html.mac-app.mac-full header#top{padding-left:10px}';
+    document.documentElement.classList.add('mac-app');
+    (document.head || document.documentElement).appendChild(css);
+  };
+  if (document.documentElement) mark(); else document.addEventListener('DOMContentLoaded', mark);
+  const send = () => {
+    const bar = document.getElementById('top');
+    if (!bar || !window.webkit?.messageHandlers?.riptideBar) return;
+    const r = bar.getBoundingClientRect(), rects = [];
+    for (const el of bar.querySelectorAll('*')) {
+      const cs = getComputedStyle(el);
+      if (el.matches('button,a,input,select,textarea,label,[contenteditable],[role=button],[tabindex]') || cs.cursor === 'pointer' || cs.cursor === 'text') {
+        const b = el.getBoundingClientRect();
+        if (b.width && b.height && cs.visibility !== 'hidden') rects.push([b.left, b.top, b.width, b.height]);
+      }
+    }
+    window.webkit.messageHandlers.riptideBar.postMessage({ h: r.bottom, rects });
+  };
+  let queued = false;
+  const soon = () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; send(); }); } };
+  addEventListener('load', () => {
+    send();
+    const bar = document.getElementById('top');
+    if (bar) new MutationObserver(soon).observe(bar, { subtree: true, childList: true, attributes: true, characterData: true });
+    addEventListener('resize', soon);
+    document.fonts?.ready.then(soon);
+  });
+})();
+"""
+
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate,
+                         WKScriptMessageHandler, NSWindowDelegate {
     var windows: [NSWindow] = []
     var server: Process?
     var waited = 0
@@ -97,9 +156,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     @discardableResult
     func openWindow(_ config: WKWebViewConfiguration?) -> WKWebView {
         let cfg = config ?? WKWebViewConfiguration()
+        let users = cfg.userContentController
+        users.removeScriptMessageHandler(forName: "riptideBar")
+        users.add(self, name: "riptideBar")
+        if !users.userScripts.contains(where: { $0.source == barScript }) {
+            users.addUserScript(WKUserScript(source: barScript, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
         cfg.preferences.javaScriptCanOpenWindowsAutomatically = true
         cfg.mediaTypesRequiringUserActionForPlayback = []
-        let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 1440, height: 900), configuration: cfg)
+        let web = RiptideWebView(frame: NSRect(x: 0, y: 0, width: 1440, height: 900), configuration: cfg)
         web.navigationDelegate = self
         web.uiDelegate = self
         web.allowsBackForwardNavigationGestures = false
@@ -109,7 +174,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                            backing: .buffered, defer: false)
         win.title = "Riptide"
+        win.titleVisibility = .hidden            // the editor's own bar shows the name
         win.titlebarAppearsTransparent = true
+        win.delegate = self
         win.appearance = NSAppearance(named: .darkAqua)
         win.backgroundColor = NSColor(calibratedRed: 0.07, green: 0.075, blue: 0.09, alpha: 1)
         win.contentView = web
@@ -122,6 +189,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         windows.append(win)
         NSApp.activate(ignoringOtherApps: true)
         return web
+    }
+
+    // the page's top bar: how tall it is and where its controls are, so the rest of it moves the window
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == "riptideBar", let web = message.webView as? RiptideWebView,
+              let body = message.body as? [String: Any] else { return }
+        web.barHeight = CGFloat((body["h"] as? NSNumber)?.doubleValue ?? 0)
+        web.controls = (body["rects"] as? [[NSNumber]] ?? []).compactMap { r in
+            r.count == 4 ? CGRect(x: r[0].doubleValue, y: r[1].doubleValue, width: r[2].doubleValue, height: r[3].doubleValue) : nil
+        }
+    }
+
+    // in full screen the window's buttons are gone, and so is the room kept for them
+    func windowDidEnterFullScreen(_ note: Notification) { fullScreen(note, true) }
+    func windowDidExitFullScreen(_ note: Notification) { fullScreen(note, false) }
+    func fullScreen(_ note: Notification, _ on: Bool) {
+        let web = (note.object as? NSWindow)?.contentView as? WKWebView
+        web?.evaluateJavaScript("document.documentElement.classList.toggle('mac-full', \(on))")
     }
 
     // a page asking for a new window (window.open, a link to a new tab): Riptide's own in a window of this app,

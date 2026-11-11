@@ -141,8 +141,10 @@ class RenderHost:
         self.sent_assets: set[str] = set()     # those the browser has
 
     # ----- the browser -----
-    def _launch(self, pw):  # self unused: also called with None, to try a browser
-        args = ["--ignore-gpu-blocklist", "--enable-gpu-rasterization", "--enable-zero-copy", "--disable-dev-shm-usage",
+    def _launch(self, pw, full=False):  # self unused: also called with None, to try a browser
+        # FULL: the whole browser in its new headless mode, with the graphics card, rather than Playwright's
+        # stripped-down headless shell, which on a Mac draws WebGL in software (many times slower)
+        args = (["--headless=new"] if full else []) + ["--ignore-gpu-blocklist", "--enable-gpu-rasterization", "--enable-zero-copy", "--disable-dev-shm-usage",
                 "--autoplay-policy=no-user-gesture-required",
                 "--enable-unsafe-swiftshader"]  # a computer with no graphics card still draws, slowly
         if sys.platform == "darwin":
@@ -155,7 +157,7 @@ class RenderHost:
         for how, what in tries:
             channel = what or "chromium"
             try:
-                kw = {"headless": True, "args": args}
+                kw = {"headless": not full, "args": args}
                 if how == "path":
                     kw["executable_path"] = what
                 elif how == "channel":
@@ -167,14 +169,31 @@ class RenderHost:
                           + " | ".join(tried))
 
     def _open(self, pw):
-        browser = self._launch(pw)
+        browser, page = self._start_page(pw, full=getattr(self, "full", False))
+        self.gl = gl_name(page)
+        # drawing in software where there is a graphics card to use: start again, as the full browser
+        if software(self.gl) and sys.platform in ("darwin", "win32") and not getattr(self, "full", False):
+            try:
+                browser2, page2 = self._start_page(pw, full=True)
+                gl2 = gl_name(page2)
+                if not software(gl2):
+                    browser.close()
+                    browser, page, self.gl, self.full = browser2, page2, gl2, True
+                else:
+                    browser2.close()
+            except Exception:  # noqa: BLE001 -- keep the one that works
+                pass
+        self.project_rev = None
+        self.sent_assets = set()
+        self.ready = True
+        return browser, page
+
+    def _start_page(self, pw, full=False):
+        browser = self._launch(pw, full)
         page = browser.new_page(viewport={"width": 1280, "height": 720})
         page.on("crash", lambda *_: setattr(self, "ready", False))
         page.goto(self.url + "/?renderhost=1", wait_until="load")
         page.wait_for_function("window.RenderHostReady === true", timeout=READY_SECONDS * 1000)
-        self.project_rev = None
-        self.sent_assets = set()
-        self.ready = True
         return browser, page
 
     def _run(self):
@@ -277,7 +296,22 @@ class RenderHost:
     def status(self) -> dict:
         why = available() if SETUP["state"] != "failed" else f"the server could not set up drawing: {SETUP['error']}"
         return {"available": not why, "why": why, "running": bool(self.thread and self.thread.is_alive() and self.ready),
+                "gl": getattr(self, "gl", ""), "software": software(getattr(self, "gl", "")) if getattr(self, "gl", "") else False,
                 "error": self.error, "setting_up": SETUP["state"] == "running", "step": SETUP["step"]}
+
+
+def gl_name(page) -> str:
+    """What draws WebGL in the server's browser: the graphics card's name, or a software renderer's."""
+    try:
+        return page.evaluate("""() => { const g = document.createElement('canvas').getContext('webgl2') || document.createElement('canvas').getContext('webgl');
+            if (!g) return 'none'; const d = g.getExtension('WEBGL_debug_renderer_info');
+            return String(d ? g.getParameter(d.UNMASKED_RENDERER_WEBGL) : g.getParameter(g.RENDERER)); }""")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def software(gl: str) -> bool:
+    return any(w in (gl or "").lower() for w in ("swiftshader", "llvmpipe", "softpipe", "software", "none"))
 
 
 def image_bytes(data_url: str) -> tuple[bytes, str]:

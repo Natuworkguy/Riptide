@@ -19,6 +19,7 @@ import json
 import math
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -26,10 +27,11 @@ import numpy as np
 from . import flora, terrain
 
 CACHE = Path(os.environ.get("RIPTIDE_NATIVE_CACHE") or Path.home() / ".riptide" / "native-cache")
-QUALITY = {  # samples, longest side cap for previews, and light bounces
-    "draft": {"samples": 24, "bounces": 4},
-    "good": {"samples": 96, "bounces": 6},
-    "final": {"samples": 256, "bounces": 8},
+LAND_REACH = 10.0   # metres the camera may move before the land round it is laid out again
+QUALITY = {  # light samples (the denoiser cleans up after them) and bounces
+    "draft": {"samples": 8, "bounces": 3},     # the editor's quick look, while things change
+    "good": {"samples": 32, "bounces": 4},     # the editor's picture once they stop
+    "final": {"samples": 64, "bounces": 6},    # an export, unless the world asks for more
 }
 
 
@@ -127,6 +129,10 @@ class World:
         sc.cycles.device = "GPU" if self.device != "CPU" else "CPU"
         sc.cycles.use_denoising = True
         sc.cycles.denoiser = "OPENIMAGEDENOISE"
+        if hasattr(sc.cycles, "denoising_use_gpu"):
+            sc.cycles.denoising_use_gpu = self.device != "CPU"    # Metal on a Mac: much faster than the processor
+        if hasattr(sc.cycles, "auto_scrambling_distance"):
+            sc.cycles.auto_scrambling_distance = self.device != "CPU"
         sc.cycles.use_adaptive_sampling = True
         sc.cycles.adaptive_threshold = .02
         sc.cycles.caustics_reflective = sc.cycles.caustics_refractive = False
@@ -224,8 +230,22 @@ class World:
     def height_at(self, x, z, o, with_flow=False):
         """The final land's height (Riptide metres) at x, z: what grass, trees and rocks stand on. The mountains
         are as terrain.js makes them, worn by water (cached), with rock relief finer than the water's grid laid on
-        their steep faces: buttresses, ledges and broken ground, tens of metres down to a few."""
-        x, z = np.asarray(x, float), np.asarray(z, float)
+        their steep faces: buttresses, ledges and broken ground, tens of metres down to a few. Many points are
+        worked out on every core at once (numpy lets go of Python's lock while it counts)."""
+        x, z = np.asarray(x, float).ravel(), np.asarray(z, float).ravel()
+        self.land(o)    # made (or read) once, before the threads share it
+        k = min(os.cpu_count() or 1, 16)
+        if k < 2 or x.size < 200_000:
+            return self._height_at(x, z, o, with_flow)
+        cuts = np.linspace(0, x.size, k + 1).astype(int)
+        with ThreadPoolExecutor(k) as ex:
+            parts = list(ex.map(lambda i: self._height_at(x[cuts[i]:cuts[i + 1]], z[cuts[i]:cuts[i + 1]], o, with_flow),
+                                range(k)))
+        if with_flow:
+            return np.concatenate([p[0] for p in parts]), np.concatenate([p[1] for p in parts])
+        return np.concatenate(parts)
+
+    def _height_at(self, x, z, o, with_flow=False):
         _, delta, flow, box = self.land(o)
         low, mt, rise = terrain.parts(x, z, o)
         peaks = max(1.0, float(o.get("peaks") or 0))
@@ -241,10 +261,18 @@ class World:
         grass at its feet to summits twenty kilometres off. Built again when the camera moves."""
         bpy = self.bpy
         step = {"draft": .007, "good": .0042, "final": .0032}.get(quality, .0042)
-        key = [round(cam[0], 1), round(cam[1], 1), round(cam[2], 1), round(look, 2), step, o.get("peaks"), o.get("road"),
-               o.get("snow"), o.get("groundColor")]
-        if not self.changed("land-mesh", key):
-            return
+        key = json.dumps([step, o.get("peaks"), o.get("road"), o.get("snow"), o.get("groundColor")], default=str)
+        # Kept while the camera stays near where it was built and looks the same way: the rings are finest at
+        # their centre, and a few metres off it the ground at the camera's feet is still a few centimetres a
+        # triangle, so a moving shot builds the land again every second or so of film, not every frame.
+        was = getattr(self, "land_at", None)
+        if was and self.keys.get("land-mesh") == key and "land" in self.bpy.data.objects:
+            moved = math.dist(cam, was[0])
+            turned = abs((look - was[1] + math.pi) % (2 * math.pi) - math.pi)
+            if moved < LAND_REACH and turned < math.radians(35):
+                return
+        self.keys["land-mesh"] = key
+        self.land_at = (tuple(cam), look)
         self.clear("land")
         t0 = time.time()
         # rings: from 30 cm to 30 km, each a little further than the last
@@ -903,6 +931,13 @@ class World:
     # ----- props and 3D layers, as the editor built them -----
     def import_props(self, glb_path, place):
         bpy = self.bpy
+        # the same props as last frame stay as they are (most shots: a car that moves with the camera, or none),
+        # so the renderer keeps what it built of them
+        same = hashlib.sha1(Path(glb_path).read_bytes()).hexdigest() if glb_path else ""
+        same = json.dumps([same, place], sort_keys=True, default=str)
+        if same == getattr(self, "props_key", None):
+            return
+        self.props_key = same
         for ob in self.props:
             try:
                 bpy.data.objects.remove(ob, do_unlink=True)
@@ -952,18 +987,29 @@ class World:
         sc.cycles.max_bounces, sc.cycles.diffuse_bounces, sc.cycles.glossy_bounces = b, max(2, b // 2), max(2, b // 2)
         sc.cycles.transmission_bounces, sc.cycles.transparent_max_bounces, sc.cycles.volume_bounces = b, 8, 0
         sc.view_settings.exposure = float(o.get("exposure") or 0) - 1.3
+        took, mark = {}, [time.time()]
+
+        def lap(name):
+            now = time.time()
+            took[name] = now - mark[0]
+            mark[0] = now
         self.sky(o)
+        lap("sky")
         ground = o.get("ground")
         if ground == "mountains":
             self.build_mountains(o)
         else:
             self.plain_ground(o)
+        lap("ground")
         pos, fwd = self.camera(job["camera"], W, H)
         if ground == "mountains":
             rp = (pos[0], pos[2], -pos[1])
             self.land_mesh(o, (pos[0], pos[2], -pos[1]), math.atan2(-fwd[1], fwd[0]), job.get("quality") or "good")
+            lap("land")
             self.grass(o, rp, (fwd[0], fwd[2], -fwd[1]))
+            lap("grass")
         self.import_props(job.get("glb"), job.get("props") or {})
+        lap("props")
         exr = Path(out_png).with_suffix(".exr")
         sc.render.image_settings.media_type = "MULTI_LAYER_IMAGE"
         sc.render.image_settings.file_format = "OPEN_EXR_MULTILAYER"
@@ -971,10 +1017,14 @@ class World:
         sc.render.filepath = str(exr)
         t0 = time.time()
         self.bpy.ops.render.render(write_still=True)
-        self.log(f"traced {W}x{H} at {sc.cycles.samples} samples on {self.device} in {time.time() - t0:.1f}s")
+        lap("trace")
         img = self.air(exr, o, pos)
+        lap("air")
         self.save(img, out_png)
         exr.unlink(missing_ok=True)
+        lap("save")
+        self.log(f"{W}x{H} at {sc.cycles.samples} samples on {self.device}: "
+                 + ", ".join(f"{k} {v:.2f}s" for k, v in took.items()))
         return {"ms": int((time.time() - t0) * 1000), "device": self.device}
 
     def plain_ground(self, o):

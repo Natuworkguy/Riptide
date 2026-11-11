@@ -79,12 +79,17 @@ const Native = (() => {
     if (!server) await askStatus();
     if (!server.available) { if (!server.setting_up) await askStatus(true); redraw(); return; }
     const w = v.want; v.want = null; v.busy = true;
-    // a quick look: no wider than 960, fewer light samples
-    const k = Math.min(1, 960 / S.w), W = Math.max(16, Math.round(S.w * k)), H = Math.max(16, Math.round(S.h * k));
-    try { const out = await ask(await describe(w.L, w.o, w.t, W, H, 'draft')); v.img = out.img; v.key = w.key; v.error = ''; v.ms = out.ms; }
-    catch (e) { v.error = e.message; v.key = w.key; }
+    // a quick look while things change (small, few light samples), then, once they stop, a cleaner one
+    const good = !!w.good, side = good ? 1280 : 640;
+    const k = Math.min(1, side / Math.max(S.w, S.h)), W = Math.max(16, Math.round(S.w * k)), H = Math.max(16, Math.round(S.h * k));
+    try {
+      const out = await ask(await describe(w.L, w.o, w.t, W, H, good ? 'good' : 'draft'));
+      v.img = out.img; v.key = w.key; v.good = good;
+      v.error = ''; v.ms = out.ms;
+    } catch (e) { v.error = e.message; v.key = w.key; }
     v.busy = false; redraw();
     if (v.want) pump(v);
+    else if (!good && !v.error) { clearTimeout(v.timer); v.timer = setTimeout(() => { if (!v.want && !v.busy && v.key === w.key) { v.want = { ...w, good: true }; pump(v); } }, 700); }
   }
   function placeholder(c, text) {
     c.save(); c.fillStyle = '#14161c'; c.fillRect(0, 0, S.w, S.h); c.fillStyle = 'rgba(255,255,255,.6)';
@@ -110,6 +115,11 @@ const Native = (() => {
       if (L.type !== 'world' || L.hidden || !visibleAt(L, t)) continue;
       const o = state(L, t); if (o.render !== 'native') continue;
       if (!server?.available) await askStatus(true);
+      // the first time: wait while the renderer installs (it says what it is doing), then go on
+      for (let i = 0; !server?.available && server?.setting_up && i < 1200; i++) {
+        status(`${server.step || 'Setting up the native renderer'}…`);
+        await new Promise(r => setTimeout(r, 1500)); await askStatus();
+      }
       if (!server?.available) throw new Error(`Photoreal cannot render here: ${server?.why || 'the native renderer is not ready'}`);
       const W = Math.max(16, Math.min(8192, Math.round(S.w * k))), H = Math.max(16, Math.min(8192, Math.round(S.h * k)));
       const out = await ask(await describe(L, o, t, W, H, 'final'));

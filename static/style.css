@@ -654,3 +654,7 @@ canvas.graph{display:block;cursor:default}
 .sced .vp.drop{box-shadow:inset 0 0 0 2px var(--accent)}
 .sced .shotrow{display:flex;align-items:center;gap:8px;height:26px;font-size:12px}.sced .shotrow .t{font-family:var(--mono);color:var(--dim);width:54px}.sced .shotrow .n{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sced .shotrow .eye{color:var(--dim);width:20px;height:20px;border-radius:4px}.sced .shotrow .eye:hover{background:#ffffff14;color:var(--text)}
+/* sketching: the size beside the pointer while drawing or pulling */
+.sced .sk-dim{position:absolute;pointer-events:none;padding:3px 7px;border-radius:5px;background:#0d0f13e6;border:1px solid #ffffff1f;color:#fff;font:600 11.5px/1.3 var(--mono, ui-monospace, Menlo, monospace);white-space:nowrap;z-index:5}
+.sced .sk-dim[hidden]{display:none}
+.sced .seg.sketch button.on{background:#2e9e5b}

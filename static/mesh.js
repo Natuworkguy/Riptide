@@ -69,6 +69,7 @@ const Mesh = (() => {
     return merge(m, 1e-5);
   }
   function editable(P) {
+    if (P.type === 'sketch' && window.Sketch) return Sketch.toMesh(P);
     const s = (P.size || [1, 1, 1]).map(Number);
     if (P.type === 'box' && !(P.round > 0)) return cube(s[0], s[1], s[2]);
     if (P.type === 'cylinder') return cylinder(s[0] / 2, (P.r2 != null ? +P.r2 : s[0] / 2), s[1], 32);
@@ -95,11 +96,24 @@ const Mesh = (() => {
     m.f.forEach((f, j) => f.forEach((a, i) => { const b = f[(i + 1) % f.length], z = f[(i + f.length - 1) % f.length]; out.f.push([a, ei.get(ek(a, b)), fi0[j], ei.get(ek(z, a))]); }));
     return out;
   }
+  // a face in triangles: a fan for three or four corners; more, cut as the shape it is (an L or a star is not
+  // convex, and a fan across it would fill in what is not there), each turned the way the face faces
+  function triangles(m, f) {
+    if (f.length <= 4) { const out = []; for (let i = 1; i < f.length - 1; i++) out.push([f[0], f[i], f[i + 1]]); return out; }
+    const n = faceNormal(m, f), ax = Math.abs(n[0]) > Math.abs(n[1]) ? (Math.abs(n[0]) > Math.abs(n[2]) ? 0 : 2) : (Math.abs(n[1]) > Math.abs(n[2]) ? 1 : 2);
+    const [i0, i1] = [[1, 2], [2, 0], [0, 1]][ax], pts = f.map(i => new T.Vector2(m.v[i * 3 + i0], m.v[i * 3 + i1]));
+    const out = [];
+    for (const [a, b, c] of T.ShapeUtils.triangulateShape(pts, [])) {
+      const A = V(m, f[a]), B = V(m, f[b]), C = V(m, f[c]);
+      out.push(dot(cross(sub(B, A), sub(C, A)), n) >= 0 ? [f[a], f[b], f[c]] : [f[a], f[c], f[b]]);
+    }
+    return out;
+  }
   function geometry(m, level = 0, smooth = false) {
     for (let i = 0; i < Math.min(4, level); i++) m = subdivide(m);
     const pos = [], tri = [], idx = [];
     for (let i = 0; i < m.v.length; i++) pos.push(m.v[i]);
-    m.f.forEach((f, fi) => { for (let i = 1; i < f.length - 1; i++) { idx.push(f[0], f[i], f[i + 1]); tri.push(fi); } });
+    m.f.forEach((f, fi) => { for (const t of triangles(m, f)) { idx.push(...t); tri.push(fi); } });
     let g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setIndex(idx);
     if (!smooth) g = g.toNonIndexed();
     g.computeVertexNormals(); g.userData.tri = tri;
@@ -124,6 +138,7 @@ const Mesh = (() => {
   function makeEditable(P) {
     if (P.type === 'mesh') return P;
     const m = editable(P), keep = ['id', 'name', 'at', 'turn', 'scale', 'keys', 'finish', 'color', 'glow', 'spin', 'bob', 'children', 'hidden'];
+    if (P.type === 'sketch' && P.name?.endsWith(' sketch')) P.name = P.name.replace(/ sketch$/, '');
     for (const k of Object.keys(P)) if (!keep.includes(k)) delete P[k];
     P.type = 'mesh'; P.mesh = m; P.meshRev = 1; if (!P.finish) P.finish = 'plastic';
     return P;

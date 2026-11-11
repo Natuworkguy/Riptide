@@ -265,14 +265,16 @@ async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "
     own grade, vignette and LUT then finish it.
 
     objects is a list of props, in metres, built from parts: {"type": "box" | "cylinder" | "sphere" | "cone" |
-    "torus" | "capsule" | "truss" | "label" | "group", "at": [x, y, z] (y up, z towards the camera, from the spot
+    "torus" | "capsule" | "truss" | "label" | "sketch" | "group", "at": [x, y, z] (y up, z towards the camera, from the spot
     on the ground the camera looks at), "turn": [x, y, z] degrees, "size": [w, h, d], "finish": "worn-metal" |
     "leatherette" | "aluminium" | "chrome" | "steel" | "rubber" | "plastic" | "paint" | "glass" | "lens" | "wood" |
     "concrete" | "rust" | "gold" | "glow", "color", "glow" (brightness), "spin": [x, y, z] degrees a second,
     "bob" (m), "children": [...] placed from it}. A cylinder or cone's size is [diameter, height]; a box takes
     "round" (corner radius, m); a truss (a lattice tower or beam) takes "bays", "rod" (m) and "taper" (0 to 1);
-    a label is a flat screen with "text" (lines split by \n), "color" and "background". See the result with
-    see_frame."""
+    a label is a flat screen with "text" (lines split by \n), "color" and "background". A "sketch" is a flat
+    outline made solid: "shape" "rect" (with "w", "d"), "circle" ("r") or "poly" ("loop": [[x, z], ...] round its
+    middle), "depth" (m: extruded up its Y, negative down) or "revolve" (degrees round its left edge, for turned
+    parts like a vase or a wheel). See the result with see_frame."""
     return await acall("add_world", {"scene": scene, "name": name, "props": props or {}})
 
 

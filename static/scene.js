@@ -391,7 +391,7 @@ const SceneEd = (() => {
     const size = P.size || [1, 1, 1], t = P.type || 'group';
     let h = `<div class="hd">${esc(nameOf(P))}</div><label class="f wide"><span>Name</span><input data-k="name" value="${esc(P.name || '')}" placeholder="${esc(nameOf(P))}"></label>`;
     h += vec('at', at, 'Position m', .01) + vec('turn', turn, 'Turn °', 1) + vec('scale', s3, 'Scale', .01);
-    if (!['group', 'light', 'model', 'mesh', 'camera', 'car', 'person', 'fx'].includes(t)) {
+    if (!['group', 'light', 'model', 'mesh', 'sketch', 'camera', 'car', 'person', 'fx'].includes(t)) {
       const lab = t === 'cylinder' || t === 'cone' ? ['Diameter', 'Height', ''] : t === 'torus' ? ['Ring', '', 'Tube'] : t === 'label' ? ['Width', 'Height', ''] : t === 'capsule' ? ['Diameter', 'Length', ''] : ['Width', 'Height', 'Depth'];
       h += `<div class="vec"><div class="vh"><span>Size m</span></div><div class="v3">${[0, 1, 2].map(i => lab[i] ? `<input data-k="size" data-i="${i}" type="number" step=".01" title="${lab[i]}" value="${r3(+size[i] || 1)}">` : '<span></span>').join('')}</div></div>`;
     }

@@ -195,15 +195,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.name == "riptideBar", let web = message.webView as? RiptideWebView,
               let body = message.body as? [String: Any] else { return }
-        web.barHeight = CGFloat((body["h"] as? NSNumber)?.doubleValue ?? 0)
+        let height = CGFloat((body["h"] as? NSNumber)?.doubleValue ?? 0)
+        let moved = height != web.barHeight
+        web.barHeight = height
         web.controls = (body["rects"] as? [[NSNumber]] ?? []).compactMap { r in
             r.count == 4 ? CGRect(x: r[0].doubleValue, y: r[1].doubleValue, width: r[2].doubleValue, height: r[3].doubleValue) : nil
         }
+        if moved, let win = web.window { placeButtons(win) }
     }
 
     // in full screen the window's buttons are gone, and so is the room kept for them
     func windowDidEnterFullScreen(_ note: Notification) { fullScreen(note, true) }
-    func windowDidExitFullScreen(_ note: Notification) { fullScreen(note, false) }
+    func windowDidExitFullScreen(_ note: Notification) {
+        fullScreen(note, false)
+        if let win = note.object as? NSWindow { placeButtons(win) }
+    }
+    func windowDidResize(_ note: Notification) { if let win = note.object as? NSWindow { placeButtons(win) } }
+    func windowDidBecomeKey(_ note: Notification) { if let win = note.object as? NSWindow { placeButtons(win) } }
+
+    // The window's three buttons, centred in the height of the editor's top bar (the Mac puts them in a 28-point
+    // title bar, higher than the middle of Riptide's): the title bar is made as tall as the top bar, and the
+    // buttons are laid out in it, as they are in other apps that draw their own bar.
+    func placeButtons(_ win: NSWindow, bar: CGFloat? = nil) {
+        if win.styleMask.contains(.fullScreen) { return }
+        let height = bar ?? ((win.contentView as? RiptideWebView)?.barHeight ?? 0)
+        guard height > 0,
+              let close = win.standardWindowButton(.closeButton),
+              let mini = win.standardWindowButton(.miniaturizeButton),
+              let zoom = win.standardWindowButton(.zoomButton),
+              let container = close.superview?.superview else { return }
+        var frame = container.frame
+        frame.size.height = height
+        frame.origin.y = win.frame.height - height
+        container.frame = frame
+        let size = close.frame.height, y = ((height - size) / 2).rounded()
+        for (i, button) in [close, mini, zoom].enumerated() {
+            button.setFrameOrigin(NSPoint(x: 13 + CGFloat(i) * 20, y: y))
+        }
+    }
     func fullScreen(_ note: Notification, _ on: Bool) {
         let web = (note.object as? NSWindow)?.contentView as? WKWebView
         web?.evaluateJavaScript("document.documentElement.classList.toggle('mac-full', \(on))")

@@ -23,6 +23,7 @@ import subprocess  # nosec B404 -- the riptide launcher, with arguments
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import webbrowser
 import xml.etree.ElementTree as ET  # nosec B405 -- an SVG Flash made, parsed without fetching anything
@@ -154,11 +155,66 @@ def open_riptide() -> None:
     raise SendError(f"Riptide did not open in {WAIT_SECONDS} seconds. Open {riptide_url()} and send it again.")
 
 
-def target(window: str = "") -> str:
-    """The window to send to: WINDOW as given (an id or a project's name), a new window when it is "new", or ""
-    for the one used last. Opens Riptide first."""
+def chat_window() -> str:
+    """The window of the Flash chat this runs for (Flash says which in FLASH_CHAT): "flash-" and the chat's id."""
+    chat = (os.environ.get("FLASH_CHAT") or "")[:8]
+    return f"flash-{chat}" if re.fullmatch(r"[0-9a-f]{8}", chat) else ""
 
-    window = (window or "").strip()
+
+def attached(window: str = "") -> str:
+    """WINDOW as given; or, with none named, the chat's own window when it is open: work asked for in a chat goes
+    to the Riptide docked beside it."""
+    if (window or "").strip():
+        return window
+    own = chat_window()
+    if own and any(w.get("id") == own for w in open_windows()):
+        return own
+    return window or ""
+
+
+def empty_window() -> str:
+    """A window with nothing in it yet, the chat's own first; "" when none is."""
+    found = [w for w in open_windows() if w.get("empty")]
+    own = chat_window()
+    found.sort(key=lambda w: w.get("id") != own)
+    return found[0]["id"] if found else ""
+
+
+def ensure_server() -> None:
+    """Riptide's server running, with no window of its own: the installed riptide command, else this folder's
+    launch.py."""
+    if server_up():
+        return
+    launcher = shutil.which("riptide")
+    cmd = [launcher, "--serve"] if launcher else [sys.executable, str(Path(__file__).resolve().parent.parent / "launch.py"), "--serve"]
+    subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,  # nosec B603
+                     start_new_session=True)
+    deadline = time.monotonic() + WAIT_SECONDS
+    while time.monotonic() < deadline:
+        if server_up():
+            return
+        time.sleep(0.4)
+    raise SendError(f"Riptide's server did not start. Run riptide --serve, or python server.py in its folder.")
+
+
+def session(chat: str = "") -> dict:
+    """Flash's Riptide button: the server started, and its editor docked beside the chat, as the chat's own window."""
+    ensure_server()
+    chat = (chat or os.environ.get("FLASH_CHAT") or "")[:8]
+    query = {"riptide": riptide_url()}
+    if re.fullmatch(r"[0-9a-f]{8}", chat):
+        query["window"] = f"flash-{chat}"
+    return {"dock": "session", "query": urllib.parse.urlencode(query)}
+
+
+def target(window: str = "") -> str:
+    """The window to send to: WINDOW as given (an id or a project's name), a new window when it is "new", one with
+    nothing in it when it is "empty" (a new one if none is), or "" for the chat's own window when it is open, else
+    the one used last. Opens Riptide first."""
+
+    window = attached((window or "").strip())
+    if window.lower() in ("empty", "an empty window", "empty window"):
+        window = empty_window() or "new"
     if window.lower() in ("new", "a new window", "new window"):
         if not server_up():
             open_riptide()
@@ -477,9 +533,17 @@ def main(argv: list) -> int:
     if argv[:1] == ["--windows"]:
         print(windows())
         return 0
+    if argv[:1] == ["--session"]:
+        try:
+            asked = json.load(sys.stdin) if not sys.stdin.isatty() else {}
+            print(json.dumps(session(str(asked.get("chat") or ""))))
+        except (SendError, OSError) as why:
+            print(json.dumps({"say": str(why)}))
+        return 0
     if argv[:1] == ["--world"]:
         try:
             asked = json.load(sys.stdin) if not sys.stdin.isatty() else {}
+            asked["window"] = attached(str(asked.get("window") or ""))
             need_window(str(asked.get("window") or ""))
             print(world(str(asked.get("scene") or ""), str(asked.get("name") or ""), asked.get("props"), str(asked.get("window") or "")))
         except SendError as why:
@@ -515,6 +579,7 @@ def main(argv: list) -> int:
         if not asked.get("path"):
             raise SendError("Give the path of a picture or a 3D model.")
         if mode == "--tool":
+            asked["window"] = attached(str(asked.get("window") or ""))
             need_window(str(asked.get("window") or ""))
         print(send(Path(str(asked["path"])), str(asked.get("name") or ""), asked.get("x"), asked.get("y"),
                    window=str(asked.get("window") or "")))

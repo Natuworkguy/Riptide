@@ -8,6 +8,7 @@ is closed, so it opens again at once; it writes to a log beside the install.
 
     riptide                  open the editor in its own window
     riptide --tab            open it in a browser tab instead (RIPTIDE_OPEN=tab does the same, always)
+    riptide --serve          start the server only, opening no window
     riptide riptide://open   the same as riptide, as a link hands it over
     riptide --stop           stop the server started in the background
 """
@@ -151,7 +152,9 @@ def main(argv: list[str]) -> int:
     if args[:1] == ["--stop"]:
         return stop()
     tab = "--tab" in args or os.environ.get("RIPTIDE_OPEN", "").lower() == "tab"
-    args = [a for a in args if a != "--tab"]
+    # the server alone, no window: for an editor shown somewhere else (Flash docks it beside a chat)
+    serve_only = "--serve" in args
+    args = [a for a in args if a not in ("--tab", "--serve")]
     if args:
         link = args[0].lower().rstrip("/")
         if link.startswith("riptide:"):
@@ -174,6 +177,9 @@ def main(argv: list[str]) -> int:
             if time.monotonic() > deadline:
                 return fail(f"Riptide's server did not start in {WAIT_SECONDS} seconds. See {state_dir() / 'server.log'}.")
             time.sleep(0.2)
+    if serve_only:
+        print(f"Riptide is running at {URL}")
+        return 0
     if not tab and app_window(URL):
         print(f"Riptide is open in its own window ({URL})")
         return 0

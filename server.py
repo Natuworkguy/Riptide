@@ -135,6 +135,8 @@ def live_hello():
                 tab["name"] = body["name"][:200] or "Untitled"
             if body.get("used"):
                 tab["used"] = time.time()
+            if isinstance(body.get("layers"), int):
+                tab["layers"] = body["layers"]
     return jsonify(ok=bool(tab))
 
 
@@ -181,7 +183,10 @@ def live_result(oid):
 @app.get("/api/live/status")
 def live_status():
     found = _windows()
-    return jsonify(tabs=len(found), windows=[{"id": w["id"], "name": w["name"], "last_used": i == 0} for i, w in enumerate(found)])
+    with live_lock:
+        layers = {k: t.get("layers") for k, t in live_tabs.items()}
+    return jsonify(tabs=len(found), windows=[{"id": w["id"], "name": w["name"], "last_used": i == 0, "layers": layers.get(w["id"]),
+                                              "empty": layers.get(w["id"]) == 0} for i, w in enumerate(found)])
 
 
 @app.post("/api/live/open")

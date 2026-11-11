@@ -110,7 +110,14 @@ editor. Its address, and whether to open it, are in the extension's settings. Ag
 Riptide can have any number of windows open, each a project of its own. Flash and agents work in the window used
 last, or in one they name by its project or open themselves: `riptide_windows` in Flash and `list_windows`,
 `use_window` and `open_window` over MCP. Flash's `send_to_riptide` and `riptide_world` take a `window` (a project's
-name, or `new`).
+name, `new`, or `empty` for a window with nothing in it yet, opening one if there is none).
+
+**Riptide in a Flash chat.** The **Riptide** button at the top of a chat in Flash's web UI (also in its command
+palette) starts Riptide's server if it is not running (`riptide --serve`: no window of its own) and docks its editor
+beside the chat, as that chat's own window. Work Flash does for that chat lands there without asking which window,
+switching chats switches windows, and each keeps its project. **Open on its own** in the dock's corner opens the same
+window in a tab. The dock reaches Riptide at the extension's address setting, so it works on the computer Riptide runs
+on.
 
 ## Tutorial
 Help in the header (or **F1**) opens a tutorial in 14 sections, from the first layer to 3D, the camera, exporting and working with an agent, with buttons that try each thing on the spot. It is offered once on a first visit.

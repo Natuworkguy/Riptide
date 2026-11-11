@@ -4139,9 +4139,10 @@ const LIVE = (() => {
     if (here.has('name') || here.has('width')) setTimeout(() => ops.new_project({ name: here.get('name') || 'Untitled', width: here.get('width'),
       height: here.get('height'), duration: here.get('duration'), background: here.get('background') || undefined }));
   } else history.replaceState(null, '', `${location.pathname}?window=${windowId}${location.hash}`);
-  let saidName = null;
-  const hello = used => { if (!used && saidName === projectName) return; saidName = projectName;
-    fetch('/api/live/hello', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ window: windowId, name: projectName, used }) }).catch(() => {}); };
+  let saidName = null, saidLayers = -1;
+  // its name, whether it is the one in use, and how many layers it has (none: an empty window, free for new work)
+  const hello = used => { const layers = S.layers.length; if (!used && saidName === projectName && saidLayers === layers) return; saidName = projectName; saidLayers = layers;
+    fetch('/api/live/hello', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ window: windowId, name: projectName, used, layers }) }).catch(() => {}); };
   addEventListener('focus', () => hello(true));
   let lastUsed = 0;
   addEventListener('pointerdown', () => { if (Date.now() - lastUsed > 2000) { lastUsed = Date.now(); hello(true); } }, true);

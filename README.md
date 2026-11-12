@@ -118,7 +118,7 @@ last, or in one they name by its project or open themselves: `riptide_windows` i
 name, `new`, or `empty` for a window with nothing in it yet, opening one if there is none).
 
 **Riptide in a Flash chat.** Each Flash chat has a Riptide window of its own, `flash-` and the chat's id. The
-**Riptide link** button at the top of a chat in Flash's web UI (also in its command palette) starts Riptide's server
+**Riptide link** item in the + menu by Flash's message box (also in its command palette) starts Riptide's server
 if it is not running (`riptide --serve`: no window of its own) and gives you that window's address, to open and watch.
 Work Flash does for the chat goes to that window without asking which (opened first if it is not open yet), and its
 answers end with the link.

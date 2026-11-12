@@ -115,7 +115,7 @@
         "label": "Riptide link",
         "icon": "film",
         "where": [
-          "header",
+          "composer",
           "palette"
         ],
         "run": [

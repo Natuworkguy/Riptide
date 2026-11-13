@@ -1645,7 +1645,8 @@ const PRESETS = {
       a('reveal', 0, 0, 'linear'); a('reveal', t1, 1, 'linear'); a('reveal', t2, 1, 'linear'); a('reveal', t3, 2, 'linear'); a('reveal', t4, 2, 'linear');
       a('reveal', t4 + Math.min(2.5, (t.length - n) * .055), 3); },
     'Draw on': (a, o, L) => { if (L.type === 'wave') { a('reveal', 0, 0, 'expoInOut'); a('reveal', 1.1, 1); return; }
-    if (L.type !== 'arc') return 'Arc and wave layers only'; a('sweep', 0, 0, 'expoInOut'); a('sweep', 1.1, o.sweep); },
+    if (L.type === 'path') { a('reveal', 0, 0, 'sineInOut'); a('reveal', 1.4, 1); return; }
+    if (L.type !== 'arc') return 'Arc, wave and line layers only'; a('sweep', 0, 0, 'expoInOut'); a('sweep', 1.1, o.sweep); },
   },
   Emphasis: {
     'Pulse': (a, o) => { a('scale', 0, o.scale, 'sineInOut'); a('scale', .25, o.scale * 1.15, 'sineInOut'); a('scale', .5, o.scale); },
@@ -1674,7 +1675,8 @@ const PRESETS = {
     'Spin out': (a, o) => { a('rotation', 0, o.rotation, 'backIn'); a('rotation', .7, o.rotation + 180); a('scale', 0, o.scale, 'backIn'); a('scale', .7, 0); },
     'Vaporize': (a, o) => { a('vapor', 0, 0, 'sineIn'); a('vapor', 1.4, 100); },
     'Erase': (a, o, L) => { if (L.type === 'text') { a('reveal', 0, 1, 'linear'); a('reveal', .6, 0); }
-      else if (L.type === 'arc') { a('sweep', 0, o.sweep, 'expoInOut'); a('sweep', .8, 0); } else return 'Text and arc layers only'; },
+      else if (L.type === 'arc') { a('sweep', 0, o.sweep, 'expoInOut'); a('sweep', .8, 0); }
+      else if (L.type === 'path' || L.type === 'wave') { a('reveal', 0, 1, 'sineInOut'); a('reveal', .8, 0); } else return 'Text, arc and line layers only'; },
   },
   '3D': {
     'Flip': (a, o, L) => { if (L.type === 'camera') return 'Not for a camera'; a('rotY', 0, o.rotY, 'expoInOut'); a('rotY', .9, o.rotY + 180); },

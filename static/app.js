@@ -74,7 +74,7 @@ function curveSVG(name, w = 34, h = 22, fn = null) {
 // ---------- model ----------
 const ANIM = ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'radius', 'fill', 'fill2', 'mid1', 'mid2', 'mid3', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth',
   'blur', 'shadow', 'rgb', 'size', 'reveal', 'sweep', 'spacing', 'bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert',
-  'rotX', 'rotY', 'z', 'd', 'lightAngle', 'orbit', 'tilt', 'dolly', 'zoom', ...Figure.JOINTS, 'side', 'limb', 'caps', 'lineh', 'speed', 'vol',
+  'boil', 'vapor', 'morph', 'wobble', 'rotX', 'rotY', 'z', 'd', 'lightAngle', 'orbit', 'tilt', 'dolly', 'zoom', ...Figure.JOINTS, 'side', 'limb', 'caps', 'lineh', 'speed', 'vol',
   'mx', 'my', 'mw', 'mh', 'mround', 'feather', 'keyTol', 'keySoft', 'spill', ...Grade.GRADE, 'vig', 'vigSize', 'lutMix'];
 const ADJUST = ['bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert'];
 // a video clip's own time and sound: its speed (keyframed, a ramp), playing backwards, and its volume and fades
@@ -86,7 +86,7 @@ const LOOKP = ['vig', 'vigSize', 'lut', 'lutMix'];
 const FINISH = [...MASK, 'mpts', ...Grade.GRADE, 'curves', ...LOOKP];
 // keying out a green screen: pictures and video only
 const KEYP = ['chroma', 'keyColor', 'keyTol', 'keySoft', 'spill'];
-const COMMON = ['x', 'y', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'blur', 'shadow', 'rgb', ...ADJUST, ...FINISH];
+const COMMON = ['x', 'y', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'blur', 'shadow', 'rgb', 'boil', 'vapor', ...ADJUST, ...FINISH];
 // turned on X and Y and pushed back in depth: any layer with 3D on, and the 3D layers themselves
 const DEPTH = ['rotX', 'rotY', 'z'];
 const FLAT = [...COMMON, 'three', ...DEPTH];
@@ -99,6 +99,10 @@ const PROPS = {
   polygon: [...FLAT, 'w', 'h', 'points', 'radius', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
   arc:     [...FLAT, 'w', 'h', 'sweep', 'stroke', 'strokeWidth', ...PHYS],
   wave:    [...FLAT, 'w', 'h', 'reveal', 'stroke', 'strokeWidth', ...PHYS],
+  // a line drawn by hand: SVG path data (pathd) in its own view box (vb), stretched to w × h, drawn on by reveal
+  path:    [...FLAT, 'w', 'h', 'pathd', 'vb', 'reveal', 'stroke', 'strokeWidth', 'pfill', 'fill', ...PHYS],
+  // an organic shape: a soft polygon of points sides, pushed out of true by wobble, its outline changing as morph moves
+  blob:    [...FLAT, 'w', 'h', 'points', 'wobble', 'morph', 'seed', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
   text:    [...FLAT, 'text', 'font', 'size', 'weight', 'italic', 'align', 'tcase', 'lineh', 'spacing', 'reveal', 'retype', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
   image:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...KEYP, ...PHYS],
   video:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...CLIP, ...KEYP, ...PHYS],
@@ -116,14 +120,14 @@ const PROPS = {
 ANIM.push(...World.NUMBERS, ...World.COLORS);
 const GROUPS = [['Transform', ['x', 'y', 'w', 'h', 'd', 'rotation', 'scale', 'sx', 'sy']],
   ['3D', ['three', 'shape', 'rotX', 'rotY', 'z', 'material', 'lightAngle']], ['Camera', ['orbit', 'tilt', 'dolly', 'zoom']],
-  ['Style', ['fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', 'radius', 'points', 'sweep', 'opacity']],
+  ['Drawing', ['pathd', 'vb', 'pfill']], ['Style', ['fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', 'radius', 'points', 'wobble', 'morph', 'seed', 'sweep', 'opacity']],
   ['Text', ['text', 'font', 'weight', 'size', 'lineh', 'italic', 'align', 'tcase', 'spacing', 'reveal', 'retype']], ['Pose', ['side', 'limb', 'caps', ...Figure.JOINTS]], ['Physics', PHYS],
-  ['Clip', CLIP], ['Effects', ['blur', 'shadow', 'rgb']], ['Adjust', ADJUST], ['Green screen', KEYP], ['Mask', MASK],
+  ['Clip', CLIP], ['Effects', ['blur', 'shadow', 'rgb', 'boil', 'vapor']], ['Adjust', ADJUST], ['Green screen', KEYP], ['Mask', MASK],
   ['Grade', Grade.GRADE], ['Curves', ['curves']], ['Vignette and LUT', LOOKP]];
 GROUPS.splice(1, 0, ...World.GROUPS);
 const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', scale: 'Scale', sx: 'Stretch X', sy: 'Stretch Y',
   opacity: 'Opacity', radius: 'Corners', fill: 'Fill', grad: 'Gradient', fill2: 'Fill 2', mid1: 'Via', mid2: 'Via 2', mid3: 'Via 3', gradAngle: 'Angle°', gradMorph: 'To radial %', stroke: 'Stroke', strokeWidth: 'Stroke W', blur: 'Blur', shadow: 'Shadow', rgb: 'RGB split',
-  size: 'Font size', text: 'Text', points: 'Points', weight: 'Weight', reveal: 'Reveal', retype: 'Retype to', sweep: 'Sweep°', spacing: 'Tracking',
+  size: 'Font size', text: 'Text', points: 'Points', pathd: 'Path', vb: 'View box', pfill: 'Fill it', boil: 'Boil', vapor: 'Vaporize %', morph: 'Morph', wobble: 'Wobble', seed: 'Seed', weight: 'Weight', reveal: 'Reveal', retype: 'Retype to', sweep: 'Sweep°', spacing: 'Tracking',
   font: 'Font', italic: 'Italic', align: 'Align', tcase: 'Case', lineh: 'Leading',
   mask: 'Mask', matte: 'Track matte', mx: 'Mask X', my: 'Mask Y', mw: 'Mask W', mh: 'Mask H', mround: 'Corners', feather: 'Feather',
   minv: 'Invert', chroma: 'Key out', keyColor: 'Key colour', keyTol: 'Tolerance', keySoft: 'Softness', spill: 'Spill %',
@@ -140,7 +144,7 @@ const CAMERA_LABEL = { x: 'Look at X', y: 'Look at Y', rotation: 'Roll°' };
 Object.assign(LABEL, World.LABELS);
 const STEP = { gradMorph: 1, opacity: .05, scale: .05, sx: .05, sy: .05, reveal: .05, zoom: .05, expo: .05, gamma: .05, ...World.STEP };
 const PALETTE = ['#7c5cff', '#ff5c8a', '#20c997', '#ffb020', '#3fa9ff', '#ff7a45'];
-const DEFAULTS = { rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0, rgb: 0,
+const DEFAULTS = { pathd: '', vb: '0 0 100 100', pfill: false, boil: 0, vapor: 0, morph: 0, wobble: 40, seed: 1, rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0, rgb: 0,
   size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, retype: '', font: 'Inter', italic: false, align: 'center', tcase: 'none', lineh: 110,
   speed: 100, reverse: false, vol: 100, mute: false, afadeIn: 0, afadeOut: 0,
   mask: 'none', matte: 'none', mx: 0, my: 0, mw: 0, mh: 0, mround: 0, feather: 0, minv: false,
@@ -190,7 +194,9 @@ function makeLayer(type, p = {}, name) {
     p: { ...DEFAULTS, x: S.w / 2, y: S.h / 2, fill, ...(type === 'arc' ? { strokeWidth: 24, stroke: fill } : {}), ...p }, keys: {} };
   S.layers.push(L); return L;
 }
-const NEW_LAYER = { figure: { w: 210, h: 460, fill: '#e8c39e' }, adjust: () => ({ w: S.w, h: S.h, name: 'Adjustment', fill: '#8b8b98' }),
+// a hand-drawn loop, and a clay blob: what the two hand-made layer types start as
+const NEW_LAYER = { path: { w: 420, h: 300, pathd: 'M8 70 C 18 20, 40 12, 52 40 S 70 92, 92 30', vb: '0 0 100 100', stroke: '#141413', strokeWidth: 10, fill: '#d97757', name: 'Line' },
+  blob: { w: 520, h: 500, fill: '#d97757', points: 8, wobble: 40, name: 'Blob' }, figure: { w: 210, h: 460, fill: '#e8c39e' }, adjust: () => ({ w: S.w, h: S.h, name: 'Adjustment', fill: '#8b8b98' }),
   world: () => ({ ...World.DEFAULTS, objects: [], w: S.w, h: S.h, name: '3D world', fill: '#d08a3c' }) };
 function newLayer(type) { const N = NEW_LAYER[type], { name, ...p } = (typeof N === 'function' ? N() : N) || {}; const L = makeLayer(type, p, name); sel = L.id; selKey = null; selKeys = []; freshLayer = L.id; refresh(); }
 
@@ -277,6 +283,43 @@ function keyState(L, t) { const o = { ...L.p }; for (const k of ANIM) if (L.keys
 function state(L, t) { let o = keyState(L, t); if (L.p.phys && L.p.phys !== 'none') o = Physics.apply(L, t, o);
   return L.react?.length && typeof Reactive !== 'undefined' ? Reactive.apply(L, t, o) : o; }
 Physics.init({ keyState, bounds });
+// a blob's outline: 72 points round it, a soft polygon pushed in and out by a few slow waves whose phases the
+// seed picks and morph turns, fitted back into w × h. Morph 0 to 100 is one full change of shape and back to new.
+const rnd = (seed, i) => { const x = Math.sin(seed * 127.1 + i * 311.7) * 43758.5453; return x - Math.floor(x); };
+function blobPoints(o) {
+  const N = 72, sides = Math.max(3, Math.round(o.points || 8)), wob = Math.max(0, Math.min(100, +o.wobble || 0)) / 100, seed = +o.seed || 1;
+  const turn = (+o.morph || 0) / 100 * 2 * PI, raw = [];
+  for (let i = 0; i < N; i++) {
+    const a = i / N * 2 * PI - PI / 2, seg = 2 * PI / sides, local = ((a + PI / 2) % seg + seg) % seg - seg / 2;
+    let r = .55 + .45 * Math.cos(PI / sides) / Math.cos(local);
+    for (let k = 2; k <= 5; k++) r += wob * .16 / Math.sqrt(k) * (rnd(seed, k) * .8 + .2) * Math.sin(k * a + rnd(seed, k + 9) * 2 * PI + turn * (rnd(seed, k + 19) > .5 ? 1 : -1) * Math.ceil(k / 2));
+    raw.push([Math.cos(a) * r, Math.sin(a) * r]);
+  }
+  const xs = raw.map(p => p[0]), ys = raw.map(p => p[1]), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  return raw.map(([x, y]) => [((x - x0) / (x1 - x0) - .5) * o.w, ((y - y0) / (y1 - y0) - .5) * o.h]);
+}
+// a path's length in its own units (for drawing it on), measured once by an SVG path element
+const pathLens = new Map();
+function pathLength(d) {
+  if (!pathLens.has(d)) { let n = 0; try { const el = document.createElementNS('http://www.w3.org/2000/svg', 'path'); el.setAttribute('d', d); n = el.getTotalLength(); } catch (_) {}
+    if (pathLens.size > 500) pathLens.clear(); pathLens.set(d, n || 1000); }
+  return pathLens.get(d);
+}
+const viewBox = vb => { const v = String(vb || '').trim().split(/[\s,]+/).map(Number); return v.length === 4 && v.every(isFinite) && v[2] > 0 && v[3] > 0 ? v : [0, 0, 100, 100]; };
+function drawPath(c, o) {
+  if (!o.pathd) return;
+  let P; try { P = new Path2D(o.pathd); } catch (_) { return; }
+  const [vx, vy, vw, vh] = viewBox(o.vb), kx = o.w / vw, ky = o.h / vh;
+  c.save(); c.translate(-o.w / 2, -o.h / 2); c.scale(kx, ky); c.translate(-vx, -vy);
+  if (o.pfill) { c.fillStyle = fillOf(c, o, vw, vh); c.fill(P); }
+  const r = Math.max(0, Math.min(1, o.reveal));
+  if (o.strokeWidth > 0 && r > 0) {
+    c.lineWidth = o.strokeWidth / Math.sqrt(Math.abs(kx * ky) || 1);
+    if (r < 1) { const len = pathLength(o.pathd); c.setLineDash([len * r, len + 1]); }
+    c.shadowColor = 'transparent'; c.stroke(P);
+  }
+  c.restore();
+}
 function shapePath(c, L, o) {
   const w = o.w, h = o.h;
   c.beginPath();
@@ -286,6 +329,11 @@ function shapePath(c, L, o) {
     const n = Math.max(3, Math.round(o.points)), star = L.type === 'star', m = star ? n * 2 : n;
     for (let i = 0; i < m; i++) { const a = i * 2 * PI / m - PI / 2, r = star && i % 2 ? .45 : 1;
       c.lineTo(Math.cos(a) * w / 2 * r, Math.sin(a) * h / 2 * r); }
+    c.closePath();
+  } else if (L.type === 'blob') {
+    const pts = blobPoints(o), n = pts.length, mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    let m = mid(pts[n - 1], pts[0]); c.moveTo(m[0], m[1]);
+    for (let i = 0; i < n; i++) { const q = mid(pts[i], pts[(i + 1) % n]); c.quadraticCurveTo(pts[i][0], pts[i][1], q[0], q[1]); }
     c.closePath();
   } else if (L.type === 'arc') {
     const sw = Math.max(0, Math.min(360, o.sweep)) * PI / 180;
@@ -355,8 +403,24 @@ function shapeTransition(o, tr, L, t) {
     dip: tr.kind === 'dipblack' || tr.kind === 'dipwhite' ? { color: tr.kind === 'dipblack' ? '#000' : '#fff', a: q, w: Math.abs(w), h: Math.abs(h) } : null };
 }
 // a layer's blur, RGB split and adjustments, as a canvas filter ('' for none)
+// Boil: the layer's edges tremble the way a hand-drawn frame redrawn ten times a second does. An SVG
+// turbulence filter displaces it, a new pattern every tenth of a second, the same each time that moment plays.
+const BOIL_FPS = 10;
+function boilFilter(frame, scale) {
+  const id = `rt-boil-${frame}-${scale}`;
+  if (!document.getElementById(id)) {
+    let defs = document.getElementById('rt-boil-defs');
+    if (!defs) { defs = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); defs.id = 'rt-boil-defs';
+      defs.setAttribute('width', '0'); defs.setAttribute('height', '0'); defs.style.position = 'absolute'; document.body.appendChild(defs); }
+    defs.insertAdjacentHTML('beforeend', `<filter id="${id}" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">` +
+      `<feTurbulence type="fractalNoise" baseFrequency="0.022" numOctaves="2" seed="${frame + 1}"/>` +
+      `<feDisplacementMap in="SourceGraphic" scale="${scale}" xChannelSelector="R" yChannelSelector="G"/></filter>`);
+  }
+  return `url(#${id})`;
+}
 function filterOf(o, k = 1) {
   const f = [];
+  if (o.boil > 0.05) f.push(boilFilter(Math.floor((o._t ?? time) * BOIL_FPS + 1e-6) % 12, Math.round(o.boil * k * 2) / 2));
   if (o.blur > 0.05) f.push(`blur(${o.blur * k}px)`);
   // RGB split: a red ghost of the layer to one side and a cyan one to the other, as a glitch or a hit leaves
   if (o.rgb > 0.05) f.push(`drop-shadow(${-o.rgb * k}px 0 0 rgba(255,0,72,.8)) drop-shadow(${o.rgb * k}px 0 0 rgba(0,230,255,.8))`);
@@ -370,6 +434,7 @@ function drawLayer(c, L, t) {
   // a 3D shape or model standing in a 3D world is drawn by the world
   if (World.worldOf(L, t)) return;
   const o = state(L, t);
+  o._t = t;
   if (L.id === editingId) o.reveal = 1;
   const tr = transitionAt(L, t), fx = tr ? shapeTransition(o, tr, L, t) : null;
   if (o.opacity <= 0) return;
@@ -392,11 +457,52 @@ function drawLayer(c, L, t) {
     { const w = (o.w ?? S.w) * o.scale * o.sx, h = (o.h ?? S.h) * o.scale * o.sy, M = c.getTransform();
       c.translate(o.x, o.y); c.rotate(o.rotation * PI / 180); c.beginPath(); c.rect(-w / 2, -h / 2, w, h); c.setTransform(M); c.clip(); }
     if (!World.draw(c, L, o, t)) { c.fillStyle = '#20232b'; c.fillRect(0, 0, S.w, S.h); } }
-  else if (deep) R3D.draw(c, L, o, t, drawContent); else drawContent(c, L, o, t);
+  else if (deep) R3D.draw(c, L, o, t, drawContent); else if (o.vapor > 0.05) drawVapor(c, L, o, t); else drawContent(c, L, o, t);
   // a dip covers the layer with black or white, all of it at the dip's middle
   if (fx?.dip && fx.dip.a > 0 && !deep) { c.filter = 'none'; c.shadowColor = 'transparent'; c.globalAlpha = Math.min(1, fx.dip.a * 1.4) * Math.min(1, o.opacity);
     c.fillStyle = fx.dip.color; c.fillRect(-fx.dip.w / 2, -fx.dip.h / 2, fx.dip.w, fx.dip.h); }
   c.restore();
+}
+// Vaporize: the layer turns to dust and blows away. It is drawn once into a picture of its own, cut into grains a
+// few pixels wide, and each grain lets go in its turn (the left side first, a little at random) and drifts up and
+// to the right on the wind, shrinking and fading. vapor 0 is the layer whole, 100 is every grain gone.
+const vaporPad = 6;
+let vaporCanvas = null, vaporGrains = null;
+function drawVapor(c, L, o, t) {
+  const p = Math.max(0, Math.min(1, o.vapor / 100)); if (p >= 1) return;
+  const { w: bw0, h: bh0 } = bounds(L, t), bw = Math.ceil(bw0 + vaporPad * 2), bh = Math.ceil(bh0 + vaporPad * 2);
+  if (!(bw > 2 && bh > 2)) return;
+  if (L.type === 'text') setFont(ctx, o);
+  const M = c.getTransform(), k = Math.max(.25, Math.min(3, Math.hypot(M.a, M.b) || 1));
+  const W = Math.min(4096, Math.ceil(bw * k)), H = Math.min(4096, Math.ceil(bh * k)), kx = W / bw, ky = H / bh;
+  if (!vaporCanvas) vaporCanvas = document.createElement('canvas');
+  const off = vaporCanvas; off.width = W; off.height = H;
+  const oc = off.getContext('2d', { willReadFrequently: true });
+  oc.setTransform(kx, 0, 0, ky, W / 2, H / 2); drawContent(oc, L, { ...o, x: 0, y: 0 }, t);
+  const px = oc.getImageData(0, 0, W, H).data, base = c.globalAlpha;
+  // the grains come from a copy; the picture itself loses the ones that have gone, and is drawn whole and smooth
+  if (!vaporGrains) vaporGrains = document.createElement('canvas');
+  const src = vaporGrains; src.width = W; src.height = H; src.getContext('2d').drawImage(off, 0, 0);
+  const g = Math.max(2, Math.round(Math.min(bw, bh) / 70)), gw = g * kx, gh = g * ky, seed = L.id * 7.31, loose = [];
+  oc.setTransform(1, 0, 0, 1, 0, 0);
+  for (let y = 0; y < bh; y += g) for (let x = 0; x < bw; x += g) {
+    const r1 = rnd(seed + x * .37, y * .91), r3 = rnd(seed, x * 3.1 + y * 5.3);
+    const start = .55 * (x / bw) + .15 * r1 + .1 * (1 - y / bh) * r3, local = Math.max(0, Math.min(1, (p - start) / .3));
+    if (local <= 0) continue;
+    const sx = Math.floor(x * kx), sy = Math.floor(y * ky);
+    oc.clearRect(sx, sy, Math.ceil(gw), Math.ceil(gh));
+    const ci = (Math.min(H - 1, sy + Math.floor(gh / 2)) * W + Math.min(W - 1, sx + Math.floor(gw / 2))) * 4 + 3;
+    if (local < 1 && px[ci] >= 8) loose.push([x, y, sx, sy, local, r1, r3]);
+  }
+  c.drawImage(off, -bw / 2, -bh / 2, bw, bh);
+  for (const [x, y, sx, sy, local, r1, r3] of loose) {
+    const r2 = rnd(seed + y * .53, x * 1.7), e = local * local;
+    const dx = e * (140 + r2 * 320) + Math.sin(local * 6 + r1 * 9) * 8 * local, dy = -e * (90 + r3 * 260) - local * 20 * r1;
+    const size = 1 - local * (.4 + .5 * r2), dw = g * size;
+    c.globalAlpha = base * (1 - local);
+    c.drawImage(src, sx, sy, Math.ceil(gw), Math.ceil(gh), x - bw / 2 + dx + (g - dw) / 2, y - bh / 2 + dy + (g - dw) / 2, dw, dw);
+  }
+  c.globalAlpha = base;
 }
 // what a layer draws, centred on 0,0 at its own size: the layer, before it is moved, turned or scaled
 function drawContent(c, L, o, t) {
@@ -404,6 +510,7 @@ function drawContent(c, L, o, t) {
   if (L.type === 'shape3d' || L.type === 'model') return placeholder3d(c, L, o);
   if (L.type === 'figure') return Figure.draw(c, o);
   c.fillStyle = o.fill; c.strokeStyle = o.stroke; c.lineWidth = o.strokeWidth; c.lineJoin = 'round'; c.lineCap = 'round';
+  if (L.type === 'path') return drawPath(c, o);
   if (L.type === 'text') {
     setFont(c, o); c.textAlign = 'left'; c.textBaseline = 'middle';
     const full = caseText(o).split('\n'), shown = textOf(o).split('\n'), lh = lineH(o), y0 = -(full.length - 1) * lh / 2;
@@ -445,7 +552,8 @@ function bounds(L, t) {
   if (L.type === 'camera') return { o, w: 0, h: 0 };
   if (L.type === 'text') { setFont(ctx, o); const ls = caseText(o).split('\n');
     return { o, w: Math.max(10, ...ls.map(s => ctx.measureText(s).width)), h: lineH(o) * ls.length }; }
-  return { o, w: Math.abs(o.w) + (L.type === 'arc' || L.type === 'wave' ? o.strokeWidth : 0), h: Math.abs(o.h) + (L.type === 'arc' || L.type === 'wave' ? o.strokeWidth : 0) };
+  const lined = L.type === 'arc' || L.type === 'wave' || L.type === 'path';
+  return { o, w: Math.abs(o.w) + (lined ? o.strokeWidth : 0), h: Math.abs(o.h) + (lined ? o.strokeWidth : 0) };
 }
 // opt: dx, dy place the scene in a frame of another shape (an export's), clipped to it, with black bars around it
 // unless transparent; transparent leaves out the background, for video with an alpha channel
@@ -971,6 +1079,8 @@ const ICON = {
   star: ic('<path d="M8 2l1.8 3.8 4.2.5-3.1 2.9.8 4.1L8 11.3l-3.7 2 .8-4.1L2 6.3l4.2-.5z"/>'),
   polygon: ic('<path d="M8 2l5.5 4-2.1 6.5H4.6L2.5 6z"/>'),
   arc: ic('<path d="M8 2.5a5.5 5.5 0 1 1-5.5 5.5"/>'),
+  path: ic('<path d="M2 11c2-6 4.5-7 6-3.5S11 13 14 4"/>'),
+  blob: ic('<path d="M8 2c3 0 6 1.8 5.6 5.4-.4 3.3-2.6 6.4-6 6.1C4.4 13.2 2 11 2.4 7.6 2.8 4.4 5 2 8 2z"/>'),
   wave: ic('<path d="M1.5 9c1.6-3.4 2.8-3.4 4.2 0s2.6 3.4 4.2 0 2.6-3.4 4.4 0"/>'),
   text: ic('<path d="M3 4V3h10v1M8 3v10M6 13h4"/>'),
   figure: ic('<circle cx="8" cy="3" r="1.6"/><path d="M8 5v5M5 7.5l3-1.5 3 1.5M6 14l2-4 2 4"/>'),
@@ -1211,7 +1321,9 @@ function renderProps() {
         if (k === 'grad') field = `<button class="selectbtn" data-menu="grad"><span>${(GRADS.find(g => g[0] === (v || 'none')) || GRADS[0])[1]}</span>${ICON.chev}</button>`;
         else if (COLORS.includes(k)) { const linked = !L.keys[k]?.length && varName(L.p[k]);
           field = `<button class="swatch${linked ? ' linked' : ''}" data-color="${k}"><i style="background:${v}"></i><span>${linked ? '--' + linked : v.toUpperCase()}</span></button>`; }
-        else if (k === 'text' || k === 'retype') field = `<textarea data-p="${k}" rows="2" spellcheck="false">${esc(v)}</textarea>`;
+        else if (k === 'text' || k === 'retype' || k === 'pathd') field = `<textarea data-p="${k}" rows="2" spellcheck="false"${k === 'pathd' ? ' class="mono"' : ''}>${esc(v)}</textarea>`;
+        else if (k === 'vb') field = `<input type="text" data-p="vb" value="${esc(v)}" spellcheck="false">`;
+        else if (k === 'pfill') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="pfill"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
         else if (k === 'weight') field = `<button class="selectbtn" data-menu="weight"><span>${WEIGHTS.find(w => w[0] == v)?.[1] || v}</span>${ICON.chev}</button>`;
         else if (k === 'font') field = `<button class="selectbtn" data-menu="font"><span style="font-family:${esc(Fonts.stack(v))}">${esc(v || 'Inter')}</span>${ICON.chev}</button>`;
         else if (k === 'mask' || k === 'matte' || k === 'lut') field = `<button class="selectbtn" data-menu="${k}"><span>${esc(k === 'lut' ? v || 'None' : ((k === 'mask' ? MASK_KINDS : TRACK_MATTES).find(x => x[0] === (v || 'none')) || ['', 'None'])[1])}</span>${ICON.chev}</button>`;
@@ -1388,7 +1500,7 @@ Pn.addEventListener('input', e => {
     render(); renderTracks(); return; }
   const k = e.target.dataset.p; if (!k) return;
   if (Physics.SCENE.includes(k)) { const v = parseFloat(e.target.value); if (isNaN(v)) return; S[k] = v; render(); return; }
-  if (k === 'text' || k === 'retype') setProp(L, k, e.target.value);
+  if (k === 'text' || k === 'retype' || k === 'pathd' || k === 'vb') setProp(L, k, e.target.value);
   else { const v = parseFloat(e.target.value); if (isNaN(v)) return;
     if ((k === 'w' || k === 'h') && aspectLocked(L)) { const o = state(L, time), other = k === 'w' ? 'h' : 'w';
       if (o.w > 0 && o.h > 0 && v > 0) { setProp(L, other, Math.max(1, Math.round(v * o[other] / o[k]))); renderPropsValues(); } }
@@ -1421,7 +1533,7 @@ Pn.addEventListener('click', e => {
   else if (t.dataset.cmd === 'flipx' || t.dataset.cmd === 'flipy') { const k = t.dataset.cmd === 'flipx' ? 'sx' : 'sy'; setProp(L, k, -state(L, time)[k]); refresh(); }
   else if (t.dataset.cmd === 'fitcanvas') fitCanvasToImage(L);
   else if (t.dataset.cmd === 'italic') { L.p.italic = !L.p.italic; refresh(); }
-  else if (t.dataset.cmd === 'minv' || t.dataset.cmd === 'chroma') { L.p[t.dataset.cmd] = !L.p[t.dataset.cmd]; refresh(); }
+  else if (t.dataset.cmd === 'minv' || t.dataset.cmd === 'chroma' || t.dataset.cmd === 'pfill') { L.p[t.dataset.cmd] = !L.p[t.dataset.cmd]; refresh(); }
   else if (t.dataset.cmd === 'maskedit') { maskEditing = maskEditing === L.id ? null : L.id; refresh();
     if (maskEditing) status(L.p.mask === 'pen' ? 'Click to place points, drag one to move it, Alt-click one to remove it' : 'Drag the mask to move it, its corners to resize it'); }
   else if (t.dataset.cmd === 'maskclear') { L.p.mpts = []; maskEditing = L.id; refresh(); status('Click on the canvas to place the mask\'s points'); }
@@ -1560,6 +1672,7 @@ const PRESETS = {
     'Blur out': (a, o) => { a('blur', 0, o.blur, 'quartOut'); a('blur', .7, 40); a('opacity', 0, o.opacity, 'sineIn'); a('opacity', .7, 0); },
     'Fall': (a, o) => { a('y', 0, o.y, 'easeIn'); a('y', .9, S.h + 400); a('rotation', 0, o.rotation, 'easeIn'); a('rotation', .9, o.rotation + 35); },
     'Spin out': (a, o) => { a('rotation', 0, o.rotation, 'backIn'); a('rotation', .7, o.rotation + 180); a('scale', 0, o.scale, 'backIn'); a('scale', .7, 0); },
+    'Vaporize': (a, o) => { a('vapor', 0, 0, 'sineIn'); a('vapor', 1.4, 100); },
     'Erase': (a, o, L) => { if (L.type === 'text') { a('reveal', 0, 1, 'linear'); a('reveal', .6, 0); }
       else if (L.type === 'arc') { a('sweep', 0, o.sweep, 'expoInOut'); a('sweep', .8, 0); } else return 'Text and arc layers only'; },
   },
@@ -3148,6 +3261,8 @@ const COMMANDS = [
   ['Add', 'Rectangle', 'r', () => newLayer('rect')],
   ['Add', 'Ellipse', 'o', () => newLayer('ellipse')],
   ['Add', 'Polygon', 'p', () => newLayer('polygon')],
+  ['Add', 'Hand-drawn line', '', () => newLayer('path')],
+  ['Add', 'Blob', '', () => newLayer('blob')],
   ['Add', 'Star', 's', () => newLayer('star')],
   ['Add', 'Arc', 'a', () => newLayer('arc')],
   ['Add', 'Wave', 'w', () => newLayer('wave')],
@@ -3830,7 +3945,7 @@ function canvasItems(px, py) {
   const add = type => () => { newLayer(type); const L = cur(); L.p.x = Math.round(px); L.p.y = Math.round(py); refresh(); };
   return [
     { head: 'Canvas', note: `${S.w}×${S.h}` },
-    { label: 'Add here', icon: ICON.plus, sub: [['rect', 'Rectangle', 'R'], ['ellipse', 'Ellipse', 'O'], ['polygon', 'Polygon', 'P'], ['star', 'Star', ''], ['arc', 'Arc', 'A'], ['text', 'Text', 'T']]
+    { label: 'Add here', icon: ICON.plus, sub: [['rect', 'Rectangle', 'R'], ['ellipse', 'Ellipse', 'O'], ['polygon', 'Polygon', 'P'], ['star', 'Star', ''], ['blob', 'Blob', ''], ['path', 'Hand-drawn line', ''], ['arc', 'Arc', 'A'], ['text', 'Text', 'T']]
       .map(([t, l, k]) => ({ label: l, icon: ICON[t], kbd: k, act: add(t) })) },
     { label: 'Paste', kbd: '⌘V', disabled: !clip, act: pasteLayer },
     { label: 'Import media…', icon: ICON.upload, act: () => assetInput.click() },

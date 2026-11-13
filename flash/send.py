@@ -388,7 +388,7 @@ def svg_layers(text: str, width: float, height: float) -> list:
         if tag in ("title", "desc", "metadata", "style"):
             return
         if tag in ("defs", "linearGradient", "radialGradient", "pattern", "clipPath", "mask", "filter", "image",
-                   "use", "path", "polyline", "foreignObject", "symbol"):
+                   "use", "foreignObject", "symbol"):
             raise NotLayers(f"a <{tag}>, which Riptide has no layer for")
         style = _style(node, inherited)
         if "url(" in (style.get("fill") or "") + (style.get("stroke") or ""):
@@ -426,6 +426,30 @@ def svg_layers(text: str, width: float, height: float) -> list:
                 "x": X((x1 + x2) / 2), "y": Y((y1 + y2) / 2), "w": round(length, 2),
                 "h": round(max(1, _num(style.get("stroke-width"), 1) * k), 2), "radius": 0, "fill": stroke,
                 "rotation": round(math.degrees(math.atan2(y2 - y1, x2 - x1)), 2)}})
+        elif tag in ("path", "polyline"):
+            # a path stays a path: the same drawing in the SVG's own units, over the whole of its view box
+            d = node.get("d") if tag == "path" else ""
+            if tag == "polyline":
+                nums = [float(v) for v in re.split(r"[\s,]+", (node.get("points") or "").strip()) if v]
+                pairs = list(zip(nums[::2], nums[1::2]))
+                d = "M" + " L".join(f"{x:g} {y:g}" for x, y in pairs) if len(pairs) > 1 else ""
+            if not (d or "").strip():
+                return
+            fill = _colour(style.get("fill"), "#000000") if tag == "path" else None
+            stroke = _colour(style.get("stroke"), None) if style.get("stroke") else None
+            if fill is None and not stroke:
+                return
+            props = {"x": X(vx + vw / 2), "y": Y(vy + vh / 2), "w": round(vw * k, 2), "h": round(vh * k, 2),
+                     "pathd": " ".join(d.split()), "vb": f"{vx - at[0]:g} {vy - at[1]:g} {vw:g} {vh:g}",
+                     "strokeWidth": round(_num(style.get("stroke-width"), 1) * k, 2) if stroke else 0}
+            if stroke:
+                props["stroke"] = stroke
+            if fill is not None:
+                props.update(pfill=True, fill=fill)
+            opacity = _num(style.get("opacity"), 1)
+            if opacity < 1:
+                props["opacity"] = round(opacity, 3)
+            layers.append({"type": "path", "name": name or ("Line" if not fill else "Shape"), "props": props})
         elif tag == "text":
             words = " ".join("".join(node.itertext()).split())
             if not words:

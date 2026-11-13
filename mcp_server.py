@@ -193,7 +193,7 @@ async def see_frames(count: int = 8, times: list[float] | None = None, width: in
 
 # ---------- changing ----------
 @mcp.tool()
-async def add_layer(type: Literal["rect", "ellipse", "polygon", "star", "arc", "text", "wave", "shape3d", "camera", "figure", "adjust"], name: str | None = None,
+async def add_layer(type: Literal["rect", "ellipse", "polygon", "star", "arc", "text", "wave", "path", "blob", "shape3d", "camera", "figure", "adjust"], name: str | None = None,
               props: dict | None = None, start: float | None = None, end: float | None = None) -> dict:
     """Add a layer on top. `props` are initial values, e.g. {"x": 540, "y": 300, "w": 400, "h": 120, "fill": "#ff5a36", "radius": 20}
     or for text {"text": "Hello", "size": 96, "weight": 800, "fill": "#111111"}. `start`/`end` limit when it is visible (seconds).
@@ -202,6 +202,14 @@ async def add_layer(type: Literal["rect", "ellipse", "polygon", "star", "arc", "
     "tcase" ("none" | "upper" | "lower" | "title") and "lineh" (line height, % of the size, 110 by default).
 Text "retype" is a second text to change to: with it set, apply the "Retype" preset to type the text, backspace
 to the part both share, then type the rest of the new one (reveal 0-1 types, 1-2 erases, 2-3 types the new text).
+
+    Hand-made shapes: a "path" is a line drawn by hand, SVG path data in "pathd" (e.g. "M10 80 C 30 10, 60 10, 90 80")
+    drawn in its own view box "vb" ("minX minY width height", "0 0 100 100" by default) stretched to w x h, in
+    "stroke" at "strokeWidth" pixels, with round ends. "reveal" 0 to 1 draws it on like a pen (key it 0 to 1 over a
+    second or so); "pfill" true also fills it with "fill". A "blob" is an organic shape: a soft polygon of "points"
+    sides (8 by default), pushed out of true by "wobble" (0 to 100), its outline changing smoothly as "morph" moves
+    (key it 0 to 100 over a scene for a shape that breathes) and different for each "seed". Any layer takes "boil"
+    (pixels, 1 to 4 is hand-drawn): its edges tremble ten times a second, the way a frame redrawn by hand does.
 
     3D: "shape3d" is a lit solid, {"shape": "cube" | "sphere" | "cylinder" | "cone" | "torus" | "text", "w": 300, "h": 300,
     "d": 300 (thickness), "rotX": -20, "rotY": 30, "material": "matte" | "glossy" | "metal", "fill": "#4c8dff",
@@ -330,7 +338,9 @@ async def delete_keyframes(layer: str, prop: str | None = None, at_time: float |
 
 @mcp.tool()
 async def apply_preset(layer: str, preset: str, at_time: float | None = None) -> dict:
-    """Apply a ready-made animation (e.g. "Pop in", "Rise", "Blur in", "Typewriter", "Retype", "Float", "Fade out") starting at `at_time`."""
+    """Apply a ready-made animation (e.g. "Pop in", "Rise", "Blur in", "Typewriter", "Retype", "Float", "Fade out", "Vaporize", which
+    turns the layer to dust that blows up and away, left side first) starting at `at_time`. The Vaporize look is the
+    "vapor" property (0 whole to 100 gone), which can also be keyed by hand."""
     return await acall("apply_preset", {"id": layer, "preset": preset, "time": at_time})
 
 

@@ -249,6 +249,7 @@ const Actors = (() => {
   const PANTS = ['#2b2b33', '#3b4a63', '#5a4a3a', '#1a1a1a', '#7a7a80', '#2c3a2c'], SKINS = ['#8d5524', '#c68642', '#e0ac69', '#f1c27d', '#ffdbac', '#5c3a21'];
   function rng(seed) { let s = seed >>> 0 || 1; return () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296; }
   World.custom.crowd = (P, t = 0) => {
+    if (P.asset === 'mannequin') P = { ...P, asset: '', body: 'mannequin' };
     const g = new T.Group(), n = clamp(Math.round(+P.count || 20), 1, 200), [w, , d] = (P.size || [12, 1, 8]).map(Number), r = rng(+P.seed || 7), move = P.move || 'walk';
     for (let i = 0; i < n; i++) {
       const x0 = (r() - .5) * w, z0 = (r() - .5) * d, a = r() * Math.PI * 2, speed = move === 'run' ? 3 + r() * 1.5 : move === 'walk' ? 1.1 + r() * .5 : 0;
@@ -256,7 +257,11 @@ const Actors = (() => {
       const look = { shirt: SHIRTS[Math.floor(r() * SHIRTS.length)], pants: PANTS[Math.floor(r() * PANTS.length)], skin: SKINS[Math.floor(r() * SKINS.length)], hairColor: r() > .7 ? '#7a5a3a' : '#16100c' };
       // each goes back and forth along a line of their own, turning at its ends
       const s = speed * t + ph * span * 2, leg = ((s % (span * 2)) + span * 2) % (span * 2), back = leg > span, along = (back ? span * 2 - leg : leg) - span / 2;
-      const node = P.asset ? World.custom.model({ asset: P.asset, clip: P.clip, clipOffset: ph * 3, clipSpeed: P.clipSpeed }, t) : person({ ...look, height: h, move, phase: ph * 4, dist: speed ? s : null }, t);
+      // real-looking men and women, mixed (the mannequin only while their bodies load, or if asked for)
+      const who = { ...look, body: r() < .5 ? 'woman' : 'man', move, phase: ph * 4, dist: speed ? s : null };
+      who.height = who.body === 'woman' ? 1.55 + (h - 1.58) * .6 : 1.66 + (h - 1.58) * .6;
+      const node = P.asset ? World.custom.model({ asset: P.asset, clip: P.clip, clipOffset: ph * 3, clipSpeed: P.clipSpeed }, t)
+        : (P.body !== 'mannequin' && realPerson(who, t)) || person({ ...look, height: h, move, phase: ph * 4, dist: speed ? s : null }, t);
       if (!node) continue;
       const holder = new T.Group(); holder.add(node);
       let x = x0 + Math.sin(a) * along, z = z0 + Math.cos(a) * along;
@@ -289,7 +294,7 @@ const Actors = (() => {
         return `<div class="hd">Crowd</div><label class="f"><span>People</span><input type="number" step="1" min="1" max="200" data-k="count" value="${+P.count || 20}"></label>
         <label class="f"><span>Do</span>${opt('move', P.move || 'walk', MOVES.filter(m => m[0] !== 'sit'))}</label>
         <label class="f"><span>Mix</span><input type="number" step="1" data-k="seed" value="${+P.seed || 7}" title="Another number, another crowd"></label>
-        <label class="f"><span>As</span>${opt('asset', P.asset || '', [['', 'Mannequins'], ...models])}</label>
+        <label class="f"><span>As</span>${opt('asset', P.asset || '', [['', 'People'], ['mannequin', 'Mannequins'], ...models])}</label>
         ${P.asset ? `<label class="f"><span>Clip</span>${opt('clip', P.clip || '', [['', 'None'], ...World.clipsOf(P.asset).map(c => [c, c])])}</label>` : ''}
         <p class="note">They come and go across its size (width and depth, in metres).</p>`; }
       if (P.type === 'model') { const clips = World.clipsOf(P.asset); if (!clips.length) return '';

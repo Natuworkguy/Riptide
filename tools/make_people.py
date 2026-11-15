@@ -92,6 +92,27 @@ def normals(v, tris):
     return n / np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-9)
 
 
+def smooth_edges(v: np.ndarray, faces: list, rounds: int = 8, keep: float = 0.5) -> None:
+    """Round off the ragged edge of a cut-out part (a collar, a hairline, a cuff): each vertex on its open edge moved
+    towards the middle of its two neighbours along that edge, ROUNDS times, so the edge follows a smooth curve."""
+    from collections import Counter, defaultdict
+    edges = Counter()
+    for corners in faces:
+        ids = [i for i, _ in corners]
+        for a, b in zip(ids, ids[1:] + ids[:1]):
+            edges[(min(a, b), max(a, b))] += 1
+    nb = defaultdict(set)
+    for (a, b), n in edges.items():
+        if n == 1:
+            nb[a].add(b)
+            nb[b].add(a)
+    ring = [k for k, ns in nb.items() if len(ns) == 2]
+    for _ in range(rounds):
+        moved = {k: keep * v[k] + (1 - keep) * v[list(nb[k])].mean(0) for k in ring}
+        for k, p in moved.items():
+            v[k] = p
+
+
 def skin_texture(data: Path, tone, brows=(), brow_color=(0.1, 0.07, 0.05), size=1024) -> bytes:
     tex = data / "textures"
     mask = lambda name: np.asarray(Image.open(tex / name).convert("L").resize((size, size), Image.BILINEAR), float)[..., None] / 255
@@ -100,9 +121,12 @@ def skin_texture(data: Path, tone, brows=(), brow_color=(0.1, 0.07, 0.05), size=
     # a little unevenness, as skin has
     noise = np.asarray(Image.fromarray((rng.random((size // 8, size // 8)) * 255).astype(np.uint8)).resize((size, size), Image.BICUBIC), float)[..., None] / 255
     base *= 0.96 + 0.08 * noise
-    lips = np.array(tone) * np.array([0.78, 0.5, 0.5])
-    base = base * (1 - mask("mpfb_lips.jpg") * 0.85) + lips * mask("mpfb_lips.jpg") * 0.85
-    base = base * (1 - mask("mpfb_eyelids.jpg") * 0.25) + np.array(tone) * np.array([0.85, 0.7, 0.68]) * mask("mpfb_eyelids.jpg") * 0.25
+    # living skin: the face a little warmer and flushed than the body, lips a natural rose, lids a touch darker
+    face = mask("mpfb_face.jpg")
+    base = base * (1 - face * 0.35) + np.array(tone) * np.array([1.04, 0.93, 0.88]) * face * 0.35
+    lips = np.array(tone) * np.array([0.86, 0.6, 0.58])
+    base = base * (1 - mask("mpfb_lips.jpg") * 0.6) + lips * mask("mpfb_lips.jpg") * 0.6
+    base = base * (1 - mask("mpfb_eyelids.jpg") * 0.3) + np.array(tone) * np.array([0.78, 0.64, 0.6]) * mask("mpfb_eyelids.jpg") * 0.3
     for nails in ("mpfb_fingernails.jpg", "mpfb_toenails.jpg"):
         base = base * (1 - mask(nails) * 0.6) + np.array([0.93, 0.8, 0.78]) * mask(nails) * 0.6
     base = base * (1 - mask("mpfb_ears.jpg") * 0.15) + np.array(tone) * np.array([0.95, 0.75, 0.72]) * mask("mpfb_ears.jpg") * 0.15
@@ -113,7 +137,7 @@ def skin_texture(data: Path, tone, brows=(), brow_color=(0.1, 0.07, 0.05), size=
         d = ImageDraw.Draw(m)
         for poly in brows:
             d.polygon([(u * size, (1 - w) * size) for u, w in poly], fill=255)
-        bm = np.asarray(m.filter(ImageFilter.GaussianBlur(size / 400)), float)[..., None] / 255 * 0.9
+        bm = np.asarray(m.filter(ImageFilter.GaussianBlur(size / 320)), float)[..., None] / 255 * 0.72
         hairs = 0.85 + 0.3 * np.asarray(Image.fromarray((rng.random((size, size)) * 255).astype(np.uint8)), float)[..., None] / 255
         base = base * (1 - bm) + np.array(brow_color) * hairs * bm
     img = Image.fromarray((np.clip(base, 0, 1) * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(0.6))
@@ -178,8 +202,8 @@ class GLB:
 
 
 LOOKS = {
-    "man": {"gender": "male", "skin": (0.80, 0.62, 0.52), "hair": (0.09, 0.07, 0.06), "top": (0.16, 0.18, 0.22), "pants": (0.20, 0.24, 0.33)},
-    "woman": {"gender": "female", "skin": (0.84, 0.66, 0.56), "hair": (0.17, 0.11, 0.07), "top": (0.55, 0.20, 0.22), "pants": (0.12, 0.13, 0.16)},
+    "man": {"gender": "male", "skin": (0.78, 0.56, 0.43), "hair": (0.09, 0.07, 0.06), "top": (0.16, 0.18, 0.22), "pants": (0.20, 0.24, 0.33)},
+    "woman": {"gender": "female", "skin": (0.84, 0.62, 0.5), "hair": (0.17, 0.11, 0.07), "top": (0.55, 0.20, 0.22), "pants": (0.12, 0.13, 0.16)},
 }
 
 
@@ -208,7 +232,7 @@ def build(data: Path, eye_png: Path, name: str, look: dict):
     def masked(m, ti):
         u, w = uvs[ti]
         return m[min(511, int((1 - w) * 512)), min(511, int(u * 512))]
-    parts: dict[str, list] = {k: [] for k in ("skin", "sclera", "iris", "pupil", "lashes", "top", "pants", "shoes", "hair")}
+    parts: dict[str, list] = {k: [] for k in ("skin", "sclera", "limbus", "iris", "pupil", "top", "pants", "shoes", "hair")}
     # where the eyes are: their centres, and the level and depth of them
     eye_c = {g: v[sorted({i for gg, c in faces if gg == g for i, _ in c})].mean(0) for g in ("helper-l-eye", "helper-r-eye")}
     eyes_y = np.mean([c[1] for c in eye_c.values()])
@@ -230,7 +254,7 @@ def build(data: Path, eye_png: Path, name: str, look: dict):
                     or (not_face and c[1] > neck_y + 0.045 and c[2] < head[2] - 0.035)):
                 scalp.append(corners)
             for ec in eye_c.values():
-                if eyes_y + 0.013 < c[1] < eyes_y + 0.03 and abs(c[0] - ec[0]) < 0.026 - abs(c[1] - eyes_y - .02) * .4 and c[2] > eye_z - 0.006:
+                if eyes_y + 0.016 < c[1] < eyes_y + 0.027 and abs(c[0] - ec[0]) < 0.024 - abs(c[1] - eyes_y - .021) * .5 and c[2] > eye_z - 0.006:
                     brows.append([uvs[t] for _, t in corners])
         elif g == "helper-tights":
             # a crew neck, cuffs short of the wrists, and the feet left to the shoes
@@ -242,9 +266,10 @@ def build(data: Path, eye_png: Path, name: str, look: dict):
         elif g in eye_c:
             # the eyeball: white, a brown iris and a black pupil, by how far from straight ahead each part is
             d = (c - eye_c[g]) / max(np.linalg.norm(c - eye_c[g]), 1e-9)
-            parts["pupil" if d[2] > 0.985 else "iris" if d[2] > 0.88 else "sclera"].append(corners)
-        elif g.startswith("helper-") and "eyelashes" in g:
-            parts["lashes"].append(corners)
+            parts["pupil" if d[2] > 0.982 else "iris" if d[2] > 0.86 else "limbus" if d[2] > 0.83 else "sclera"].append(corners)
+
+    # clothes cut along smooth lines, not the mesh's staircase
+    smooth_edges(v, parts["top"] + parts["pants"], rounds=10)
 
     # short hair: the scalp grown out a few millimetres, its own copy of those vertices
     body_tris = np.array([[c[0][0], c[k][0], c[k + 1][0]] for g, c in faces if g == "body" for k in range(1, len(c) - 1)])
@@ -253,6 +278,7 @@ def build(data: Path, eye_png: Path, name: str, look: dict):
     shell = {vi: len(v) + k for k, vi in enumerate(scalp_v)}
     v = np.vstack([v, v[scalp_v] + vn[scalp_v] * look.get("hair_mm", 6) / 1000])
     parts["hair"] = [[(shell[vi], ti) for vi, ti in c] for c in scalp]
+    smooth_edges(v, parts["hair"], rounds=12)
     hair_of = {shell[vi]: vi for vi in scalp_v}
     # shoes: the feet grown out and smoothed, so toes do not show through
     foot_v = sorted({i for c in feet for i, _ in c})
@@ -327,10 +353,10 @@ def build(data: Path, eye_png: Path, name: str, look: dict):
         "top": g.material("top", look["top"], 0.85),
         "pants": g.material("pants", look["pants"], 0.9),
         "hair": g.material("hair", look["hair"], 0.75),
-        "sclera": g.material("sclera", (0.93, 0.91, 0.88), 0.12),
+        "sclera": g.material("sclera", (0.86, 0.82, 0.78), 0.1),
+        "limbus": g.material("limbus", (0.16, 0.1, 0.06), 0.1),
         "iris": g.material("iris", look.get("iris", (0.36, 0.22, 0.12)), 0.1),
         "pupil": g.material("pupil", (0.02, 0.02, 0.02), 0.05),
-        "lashes": g.material("lashes", (0.04, 0.03, 0.03), 0.9),
     }
     prim_list = []
     for part, tris in prims.items():

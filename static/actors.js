@@ -158,6 +158,7 @@ const Actors = (() => {
     if (!c) {
       c = {}; bodyCache.set(kind, c); World.pending++;
       new T.GLTFLoader().load(BODIES[kind], gl => {
+        liven(gl.scene);
         c.group = gl.scene; c.tall = new T.Box3().setFromObject(gl.scene).getSize(new T.Vector3()).y || 1.75;
         // how far down and out each arm hangs at rest (MakeHuman's A pose), to turn the moves' arm angles into turns from it
         const at = n => { const b = gl.scene.getObjectByName(n); return b ? b.getWorldPosition(new T.Vector3()) : null; };
@@ -169,6 +170,24 @@ const Actors = (() => {
     return c.group ? c : null;
   }
   const looks = new Map();
+  // a skin colour as a tint over the painted skin (whose own tone is about #c8906e): the same tone leaves it as painted
+  const skinTint = hex => { const c = new T.Color(hex), b = new T.Color('#c8906e'); return new T.Color(Math.min(1.6, c.r / b.r), Math.min(1.6, c.g / b.g), Math.min(1.6, c.b / b.b)); };
+  // skin that reads as alive: a soft sheen at grazing angles, light that seems to glow through it, wet eyes
+  function liven(scene) {
+    scene.traverse(n => {
+      if (!n.isMesh) return;
+      const m = n.material, name = m.name;
+      if (name === 'skin') {
+        const s = new T.MeshPhysicalMaterial({ name, map: m.map, color: m.color, roughness: .52, metalness: 0, sheen: .6, sheenRoughness: .55,
+          sheenColor: new T.Color('#ff9a80'), emissive: new T.Color('#5a1a10'), emissiveIntensity: .12, clearcoat: .08, clearcoatRoughness: .5 });
+        n.material = s;
+      } else if (['sclera', 'iris', 'limbus', 'pupil'].includes(name)) {
+        n.material = new T.MeshPhysicalMaterial({ name, color: m.color, roughness: .2, clearcoat: 1, clearcoatRoughness: .03 });
+      } else if (name === 'hair') {
+        n.material = new T.MeshPhysicalMaterial({ name, color: m.color, roughness: .62, sheen: 1, sheenRoughness: .35, sheenColor: new T.Color('#7a6050') });
+      }
+    });
+  }
   // its clothes, skin and hair in the colours given (each set of colours its own materials), or an outfit over it all
   function dress(g, o) {
     const key = o.outfit ? 'outfit:' + o.outfit + (o.outfitColor || '') : [o.skin, o.shirt, o.pants, o.hairColor, o.shoes].join('|');
@@ -185,7 +204,7 @@ const Actors = (() => {
       const want = tint[n.material.name];
       if (!want) return;
       const k = n.material.name + want;
-      if (!set[k]) { set[k] = n.material.clone(); set[k].color = new T.Color(want); if (n.material.name === 'skin') set[k].color.lerp(new T.Color('#ffffff'), .35); }
+      if (!set[k]) { set[k] = n.material.clone(); set[k].color = n.material.name === 'skin' ? skinTint(want) : new T.Color(want); }
       n.material = set[k];
     });
   }
@@ -264,7 +283,7 @@ const Actors = (() => {
         <label class="f"><span>Does</span>${opt('move', P.move || 'idle', MOVES)}</label>
         <label class="f"><span>Height m</span><input type="number" step=".01" data-k="height" value="${+P.height || 1.75}"></label>
         <label class="f"><span>Outfit</span>${opt('outfit', P.outfit || '', [['', 'Clothes'], ['holo', 'Holographic shards'], ['chrome', 'Chrome'], ['glow', 'Glowing'], ['gold', 'Gold']])}</label>
-        ${color('skin', P.skin || '#c68e6a', 'Skin')}${color('shirt', P.shirt || '#2f5d8a', 'Top')}${color('pants', P.pants || '#2b2b33', 'Trousers')}${color('hairColor', P.hairColor || '#1c140e', 'Hair')}${color('shoes', P.shoes || '#1a1a1a', 'Shoes')}
+        ${color('skin', P.skin || '#c8906e', 'Skin')}${color('shirt', P.shirt || '#2f5d8a', 'Top')}${color('pants', P.pants || '#2b2b33', 'Trousers')}${color('hairColor', P.hairColor || '#1c140e', 'Hair')}${color('shoes', P.shoes || '#1a1a1a', 'Shoes')}
         <p class="note">Key their place to send them somewhere: walking or running, their steps keep pace with how far they go. Pose turns any joint by hand, over what they are doing.</p>`;
       if (P.type === 'crowd') { const models = Object.entries(S.assets || {}).filter(([, a]) => a.kind === 'model').map(([id, a]) => [id, a.name]);
         return `<div class="hd">Crowd</div><label class="f"><span>People</span><input type="number" step="1" min="1" max="200" data-k="count" value="${+P.count || 20}"></label>

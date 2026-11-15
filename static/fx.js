@@ -203,7 +203,7 @@ const FX = (() => {
 
   // ----- a scene to start from: a wet neon street at night -----
   World.PRESETS.neon = { label: 'Neon night', hint: 'A wet city street at night: rain, neon, traffic, people',
-    p: { sky: 'night', sunEl: 18, sunAz: 160, sunPower: 60, clouds: 60, wind: 2, ground: 'floor', groundColor: '#1a1b1e', floorFinish: '', fog: 18, dust: 0, rain: 25, wet: 85,
+    p: { sky: 'city', sunEl: 18, sunAz: 160, sunPower: 60, clouds: 60, wind: 2, ground: 'floor', groundColor: '#1a1b1e', floorFinish: '', fog: 18, dust: 0, rain: 25, wet: 85,
       eye: 1.1, heading: 4, pitch: 1, travel: 0, lens: 32, focus: 9, dof: 8, exposure: .15, bloom: 35, grain: 20, fringe: 12, ao: 30, streaks: 25, flare: 0, godrays: 0,
       letterbox: '2.39', shutter: 180, render: 'preview' },
     objects: d => {

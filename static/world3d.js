@@ -12,7 +12,7 @@ const World = (() => {
   const LETTERBOXES = [['none', 'None'], ['2.39', '2.39 : 1 (scope)'], ['2', '2 : 1'], ['1.85', '1.85 : 1']];
   const RENDERS = [['preview', 'Preview: fast'], ['path', 'Path traced: real light'], ['native', 'Photoreal: rendered natively']];
   const SKIES = [['sunset', 'Golden hour'], ['day', 'Clear day'], ['dusk', 'Dusk'], ['haze', 'Hazy'], ['overcast', 'Overcast'],
-    ['night', 'Night'], ['studio', 'Studio']];
+    ['night', 'Night'], ['city', 'City night (no stars, cloud lit by the streets)'], ['studio', 'Studio']];
   const GROUNDS = [['ocean', 'Ocean'], ['field', 'Wheat field'], ['desert', 'Desert'], ['mountains', 'Mountain road'], ['floor', 'Studio floor'], ['none', 'None']];
   // sky palettes: the zenith, the horizon, the sun, clouds where the sun reaches them and where it does not
   const PALETTE = {
@@ -22,6 +22,8 @@ const World = (() => {
     haze: { zen: '#7f9a9e', hor: '#cfd2c2', sun: '#fff0d2', lit: '#f1ece0', shade: '#8d948e', disk: .5, power: 1.1 },
     overcast: { zen: '#8a8f96', hor: '#c6c9cc', sun: '#e9e9e9', lit: '#d9dadc', shade: '#8a8d92', disk: 0, power: .55 },
     night: { zen: '#03050d', hor: '#16203d', sun: '#a9bbff', lit: '#3a4466', shade: '#0b0f1c', disk: .6, power: .35 },
+    // a city's night: no stars, low cloud glowing a dull orange-brown from the street lights below it
+    city: { zen: '#0a0a0d', hor: '#3a2b24', sun: '#ffcf9a', lit: '#3a3030', shade: '#0e0c0d', disk: 0, power: .3 },
     studio: { zen: '#25272d', hor: '#5b5d66', sun: '#ffffff', lit: '#000000', shade: '#000000', disk: 0, power: 1.8 },
   };
   const FIELDS = ['sky', 'hdri', 'hdriTurn', 'hdriPower', 'sunEl', 'sunAz', 'sunPower', 'clouds', 'wind',

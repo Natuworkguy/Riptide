@@ -253,18 +253,19 @@ to the part both share, then type the rest of the new one (reveal 0-1 types, 1-2
 
 
 @mcp.tool()
-async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "mountain", ""] = "", name: str | None = None,
+async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "mountain", "neon", ""] = "", name: str | None = None,
                     props: dict | None = None) -> dict:
     """Add a 3D world at the bottom of the layers: a whole place to film, with a sky, a sun that casts shadows,
     the ground, the air, props, and a lens. 3D shapes and models above it stand inside it, lit and shadowed by
     it. `scene` starts from a ready-made one, keyed with a slow camera move: "wave" (a breaking wave at golden
     hour), "rig" (a worn film camera on a jib in a hazy wheat field, shallow focus), "studio" (a soft-lit floor
     for your shapes and models), "desert" (dunes and a monolith at dusk), "night" (moonlit sea), "mountain" (a red car up a winding
-    road through pine forest under snowy peaks, filmed by a chase camera); "" is an empty
+    road through pine forest under snowy peaks, filmed by a chase camera), "neon" (a wet city street at night in the rain:
+    shopfronts, hanging neon signs, lamp posts, parked cars, traffic and people); "" is an empty
     world. `props` then changes any of its settings (all the numbers and colours animate, with update_layer or
     set_keyframes like any layer's):
 
-    sky "sunset" | "day" | "dusk" | "haze" | "overcast" | "night" | "studio"; sunEl (degrees up), sunAz (degrees
+    sky "sunset" | "day" | "dusk" | "haze" | "overcast" | "night" | "city" (a city at night: no stars, cloud lit orange by the streets) | "studio"; sunEl (degrees up), sunAz (degrees
     round: 0 is straight ahead of the camera, behind what it looks at), sunPower (%), clouds (%), wind (m/s:
     clouds, plants, dust and the sea move with it). ground "ocean" | "field" | "desert" | "mountains" | "floor" |
     "none", groundColor. Mountains: peaks (m), snow (snow line, % of the peaks), trees (pines, %), road (its width,
@@ -300,6 +301,14 @@ async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "
     "mixamorigRightArm"); "pose": {"@look": [up, across, 0]} aims the eyes (degrees up, and across to the viewer's
     right), and "poseKeys": [{"t": seconds, "pose": {...}}] eases from pose to pose, eyes included. For any other person use a rigged model (add_model with a Mixamo .fbx or a
     .glb), placed as {"type": "model", "asset": its asset id, "clip": an animation it has, "outfit": a finish}.
+    A "car" is a real-looking car: "model" "sedan" | "hatch" | "suv" | "taxi" | "classic" (the old block car), "color",
+    "lights" false to switch its lights off (parked), "beams" true to light the road ahead; key its "at" and it drives,
+    wheels turning and steering, with "face": "travel" so it points the way it goes. A "crowd" ("count", "move",
+    "size" [w, 1, d], "seed") fills an area with real-looking men and women coming and going. City parts: a "street"
+    ("roadWidth" m, "pavement" m, "size" [1, 1, length]: tarmac with markings, kerbs, paving slabs with grime), a
+    "building" ("size" [w, h, d], "seed", "lit" %, "wall" "brick" | "darkbrick" | "concrete" | "tile" | "panel":
+    storeys of lit rooms over shopfronts), a "sign" (a sign hanging out over a pavement: "text", "color", "kind" "neon"
+    | "box", "glow", "flicker"), a "lamppost" ("reach", "power", "color") and "wires" ("count", "sag", "size" [length, 1, 1]).
     An "fx" is particles: "kind" "smoke" | "fire" | "explosion" | "sparks" | "dust" | "steam" | "tendril" (a tall
     twisting column of sparkles), "amount", "scale". See the result with see_frame."""
     return await acall("add_world", {"scene": scene, "name": name, "props": props or {}})

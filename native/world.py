@@ -843,6 +843,11 @@ class World:
             return
         k = Nodes(self.world.node_tree)
         out = k.n("ShaderNodeOutputWorld")
+        if kind == "city":
+            # a city's night sky: no sun or stars, low cloud glowing dull orange-brown from the streets
+            bg = k.n("ShaderNodeBackground", inputs={"Color": srgb("#2c221d"), "Strength": 0.12})
+            k.l(bg.outputs[0], out.inputs["Surface"])
+            return
         if kind == "studio":
             bg = k.n("ShaderNodeBackground", inputs={"Color": srgb("#3a3c42"), "Strength": 1.0})
             k.l(bg.outputs[0], out.inputs["Surface"])

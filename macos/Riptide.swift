@@ -46,7 +46,8 @@ let barScript = """
   };
   if (document.documentElement) mark(); else document.addEventListener('DOMContentLoaded', mark);
   const send = () => {
-    const bar = document.getElementById('top');
+    // the bar on top: the scene editor's while it is open over the editor, else the main one
+    const bar = document.querySelector('.sced:not([hidden]) > header') || document.getElementById('top');
     if (!bar || !window.webkit?.messageHandlers?.riptideBar) return;
     const r = bar.getBoundingClientRect(), rects = [];
     for (const el of bar.querySelectorAll('*')) {
@@ -62,8 +63,11 @@ let barScript = """
   const soon = () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; send(); }); } };
   addEventListener('load', () => {
     send();
-    const bar = document.getElementById('top');
+    // the bar on top: the scene editor's while it is open over the editor, else the main one
+    const bar = document.querySelector('.sced:not([hidden]) > header') || document.getElementById('top');
     if (bar) new MutationObserver(soon).observe(bar, { subtree: true, childList: true, attributes: true, characterData: true });
+    // the scene editor opening or closing changes which bar is on top
+    new MutationObserver(soon).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['hidden'] });
     addEventListener('resize', soon);
     document.fonts?.ready.then(soon);
   });

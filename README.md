@@ -183,7 +183,10 @@ Work happens on the `dev` branch; `main` holds releases. See [CONTRIBUTING.md](C
 - **Zoom blur** (any layer, or an adjustment layer for the whole frame): a rush forward, the middle kept sharp.
 - **Pixel smear** (any layer, or an adjustment layer): bright pixels dragged out into streaks, the datamosh look.
 - **Speed lines** (a layer of its own): streaks rushing out from the middle.
-- In 3D worlds: a person can **skate**, **ollie** or **kickflip** on a board, and wear an **outfit** finish such as
-  **holo** (rainbow foil shards); particles have a **tendril** kind, a twisting column of sparkles. For a real person,
-  import a rigged character (a Mixamo `.fbx` with its animation, or a `.glb`) and give it an outfit too.
+- In 3D worlds a person is a real-looking man or woman (MakeHuman's free CC0 body, rigged: see
+  `tools/make_people.py`), with their clothes, skin, hair and shoes in any colours. They walk, run, dance, sit, or
+  **skate**, **ollie** and **kickflip** on a board, and in the scene editor every joint can be posed by hand, or keyed
+  pose to pose. Any person or model can wear an **outfit** finish such as **holo** (rainbow foil shards). Particles have
+  a **tendril** kind, a twisting column of sparkles. Imported characters work the same way: a Mixamo `.fbx` with its
+  animation, or a `.glb`.
 

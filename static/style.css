@@ -622,6 +622,8 @@ canvas.graph{display:block;cursor:default}
 .sced{position:fixed;inset:0;z-index:160;display:grid;grid-template:44px 1fr 40px/220px 1fr 280px;background:var(--bg);color:var(--text)}
 .sced[hidden]{display:none}
 .sced header{grid-column:1/-1;display:flex;align-items:center;gap:8px;padding:0 10px;border-bottom:1px solid var(--line);background:var(--panel)}
+/* the Mac app's window buttons sit over the top left corner: the scene editor's bar leaves them room, as the main bar does */
+html.mac-app .sced header{padding-left:84px}html.mac-app.mac-full .sced header{padding-left:10px}
 .sced header .ttl{font-weight:600}.sced header .nm{color:var(--dim);margin-right:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
 .sced header .sp{flex:1}.sced .extras{display:flex;gap:6px;align-items:center}
 .sced .seg{display:flex;background:var(--field);border-radius:var(--r);padding:2px;gap:2px}

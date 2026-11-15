@@ -94,6 +94,21 @@ const Actors = (() => {
     return q;
   }
   const cap = (r, len) => once(`cap${r}|${len}`, () => { const g = new T.CapsuleGeometry(r, Math.max(.001, len - 2 * r), 6, 12); g.translate(0, -len / 2, 0); return g; });
+  // a skateboard, its nose lifted and turned over as the trick TR says
+  function makeBoard(o, tr) {
+    const board = new T.Group(); board.position.y = .075;
+    const deck = once('deck', () => new T.BoxGeometry(.21, .018, .8)), wheelG = once('swheel', () => { const g = new T.CylinderGeometry(.027, .027, .03, 16); g.rotateZ(Math.PI / 2); return g; });
+    const flip = new T.Group(); flip.rotation.z = deg(tr.spin); flip.rotation.x = deg(-tr.nose); board.add(flip);
+    flip.add(new T.Mesh(deck, mat(o.boardFinish || 'paint', o.board || '#1d2b7a')));
+    for (const [x, z] of [[-.08, .27], [.08, .27], [-.08, -.27], [.08, -.27]]) { const w = new T.Mesh(wheelG, mat('plastic', '#f2efe6')); w.position.set(x, -.04, z); flip.add(w); }
+    return board;
+  }
+  // the board under a real-looking person, who stands side-on to it, rising with them in a trick
+  function boardFor(P, t) {
+    const tr = P.move === 'skate' ? { air: 0, nose: 0, spin: 0 } : trick(((t / TRICK) % 1 + 1) % 1, P.move === 'kickflip');
+    const holder = new T.Group(); holder.add(makeBoard(P, tr)); holder.position.y = tr.air;
+    holder.rotation.y = deg(90); return holder;
+  }
   function person(o, t) {
     const h = clamp(+o.height || 1.75, .5, 3), k = h / 1.75, move = o.move || 'idle';
     // an outfit finish (holo, chrome, glow...) covers them head to toe, bar the shoes
@@ -127,19 +142,86 @@ const Actors = (() => {
       const tr = move === 'skate' ? { air: 0, nose: 0, spin: 0 } : trick(((t / TRICK) % 1 + 1) % 1, move === 'kickflip');
       root.position.y = tr.air;
       root.rotation.y = deg(-80);
-      const board = new T.Group(); board.position.y = .075; board.rotation.y = deg(80);
-      const deck = once('deck', () => { const g = new T.BoxGeometry(.21, .018, .8); return g; }), wheelG = once('swheel', () => { const g = new T.CylinderGeometry(.027, .027, .03, 16); g.rotateZ(Math.PI / 2); return g; });
-      const flip = new T.Group(); flip.rotation.z = deg(tr.spin); flip.rotation.x = deg(-tr.nose); board.add(flip);
-      flip.add(new T.Mesh(deck, mat(o.boardFinish || 'paint', o.board || '#1d2b7a')));
-      for (const [x, z] of [[-.08, .27], [.08, .27], [-.08, -.27], [.08, -.27]]) { const w = new T.Mesh(wheelG, mat('plastic', '#f2efe6')); w.position.set(x, -.04, z); flip.add(w); }
-      root.add(board);
+      const board = makeBoard(o, tr); board.rotation.y = deg(80); root.add(board);
     }
     root.scale.setScalar(k);
     return root;
   }
+  // ----- a real-looking person: MakeHuman's free (CC0) body, rigged, built by tools/make_people.py -----
+  // The same moves as the mannequin drive its skeleton: each joint turned about the model's own axes (it faces +Z and
+  // its bones stand unturned at rest), then any pose given by hand is laid over that (static/pose.js), so a person can
+  // walk on its own and be posed joint by joint, or keyed pose to pose.
+  const BODIES = { man: 'people/man.glb', woman: 'people/woman.glb' };
+  const bodyCache = new Map();
+  function body(kind) {
+    let c = bodyCache.get(kind);
+    if (!c) {
+      c = {}; bodyCache.set(kind, c); World.pending++;
+      new T.GLTFLoader().load(BODIES[kind], gl => {
+        c.group = gl.scene; c.tall = new T.Box3().setFromObject(gl.scene).getSize(new T.Vector3()).y || 1.75;
+        // how far down and out each arm hangs at rest (MakeHuman's A pose), to turn the moves' arm angles into turns from it
+        const at = n => { const b = gl.scene.getObjectByName(n); return b ? b.getWorldPosition(new T.Vector3()) : null; };
+        const sh = at('mixamorigLeftArm'), el = at('mixamorigLeftForeArm');
+        c.armRest = sh && el ? Math.atan2(el.x - sh.x, sh.y - el.y) * 180 / Math.PI : 45;
+        World.pending--; World.version++; SceneEd.redraw?.(); if (typeof render === 'function') render();
+      }, undefined, () => { c.failed = true; World.pending--; });
+    }
+    return c.group ? c : null;
+  }
+  const looks = new Map();
+  // its clothes, skin and hair in the colours given (each set of colours its own materials), or an outfit over it all
+  function dress(g, o) {
+    const key = o.outfit ? 'outfit:' + o.outfit + (o.outfitColor || '') : [o.skin, o.shirt, o.pants, o.hairColor, o.shoes].join('|');
+    let set = looks.get(key);
+    if (!set) {
+      set = {};
+      if (o.outfit) set.all = mat(o.outfit, o.outfitColor || undefined);
+      looks.set(key, set);
+    }
+    const tint = { top: o.shirt, pants: o.pants, hair: o.hairColor, shoes: o.shoes, skin: o.skin };
+    g.traverse(n => {
+      if (!n.isMesh) return;
+      if (set.all && !['sclera', 'iris', 'pupil'].includes(n.material.name)) { n.material = set.all; return; }
+      const want = tint[n.material.name];
+      if (!want) return;
+      const k = n.material.name + want;
+      if (!set[k]) { set[k] = n.material.clone(); set[k].color = new T.Color(want); if (n.material.name === 'skin') set[k].color.lerp(new T.Color('#ffffff'), .35); }
+      n.material = set[k];
+    });
+  }
+  function realPerson(o, t) {
+    const c = body(o.body === 'woman' ? 'woman' : 'man'); if (!c) return null;
+    const move = o.move || 'idle', cadence = move === 'run' ? 2.9 : 1.85;
+    const ph = o.dist != null ? o.dist / (move === 'run' ? 2.6 : 1.45) : t * cadence / 2 + (o.phase || 0);
+    const q = pose(move, ph, t + (o.phase || 0));
+    const g = T.SkeletonUtils.clone(c.group), bone = n => g.getObjectByName('mixamorig' + n), r = d => d * Math.PI / 180;
+    const turn = (n, x = 0, y = 0, z = 0) => { const b = bone(n); if (b) b.quaternion.multiply(new T.Quaternion().setFromEuler(new T.Euler(r(x), r(y), r(z), 'XYZ'))); };
+    // legs: forward from the hip, the knee bending back, a little apart on a board
+    for (const [s, n, side] of [['L', 'Left', 1], ['R', 'Right', -1]]) {
+      turn(n + 'UpLeg', -(q['thigh' + s] || 0), 0, side * (q.spread || 0));
+      turn(n + 'Leg', q['knee' + s] || 0);
+      // arms: from hanging at rest, forward and out, the elbow bending forward
+      turn(n + 'Arm', -(q['arm' + s] || 0), 0, side * (6 + (q['arm' + s + 'side'] || 0) - c.armRest));
+      turn(n + 'ForeArm', -(q['elbow' + s] || 0) * .8, 0, 0);
+    }
+    turn('Spine', q.lean || 0, (q.twist || 0) / 2, 0); turn('Spine1', 0, (q.twist || 0) / 2, 0);
+    turn('Hips', 0, 0, q.sway || 0);
+    const hips = bone('Hips'); if (hips) hips.position.y += (q.bob || 0) * c.tall / 1.75;
+    dress(g, o);
+    const root = new T.Group(); root.add(g);
+    root.scale.setScalar(clamp(+o.height || c.tall, .5, 3) / c.tall);
+    return root;
+  }
   World.custom.person = (P, t = 0) => {
-    const moving = P.keys?.at?.length >= 2, g = new T.Group();
-    g.add(person({ ...P, dist: moving && (P.move === 'walk' || P.move === 'run') ? travelled(P, t) : null }, t));
+    const moving = P.keys?.at?.length >= 2, g = new T.Group(), o = { ...P, dist: moving && (P.move === 'walk' || P.move === 'run') ? travelled(P, t) : null };
+    // a real-looking person unless asked for the old mannequin; the mannequin while the body is still loading
+    const real = P.body !== 'mannequin' ? realPerson(o, t) : null;
+    if (real) {
+      World.poseHook?.(real, P, t);
+      g.add(real);
+      // on a board: side-on to it, both going up together in a trick
+      if (SKATE.includes(P.move)) { const b = boardFor(P, t); real.position.y = b.position.y; g.add(b); }
+    } else g.add(person(o, t));
     g.scale.setScalar(M); return g;
   };
 
@@ -178,11 +260,12 @@ const Actors = (() => {
       if (P.type === 'car') return `<div class="hd">Car</div><label class="f"><span>Lights</span>${opt('lights', P.lights === false ? 'off' : '', [['', 'On'], ['off', 'Off']])}</label>
         <label class="f"><span>Beams</span>${opt('beams', P.beams ? '1' : '', [['', 'None'], ['1', 'Light the road (night)']])}</label>
         <p class="note">Key its place two or more times and it drives: its wheels turn and steer, and it faces the way it goes.</p>`;
-      if (P.type === 'person') return `<div class="hd">Person</div><label class="f"><span>Does</span>${opt('move', P.move || 'idle', MOVES)}</label>
+      if (P.type === 'person') return `<div class="hd">Person</div><label class="f"><span>Body</span>${opt('body', P.body || 'man', [['man', 'Man'], ['woman', 'Woman'], ['mannequin', 'Mannequin']])}</label>
+        <label class="f"><span>Does</span>${opt('move', P.move || 'idle', MOVES)}</label>
         <label class="f"><span>Height m</span><input type="number" step=".01" data-k="height" value="${+P.height || 1.75}"></label>
         <label class="f"><span>Outfit</span>${opt('outfit', P.outfit || '', [['', 'Clothes'], ['holo', 'Holographic shards'], ['chrome', 'Chrome'], ['glow', 'Glowing'], ['gold', 'Gold']])}</label>
-        ${color('skin', P.skin || '#c68e6a', 'Skin')}${color('shirt', P.shirt || '#2f5d8a', 'Top')}${color('pants', P.pants || '#2b2b33', 'Trousers')}${color('hairColor', P.hairColor || '#1c140e', 'Hair')}
-        <p class="note">Key their place to send them somewhere: walking or running, their steps keep pace with how far they go.</p>`;
+        ${color('skin', P.skin || '#c68e6a', 'Skin')}${color('shirt', P.shirt || '#2f5d8a', 'Top')}${color('pants', P.pants || '#2b2b33', 'Trousers')}${color('hairColor', P.hairColor || '#1c140e', 'Hair')}${color('shoes', P.shoes || '#1a1a1a', 'Shoes')}
+        <p class="note">Key their place to send them somewhere: walking or running, their steps keep pace with how far they go. Pose turns any joint by hand, over what they are doing.</p>`;
       if (P.type === 'crowd') { const models = Object.entries(S.assets || {}).filter(([, a]) => a.kind === 'model').map(([id, a]) => [id, a.name]);
         return `<div class="hd">Crowd</div><label class="f"><span>People</span><input type="number" step="1" min="1" max="200" data-k="count" value="${+P.count || 20}"></label>
         <label class="f"><span>Do</span>${opt('move', P.move || 'walk', MOVES.filter(m => m[0] !== 'sit'))}</label>

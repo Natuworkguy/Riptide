@@ -106,7 +106,7 @@ const Pose = (() => {
   const st = { on: false, bone: '', start: null };
   const ed = () => SceneEd.api, P_ = () => SceneEd.selected;
   const nodeOf = P => P ? ed().findNode(P.id) : null;
-  const posable = P => P?.type === 'model' && (() => { let y = false; nodeOf(P)?.traverse(n => { if (n.isBone) y = true; }); return y; })();
+  const posable = P => (P?.type === 'model' || (P?.type === 'person' && P.body !== 'mannequin')) && (() => { let y = false; nodeOf(P)?.traverse(n => { if (n.isBone) y = true; }); return y; })();
   const boneIn = (node, name) => { let b = null; node?.traverse(n => { if (!b && n.isBone && n.name === name) b = n; }); return b; };
   const keyed = P => (P.poseKeys || []).length > 0;
   function write(P, pose, record = true) {

@@ -1,0 +1,7 @@
+man.glb and woman.glb are built by tools/make_people.py from MakeHuman's assets
+(the base mesh, its shape targets, the Mixamo-named skeleton and its skin weights,
+and the masks used to paint the skin), as carried by MPFB2:
+https://github.com/makehumancommunity/mpfb2
+
+MakeHuman's assets are released under CC0 1.0 Universal: anyone may use them for
+anything. So are these two models.

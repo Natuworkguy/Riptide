@@ -856,6 +856,12 @@ const World = (() => {
   const finished = new Map();
   const frameKey = (L, o, t) => `${t}|${JSON.stringify(o)}|${World.version}`;
   async function prepareFrame(t) {
+    // what the frame needs loaded (a model, a person's body, a texture) is asked for by building it once; then the
+    // frame waits for it, up to half a minute, so it is never filmed with a stand-in
+    if (gl()) {
+      for (const L of S.layers) if (L.type === 'world' && !L.hidden && visibleAt(L, t)) { try { stage(L, state(L, t), t); } catch (_) { /* drawn as it can be */ } }
+      for (let i = 0; i < 600 && World.pending > 0; i++) await new Promise(r => setTimeout(r, 50));
+    }
     for (const L of S.layers) {
       if (L.type !== 'world' || L.hidden || !visibleAt(L, t)) continue;
       const o = state(L, t), path = o.render === 'path' && World.traceFrame, shutter = clamp(+o.shutter || 0, 0, 360);

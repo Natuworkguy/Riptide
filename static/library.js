@@ -34,7 +34,7 @@ const Library = (() => {
     const id = newId(); S.assets[id] = { kind: 'material', name: setName(images), maps }; return id;
   }
   async function importModel(file) {
-    const format = R3D.modelFormat(file.name); if (!format) throw new Error(`${file.name} is not a .glb, .gltf or .obj model`);
+    const format = R3D.modelFormat(file.name); if (!format) throw new Error(`${file.name} is not a .glb, .gltf, .fbx or .obj model`);
     if (file.size > MOST) throw new Error(`${file.name} is too big`);
     const ids = await addAssets([file]); if (!ids.length) throw new Error(`could not read ${file.name}`);
     return ids[0];
@@ -104,6 +104,11 @@ const Library = (() => {
         let g;
         if (a.format === 'obj') { g = new T.OBJLoader().parse(new TextDecoder().decode(buf));
           g.traverse(m => { if (m.isMesh) { if (!m.geometry.attributes.normal) m.geometry.computeVertexNormals(); m.material = World.finish('plastic', '#b8b8b8'); } }); }
+        else if (a.format === 'fbx') {
+          // an FBX, as Mixamo's characters and moves come: in centimetres, so a person 180 tall is made 1.8 m
+          g = new T.FBXLoader().parse(buf, ''); c.clips = g.animations || [];
+          const tall = new T.Box3().setFromObject(g).getSize(new T.Vector3()).y; if (tall > 20) g.scale.setScalar(.01);
+        }
         else { const gl = await new T.GLTFLoader().parseAsync(buf, ''); g = gl.scene; c.clips = gl.animations || []; }
         const b = new T.Box3().setFromObject(g), ctr = b.getCenter(new T.Vector3());
         g.position.set(-ctr.x, -b.min.y, -ctr.z); const holder = new T.Group(); holder.add(g); c.group = holder; end();
@@ -115,6 +120,8 @@ const Library = (() => {
     const clip = P.clip && c.clips?.find(x => x.name === P.clip);
     if (clip) { const mix = new T.AnimationMixer(g.children[0]); mix.clipAction(clip).play();
       const len = clip.duration || 1, at = t * (+P.clipSpeed || 1) + (+P.clipOffset || 0); mix.setTime(P.clipOnce ? Math.min(at, len - 1e-3) : ((at % len) + len) % len); }
+    // an outfit finish (holo, chrome, glow...) over every part of it, its skeleton still moving it
+    if (P.outfit) { const m = World.finish(P.outfit, P.outfitColor || undefined); g.traverse(n => { if (n.isMesh) n.material = m; }); }
     // then the pose it was given, bone by bone, over its rest pose or its clip (static/pose.js)
     World.poseHook?.(g, P, t);
     return g;

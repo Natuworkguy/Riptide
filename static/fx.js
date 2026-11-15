@@ -56,9 +56,9 @@ const FX = (() => {
   });
 
   // ----- effects: particles from a place, each from its own birth time -----
-  const KINDS = [['smoke', 'Smoke'], ['fire', 'Fire'], ['explosion', 'Explosion'], ['sparks', 'Sparks'], ['dust', 'Dust from the ground'], ['steam', 'Steam']];
-  const KIND = { smoke: 0, fire: 1, sparks: 2, dust: 3, explosion: 4, steam: 5 };
-  const LIFE = { smoke: 5, fire: 1.1, sparks: 1.4, dust: 2.6, explosion: 6, steam: 3 };
+  const KINDS = [['smoke', 'Smoke'], ['fire', 'Fire'], ['explosion', 'Explosion'], ['sparks', 'Sparks'], ['dust', 'Dust from the ground'], ['steam', 'Steam'], ['tendril', 'Tendril (a twisting column of sparkles)']];
+  const KIND = { smoke: 0, fire: 1, sparks: 2, dust: 3, explosion: 4, steam: 5, tendril: 6 };
+  const LIFE = { smoke: 5, fire: 1.1, sparks: 1.4, dust: 2.6, explosion: 6, steam: 3, tendril: 6 };
   const fxCache = new Map();
   function fxPoints(n) {
     const seed = new Float32Array(n * 4); let s = 3; const r = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
@@ -90,6 +90,13 @@ const FX = (() => {
           size = uSize * mix(.75, .15, a) * (.6 + .4 * s.y); vCol = fireCol(a * .7); vA = (1. - a) * smoothstep(0., .1, a); vSoft = 1.; }
         else if (uKind == 2) { vec3 v = vec3((s.x - .5) * 3., 2.5 + s.y * 3.5, (s.z - .5) * 3.) * uSize; p = v * age + vec3(0., -4.9 * age * age, 0.);
           size = .05 * uSize; vCol = vec3(1., .7, .3) * 7.; vA = 1. - a; vSoft = .5; }
+        else if (uKind == 6) {
+          // a tendril: sparkles climbing a column that twists and sways, thick ribbons of them, as if smoke were made of stars
+          float h = a * 14. * uSize, tw = h * .55 + uTime * .8, rib = floor(s.z * 3.) * 2.094, sway = sin(h * .35 + uTime * .6) * .9 * uSize;
+          float r = (.35 + .25 * sin(h * .8 + s.y * 6.)) * uSize * (.6 + .8 * s.x);
+          p = vec3(cos(tw + rib) * r + sway + uWind * a * 2., h, sin(tw + rib) * r);
+          size = .07 * uSize * (.5 + s.y); vCol = mix(vec3(.75, .62, 1.), vec3(1.), s.w) * (2.5 + 3. * step(.93, s.x));
+          vA = smoothstep(0., .08, a) * (1. - smoothstep(.85, 1., a)) * (.5 + .5 * sin(uTime * 9. + s.y * 40.)); vSoft = .5; }
         else { float ang = s.x * 6.2832, r = (.4 + age * 2.6) * uSize * (.6 + .4 * s.y); p = vec3(cos(ang) * r, s.z * .5 * age * uSize, sin(ang) * r);
           size = uSize * mix(.4, 2.2, a); vCol = vec3(.42, .36, .28); vA = sin(a * 3.1416) * .45; vSoft = 2.; }
       }
@@ -100,9 +107,9 @@ const FX = (() => {
       float puff = vSoft > 1.5 ? (.7 + .3 * vn(gl_PointCoord * 4. + vA * 3.)) : 1.;
       float a = vA * smoothstep(.5, .5 - .35 * min(vSoft, 1.), d) * puff; gl_FragColor = vec4(vCol, a); }`;
   World.custom.fx = (P, t = 0) => {
-    const kind = KIND[P.kind] != null ? P.kind : 'smoke', n = kind === 'explosion' ? 900 : Math.round(clamp(+P.amount || 60, 1, 100) * (kind === 'sparks' ? 6 : 4));
+    const kind = KIND[P.kind] != null ? P.kind : 'smoke', n = kind === 'explosion' ? 900 : Math.round(clamp(+P.amount || 60, 1, 100) * (kind === 'sparks' ? 6 : kind === 'tendril' ? 40 : 4));
     const key = `${P.id}|${kind}|${n}`; let c = fxCache.get(key);
-    if (!c) { const m = new T.ShaderMaterial({ transparent: true, depthWrite: false, fog: false, blending: kind === 'fire' || kind === 'sparks' ? T.AdditiveBlending : T.NormalBlending,
+    if (!c) { const m = new T.ShaderMaterial({ transparent: true, depthWrite: false, fog: false, blending: kind === 'fire' || kind === 'sparks' || kind === 'tendril' ? T.AdditiveBlending : T.NormalBlending,
         uniforms: { uTime: { value: 0 }, uLife: { value: LIFE[kind] }, uSize: { value: 1 }, uStart: { value: 0 }, uWind: { value: 0 }, uPx: { value: 800 }, uKind: { value: KIND[kind] } },
         vertexShader: FX_VERT, fragmentShader: FX_FRAG });
       const pts = new T.Points(fxPoints(n), m); pts.frustumCulled = false; pts.userData.fxMat = m;

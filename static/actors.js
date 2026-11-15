@@ -59,7 +59,19 @@ const Actors = (() => {
   };
 
   // ----- a person -----
-  const MOVES = [['walk', 'Walk'], ['run', 'Run'], ['idle', 'Stand'], ['wave', 'Wave'], ['dance', 'Dance'], ['sit', 'Sit']];
+  const MOVES = [['walk', 'Walk'], ['run', 'Run'], ['idle', 'Stand'], ['wave', 'Wave'], ['dance', 'Dance'], ['sit', 'Sit'],
+    ['skate', 'Skate'], ['ollie', 'Ollie'], ['kickflip', 'Kickflip']];
+  const SKATE = ['skate', 'ollie', 'kickflip'];
+  // a trick's moment, U from 0 to 1 over TRICK seconds: crouch, pop, up in the air, come down, land and roll on.
+  // How high the rider is (m), how much the knees bend, and the board's nose up and its flip, at that moment.
+  const TRICK = 1.6;
+  function trick(u, flip) {
+    const air = u > .3 && u < .78 ? Math.sin((u - .3) / .48 * Math.PI) : 0;
+    const crouch = u < .3 ? Math.sin(u / .3 * Math.PI / 2) : u > .78 ? Math.sin((1 - u) / .22 * Math.PI / 2) * .8 : .25 + air * .6;
+    const nose = u > .26 && u < .45 ? Math.sin((u - .26) / .19 * Math.PI) * 28 : 0;
+    const spin = flip && u > .32 && u < .7 ? (u - .32) / .38 * 360 : 0;
+    return { air: air * .62, crouch, nose, spin };
+  }
   // joint angles (degrees) for a move at phase PH (a step's turn, 0 to 1)
   function pose(move, ph, t) {
     const s = Math.sin(ph * Math.PI * 2), c = Math.cos(ph * Math.PI * 2), q = {};
@@ -70,6 +82,13 @@ const Actors = (() => {
     else if (move === 'wave') Object.assign(q, { armR: 0, armRside: 150, elbowR: 25 + 25 * Math.sin(t * 7), armL: 4, elbowL: 8, bob: 0, lean: 0, breathe: t });
     else if (move === 'dance') Object.assign(q, { thighL: 14 * s, thighR: -14 * c, kneeL: 20 + 15 * s, kneeR: 20 - 15 * c, armLside: 70 + 50 * s, armRside: 70 + 50 * c,
       elbowL: 50, elbowR: 50, bob: Math.abs(s) * .06, lean: 0, sway: 10 * Math.sin(ph * Math.PI * 4), twist: 15 * s });
+    else if (SKATE.includes(move)) {
+      // side-on over the board, knees bent, arms out for balance; a trick crouches, pops and tucks
+      const k = move === 'skate' ? .35 + .05 * Math.sin(t * 2.2) : trick(((t / TRICK) % 1 + 1) % 1, move === 'kickflip').crouch;
+      Object.assign(q, { thighL: 18 + 50 * k, thighR: 10 + 50 * k, kneeL: 20 + 95 * k, kneeR: 20 + 95 * k, spread: 16,
+        armLside: 55 + 15 * Math.sin(t * 1.7), armRside: 45 + 15 * Math.cos(t * 1.3), armL: -10, armR: 20, elbowL: 25, elbowR: 30,
+        bob: -.3 * k, lean: 10 + 18 * k, twist: 4 * Math.sin(t * 1.1), sway: 3 * Math.sin(t * 1.9) });
+    }
     else if (move === 'sit') Object.assign(q, { thighL: 90, thighR: 90, kneeL: 90, kneeR: 90, armL: 20, armR: 20, elbowL: 40, elbowR: 40, bob: -.45, lean: 0 });
     else Object.assign(q, { armL: 3, armR: -3, elbowL: 6, elbowR: 6, bob: Math.sin(t * 1.6) * .004, lean: 0, sway: Math.sin(t * .7) * 1.5 });
     return q;
@@ -77,7 +96,9 @@ const Actors = (() => {
   const cap = (r, len) => once(`cap${r}|${len}`, () => { const g = new T.CapsuleGeometry(r, Math.max(.001, len - 2 * r), 6, 12); g.translate(0, -len / 2, 0); return g; });
   function person(o, t) {
     const h = clamp(+o.height || 1.75, .5, 3), k = h / 1.75, move = o.move || 'idle';
-    const skin = mat('plastic', o.skin || '#c68e6a'), shirt = mat('rubber', o.shirt || '#2f5d8a'), pants = mat('rubber', o.pants || '#2b2b33'), shoes = mat('leatherette', o.shoes || '#1a1a1a');
+    // an outfit finish (holo, chrome, glow...) covers them head to toe, bar the shoes
+    const suit = o.outfit ? mat(o.outfit, o.outfitColor || undefined) : null;
+    const skin = suit || mat('plastic', o.skin || '#c68e6a'), shirt = suit || mat('rubber', o.shirt || '#2f5d8a'), pants = suit || mat('rubber', o.pants || '#2b2b33'), shoes = mat('leatherette', o.shoes || '#1a1a1a');
     const cadence = move === 'run' ? 2.9 : 1.85, ph = o.dist != null ? o.dist / (move === 'run' ? 2.6 : 1.45) : t * cadence / 2 + (o.phase || 0);
     const q = pose(move, ph, t + (o.phase || 0)), root = new T.Group(), hips = new T.Group();
     hips.position.y = .95 + (q.bob || 0); hips.rotation.z = deg(q.sway || 0); hips.rotation.y = deg(q.twist || 0); root.add(hips);
@@ -94,11 +115,24 @@ const Actors = (() => {
       const el = new T.Group(); el.position.y = -.3; el.rotation.x = deg(-(q['elbow' + n] || 0)); sh.add(el);
       el.add(new T.Mesh(cap(.04, .26), skin));
       const hand = new T.Mesh(once('hand', () => new T.SphereGeometry(.045, 10, 8)), skin); hand.position.y = -.28; el.add(hand);
-      const hip = new T.Group(); hip.position.set(side * .095, -.02, 0); hip.rotation.x = deg(-(q['thigh' + n] || 0)); hips.add(hip);
+      const hip = new T.Group(); hip.position.set(side * .095, -.02, 0); hip.rotation.x = deg(-(q['thigh' + n] || 0)); hip.rotation.z = deg(side * (q.spread || 0)); hips.add(hip);
       hip.add(new T.Mesh(cap(.068, .45), pants));
       const kn = new T.Group(); kn.position.y = -.44; kn.rotation.x = deg(q['knee' + n] || 0); hip.add(kn);
       kn.add(new T.Mesh(cap(.055, .44), pants));
       const foot = new T.Mesh(once('foot', () => { const g = new T.BoxGeometry(.1, .07, .25); g.translate(0, 0, .06); return g; }), shoes); foot.position.y = -.45; kn.add(foot);
+    }
+    if (SKATE.includes(move)) {
+      // on a board, the rider side-on to it: in a trick both go up, the board's nose lifting and, in a kickflip,
+      // the board turning over under them
+      const tr = move === 'skate' ? { air: 0, nose: 0, spin: 0 } : trick(((t / TRICK) % 1 + 1) % 1, move === 'kickflip');
+      root.position.y = tr.air;
+      root.rotation.y = deg(-80);
+      const board = new T.Group(); board.position.y = .075; board.rotation.y = deg(80);
+      const deck = once('deck', () => { const g = new T.BoxGeometry(.21, .018, .8); return g; }), wheelG = once('swheel', () => { const g = new T.CylinderGeometry(.027, .027, .03, 16); g.rotateZ(Math.PI / 2); return g; });
+      const flip = new T.Group(); flip.rotation.z = deg(tr.spin); flip.rotation.x = deg(-tr.nose); board.add(flip);
+      flip.add(new T.Mesh(deck, mat(o.boardFinish || 'paint', o.board || '#1d2b7a')));
+      for (const [x, z] of [[-.08, .27], [.08, .27], [-.08, -.27], [.08, -.27]]) { const w = new T.Mesh(wheelG, mat('plastic', '#f2efe6')); w.position.set(x, -.04, z); flip.add(w); }
+      root.add(board);
     }
     root.scale.setScalar(k);
     return root;
@@ -146,6 +180,7 @@ const Actors = (() => {
         <p class="note">Key its place two or more times and it drives: its wheels turn and steer, and it faces the way it goes.</p>`;
       if (P.type === 'person') return `<div class="hd">Person</div><label class="f"><span>Does</span>${opt('move', P.move || 'idle', MOVES)}</label>
         <label class="f"><span>Height m</span><input type="number" step=".01" data-k="height" value="${+P.height || 1.75}"></label>
+        <label class="f"><span>Outfit</span>${opt('outfit', P.outfit || '', [['', 'Clothes'], ['holo', 'Holographic shards'], ['chrome', 'Chrome'], ['glow', 'Glowing'], ['gold', 'Gold']])}</label>
         ${color('skin', P.skin || '#c68e6a', 'Skin')}${color('shirt', P.shirt || '#2f5d8a', 'Top')}${color('pants', P.pants || '#2b2b33', 'Trousers')}${color('hairColor', P.hairColor || '#1c140e', 'Hair')}
         <p class="note">Key their place to send them somewhere: walking or running, their steps keep pace with how far they go.</p>`;
       if (P.type === 'crowd') { const models = Object.entries(S.assets || {}).filter(([, a]) => a.kind === 'model').map(([id, a]) => [id, a.name]);

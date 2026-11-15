@@ -92,10 +92,11 @@ Reload a window and it comes back as it was, unsaved changes included: each wind
 under the window's own id, for two weeks. A new window starts fresh. New projects start at 1080×1080 unless you pick a
 size and choose **Use this size for new projects** from the canvas size menu.
 
-3D worlds are drawn by the server, not your browser tab: `server.py` keeps a windowless browser of its own (Chrome or Edge
-when you have one, else Playwright's Chromium, which the installer fetches) and the editor shows the pictures it sends.
-A heavy scene can no longer take the editor down, and if that browser falls over the server starts another. Right-click
-the canvas and untick **Draw 3D on the server** to draw in the tab again. Set `RIPTIDE_BROWSER` to use a particular
+3D worlds are drawn on your computer's graphics (WebGL) when the browser has it, and by the server when it has not:
+`server.py` keeps a windowless browser of its own (Chrome or Edge when you have one, else Playwright's Chromium, which
+the installer fetches) and the editor shows the pictures it sends. If that browser falls over the server starts
+another. Right-click the canvas, **Draw 3D**, to choose: **Automatic**, **This computer** or **Riptide's server** (a
+heavy scene on the server can never take the editor down). Set `RIPTIDE_BROWSER` to use a particular
 Chrome or Chromium. An install from before this sets itself up the first time the editor asks: the server installs
 Playwright into its own environment and drives Chrome, Edge, Brave or Chromium if one is installed, or downloads
 Chromium if none is. So a browser that has WebGL switched off (Brave can, for privacy) still gets 3D.
@@ -170,3 +171,19 @@ frame; **Keep size** only re-centres it. **Rotate** swaps width and height.
 Work happens on the `dev` branch; `main` holds releases. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 3D is drawn with [three.js](https://threejs.org) (MIT), with three-gpu-pathtracer, three-mesh-bvh and three-bvh-csg (MIT), bundled in `static/vendor/three`, with the Droid Sans Bold typeface (Apache 2.0) for 3D text.
+
+## Edit effects
+
+- **Cut out person** (pictures and videos, under Cut out): the person in the shot cut out of their background with no
+  green screen. The server works out each frame with a model made for people (U2-Net), installed and downloaded (about
+  170 MB, checked against a pinned hash) the first time, then kept in `~/.riptide/cutout`. **Edge soft** and **Grow**
+  shape the edge.
+- **Echo** (any layer): copies of the layer from a moment before, fading, for a trail on a move, or, with **Echo
+  grow**, rings pulsing off a shape.
+- **Zoom blur** (any layer, or an adjustment layer for the whole frame): a rush forward, the middle kept sharp.
+- **Pixel smear** (any layer, or an adjustment layer): bright pixels dragged out into streaks, the datamosh look.
+- **Speed lines** (a layer of its own): streaks rushing out from the middle.
+- In 3D worlds: a person can **skate**, **ollie** or **kickflip** on a board, and wear an **outfit** finish such as
+  **holo** (rainbow foil shards); particles have a **tendril** kind, a twisting column of sparkles. For a real person,
+  import a rigged character (a Mixamo `.fbx` with its animation, or a `.glb`) and give it an outfit too.
+

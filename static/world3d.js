@@ -303,6 +303,11 @@ const World = (() => {
     gr.addColorStop(0, `rgba(${c},${c},${c},${a})`); gr.addColorStop(1, `rgba(${c},${c},${c},0)`); g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2); } };
   const speckle = (g, s, rand, n, a) => { for (let i = 0; i < n; i++) { const v = rand() > .5 ? 255 : 0; g.fillStyle = `rgba(${v},${v},${v},${a * rand()})`; g.fillRect(rand() * s, rand() * s, 1 + rand() * 1.5, 1 + rand() * 1.5); } };
   const PAINT = {
+    // rainbow foil shards on black: the holographic finish
+    holo: (g, s, r) => { g.fillStyle = '#05050a'; g.fillRect(0, 0, s, s);
+      for (let i = 0; i < 520; i++) { const x = r() * s, y = r() * s, a = 6 + r() * 46, h = Math.floor(r() * 360);
+        g.fillStyle = r() < .12 ? `rgba(255,255,255,${.5 + r() * .5})` : `hsla(${h},${80 + r() * 20}%,${45 + r() * 25}%,${.55 + r() * .45})`;
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x + (r() - .5) * a * 2, y + (r() - .5) * a); g.lineTo(x + (r() - .5) * a, y + (r() - .5) * a * 2); g.closePath(); g.fill(); } },
     // powder coat that has been handled: fine grain, rubbed patches
     worn: (g, s, r) => { g.fillStyle = '#8a8a8a'; g.fillRect(0, 0, s, s); blotches(g, 60, r, s, 10, 70, .05, .22, true); blotches(g, 50, r, s, 6, 40, .05, .2, false); speckle(g, s, r, s * s / 6, .5); },
     // pebbled leatherette
@@ -337,6 +342,9 @@ const World = (() => {
     rust: { color: '#8a4e2e', metalness: .3, roughness: .85, map: 'worn', bump: 'worn', bumpScale: 1, tint: 'worn' },
     gold: { color: '#f2c36b', metalness: 1, roughness: .22 },
     glow: { color: '#ff3b30', emissive: 3 },
+    // shards of rainbow foil on black, faceted, catching every light and faintly lit from within: a glitch skin
+    holo: { color: '#ffffff', metalness: .55, roughness: .22, clearcoat: .8, iridescence: 1, iridescenceIOR: 1.9, iridescenceThicknessRange: [120, 900],
+      tint: 'holo', glowMap: .55, flat: true },
   };
   const matCache = new Map();
   function finish(name, color, emissive, P) {
@@ -351,6 +359,8 @@ const World = (() => {
     if (F.tint) m.map = tex(F.tint, 2, true);
     if (F.bump) { m.bumpMap = tex(F.bump, 2); m.bumpScale = F.bumpScale || .5; }
     if (F.emissive || emissive) { m.emissive = c; m.emissiveIntensity = emissive ?? F.emissive; }
+    if (F.glowMap && m.map) { m.emissive = new T.Color(1, 1, 1); m.emissiveMap = m.map; m.emissiveIntensity = F.glowMap; }
+    if (F.flat) m.flatShading = true;
     matCache.set(key, m); return m;
   }
 

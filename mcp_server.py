@@ -193,7 +193,7 @@ async def see_frames(count: int = 8, times: list[float] | None = None, width: in
 
 # ---------- changing ----------
 @mcp.tool()
-async def add_layer(type: Literal["rect", "ellipse", "polygon", "star", "arc", "text", "wave", "path", "blob", "shape3d", "camera", "figure", "adjust"], name: str | None = None,
+async def add_layer(type: Literal["rect", "ellipse", "polygon", "star", "arc", "text", "wave", "path", "blob", "speedlines", "shape3d", "camera", "figure", "adjust"], name: str | None = None,
               props: dict | None = None, start: float | None = None, end: float | None = None) -> dict:
     """Add a layer on top. `props` are initial values, e.g. {"x": 540, "y": 300, "w": 400, "h": 120, "fill": "#ff5a36", "radius": 20}
     or for text {"text": "Hello", "size": 96, "weight": 800, "fill": "#111111"}. `start`/`end` limit when it is visible (seconds).
@@ -210,6 +210,14 @@ to the part both share, then type the rest of the new one (reveal 0-1 types, 1-2
     sides (8 by default), pushed out of true by "wobble" (0 to 100), its outline changing smoothly as "morph" moves
     (key it 0 to 100 over a scene for a shape that breathes) and different for each "seed". Any layer takes "boil"
     (pixels, 1 to 4 is hand-drawn): its edges tremble ten times a second, the way a frame redrawn by hand does.
+    "speedlines" are streaks rushing out from the middle of the box to its edge: "count" of them, "lineLen" (% of
+    the way out), "thick" (px), "hole" (% clear in the middle), "rush" (% speed), "seed", in "fill"; make the box
+    bigger than the canvas so they run off it. Any layer takes "echo" (copies of it from a moment before, fading:
+    a trail on a move, or with "echoScale" growing each copy %, rings pulsing off a logo), "echoGap" (seconds between
+    copies), "echoFade" (% the oldest has faded), and "zblur" (zoom blur from its centre, 0 to 200: a rush forward;
+    on a full-canvas "adjust" layer it smears the whole frame). Pictures and videos added by the user take "cutout"
+    true (the person in them cut out of their background, no green screen needed), "cutEdge" (edge softness) and
+    "cutGrow" (-10 to 10, pushes the edge out or in); set them with update_layer.
 
     3D: "shape3d" is a lit solid, {"shape": "cube" | "sphere" | "cylinder" | "cone" | "torus" | "text", "w": 300, "h": 300,
     "d": 300 (thickness), "rotX": -20, "rotY": 30, "material": "matte" | "glossy" | "metal", "fill": "#4c8dff",
@@ -279,13 +287,18 @@ async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "
     "torus" | "capsule" | "truss" | "label" | "sketch" | "group", "at": [x, y, z] (y up, z towards the camera, from the spot
     on the ground the camera looks at), "turn": [x, y, z] degrees, "size": [w, h, d], "finish": "worn-metal" |
     "leatherette" | "aluminium" | "chrome" | "steel" | "rubber" | "plastic" | "paint" | "glass" | "lens" | "wood" |
-    "concrete" | "rust" | "gold" | "glow", "color", "glow" (brightness), "spin": [x, y, z] degrees a second,
+    "concrete" | "rust" | "gold" | "glow" | "holo" (rainbow foil shards, faceted: a glitch skin), "color", "glow" (brightness), "spin": [x, y, z] degrees a second,
     "bob" (m), "children": [...] placed from it}. A cylinder or cone's size is [diameter, height]; a box takes
     "round" (corner radius, m); a truss (a lattice tower or beam) takes "bays", "rod" (m) and "taper" (0 to 1);
     a label is a flat screen with "text" (lines split by \n), "color" and "background". A "sketch" is a flat
     outline made solid: "shape" "rect" (with "w", "d"), "circle" ("r") or "poly" ("loop": [[x, z], ...] round its
     middle), "depth" (m: extruded up its Y, negative down) or "revolve" (degrees round its left edge, for turned
-    parts like a vase or a wheel). See the result with see_frame."""
+    parts like a vase or a wheel). A "person" is a simple built-in figure: "move" "walk" | "run" | "idle" | "wave" |
+    "dance" | "sit" | "skate" | "ollie" | "kickflip" (the last three on a skateboard), "height", and "outfit" (any finish,
+    e.g. "holo", over the whole body). For a real-looking person use a rigged model (add_model with a Mixamo .fbx or a
+    .glb), placed as {"type": "model", "asset": its asset id, "clip": an animation it has, "outfit": a finish}.
+    An "fx" is particles: "kind" "smoke" | "fire" | "explosion" | "sparks" | "dust" | "steam" | "tendril" (a tall
+    twisting column of sparkles), "amount", "scale". See the result with see_frame."""
     return await acall("add_world", {"scene": scene, "name": name, "props": props or {}})
 
 
@@ -466,12 +479,12 @@ async def add_image(path: str, name: str | None = None, x: float | None = None, 
     return await acall("add_image", {"src": src, "file": os.path.basename(p), "name": name, "x": x, "y": y}, timeout=120)
 
 
-MODEL_TYPES = {".glb": "model/gltf-binary", ".gltf": "model/gltf+json", ".obj": "model/obj"}
+MODEL_TYPES = {".glb": "model/gltf-binary", ".gltf": "model/gltf+json", ".obj": "model/obj", ".fbx": "application/octet-stream"}
 
 
 @mcp.tool()
 async def add_model(path: str, name: str | None = None, props: dict | None = None) -> dict:
-    """Add a 3D model from this computer (.glb, .gltf with its data inside it, or .obj; up to 50 MB) as a layer. It
+    """Add a 3D model from this computer (.glb, .gltf with its data inside it, .fbx such as a Mixamo character and its animation, or .obj; up to 50 MB) as a layer. It
     fills its w × h box without being stretched, and turns and moves like any 3D layer (rotX, rotY, rotation, z),
     lit from lightAngle. Returns the new layer id."""
     p = os.path.abspath(os.path.expanduser(path))

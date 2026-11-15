@@ -15,20 +15,30 @@ const Remote = (() => {
   const read = () => { try { return localStorage.getItem(KEY); } catch { return null; } };
   const write = v => { try { localStorage.setItem(KEY, v); } catch { /* the choice lasts this visit only */ } };
   const local = { draw: World.draw, prepareFrame: World.prepareFrame };
-  let pref = read();                  // 'off' keeps worlds in this tab; anything else draws them on the server when it can
+  // where worlds are drawn: 'auto' (this computer's graphics when it has WebGL, else the server), 'on' (the server
+  // whenever it can) or 'off' (always this tab). Before there was a choice of three, anything but 'off' meant the server.
+  let pref = read() || 'auto';
+  // whether this browser can draw 3D itself: a WebGL context it is allowed to make
+  const webgl = (() => { try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch { return false; } })();
+  const wantsServer = () => pref === 'on' || (pref === 'auto' && !webgl);
   let server = null;                  // what /api/render/status said; null until it answers (drawn there meanwhile)
   let down = '';                      // why the server is not drawing right now, if it is not
   let fails = 0;
 
   const R = {
     host,
-    get on() { return !host && pref !== 'off' && server?.available !== false && !down; },
+    get on() { return !host && wantsServer() && server?.available !== false && !down; },
+    get mode() { return pref; },
+    webgl,
     get why() { return down || server?.why || ''; },
     get step() { return server?.setting_up ? server.step : ''; },
     get available() { return !!server?.available; },
     received: 0,          // pictures the server has sent
-    set(on) { pref = on ? 'on' : 'off'; write(pref); down = ''; fails = 0; World.version++; redraw();
-      status(on ? '3D worlds are drawn by Riptide\'s server' : '3D worlds are drawn in this tab'); },
+    // 'auto', 'on' (the server) or 'off' (this computer); true and false as before
+    set(mode) { pref = mode === true ? 'on' : mode === false ? 'off' : ['auto', 'on', 'off'].includes(mode) ? mode : 'auto';
+      write(pref); down = ''; fails = 0; World.version++; redraw();
+      status(pref === 'on' ? '3D worlds are drawn by Riptide\'s server' : pref === 'off' ? '3D worlds are drawn on this computer'
+        : `3D worlds are drawn ${webgl ? 'on this computer (it has WebGL), or by the server if it has not' : 'by Riptide\'s server: this browser has no WebGL'}`); },
   };
   const redraw = () => { if (typeof render === 'function') render(); SceneEd.redraw?.(); };
 
@@ -40,7 +50,7 @@ const Remote = (() => {
         const was = server; server = s;
         if (s.setting_up) setTimeout(askStatus, 3000);
         else if (was?.setting_up && s.available) status('Riptide\'s server can draw 3D now');
-        if (!s.available && pref !== 'off' && S.layers.some(L => L.type === 'world')) status(`3D worlds are drawn in this tab: ${s.why}`);
+        if (!s.available && wantsServer() && S.layers.some(L => L.type === 'world')) status(`3D worlds are drawn in this tab: ${s.why}`);
         redraw();
       });
   }

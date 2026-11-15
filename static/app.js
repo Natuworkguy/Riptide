@@ -74,7 +74,7 @@ function curveSVG(name, w = 34, h = 22, fn = null) {
 // ---------- model ----------
 const ANIM = ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'radius', 'fill', 'fill2', 'mid1', 'mid2', 'mid3', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth',
   'blur', 'shadow', 'rgb', 'size', 'reveal', 'sweep', 'spacing', 'bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert',
-  'boil', 'vapor', 'morph', 'wobble', 'rotX', 'rotY', 'z', 'd', 'lightAngle', 'orbit', 'tilt', 'dolly', 'zoom', ...Figure.JOINTS, 'side', 'limb', 'caps', 'lineh', 'speed', 'vol',
+  'boil', 'vapor', 'echo', 'echoGap', 'echoFade', 'echoScale', 'zblur', 'smear', 'smearAt', 'cutEdge', 'cutGrow', 'count', 'lineLen', 'thick', 'hole', 'rush', 'morph', 'wobble', 'rotX', 'rotY', 'z', 'd', 'lightAngle', 'orbit', 'tilt', 'dolly', 'zoom', ...Figure.JOINTS, 'side', 'limb', 'caps', 'lineh', 'speed', 'vol',
   'mx', 'my', 'mw', 'mh', 'mround', 'feather', 'keyTol', 'keySoft', 'spill', ...Grade.GRADE, 'vig', 'vigSize', 'lutMix'];
 const ADJUST = ['bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert'];
 // a video clip's own time and sound: its speed (keyframed, a ramp), playing backwards, and its volume and fades
@@ -86,7 +86,14 @@ const LOOKP = ['vig', 'vigSize', 'lut', 'lutMix'];
 const FINISH = [...MASK, 'mpts', ...Grade.GRADE, 'curves', ...LOOKP];
 // keying out a green screen: pictures and video only
 const KEYP = ['chroma', 'keyColor', 'keyTol', 'keySoft', 'spill'];
-const COMMON = ['x', 'y', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'blur', 'shadow', 'rgb', 'boil', 'vapor', ...ADJUST, ...FINISH];
+// Echo: copies of the layer from a moment before, fading, each a little bigger if Echo grow is on: the trail a fast
+// move leaves, or rings pulsing off a logo. Zoom blur: the layer smeared out from its centre, as a rush forward does.
+const ECHO = ['echo', 'echoGap', 'echoFade', 'echoScale'];
+// Pixel smear: bright pixels dragged out into streaks, the datamosh look of a frame melting
+const SMEAR = ['smear', 'smearDir', 'smearAt'];
+const COMMON = ['x', 'y', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'blur', 'shadow', 'rgb', 'boil', 'vapor', ...ECHO, 'zblur', ...SMEAR, ...ADJUST, ...FINISH];
+// cutting a person out of a picture or video with no green screen (cutout.js)
+const CUTP = ['cutout', 'cutEdge', 'cutGrow'];
 // turned on X and Y and pushed back in depth: any layer with 3D on, and the 3D layers themselves
 const DEPTH = ['rotX', 'rotY', 'z'];
 const FLAT = [...COMMON, 'three', ...DEPTH];
@@ -104,10 +111,12 @@ const PROPS = {
   // an organic shape: a soft polygon of points sides, pushed out of true by wobble, its outline changing as morph moves
   blob:    [...FLAT, 'w', 'h', 'points', 'wobble', 'morph', 'seed', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
   text:    [...FLAT, 'text', 'font', 'size', 'weight', 'italic', 'align', 'tcase', 'lineh', 'spacing', 'reveal', 'retype', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
-  image:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...KEYP, ...PHYS],
-  video:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...CLIP, ...KEYP, ...PHYS],
+  image:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...CUTP, ...KEYP, ...PHYS],
+  video:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...CLIP, ...CUTP, ...KEYP, ...PHYS],
+  // speed lines: streaks rushing out from the middle of the box to its edge, as a dash forward or a hit
+  speedlines: [...FLAT, 'w', 'h', 'count', 'lineLen', 'thick', 'hole', 'rush', 'seed', 'fill'],
   // an adjustment layer: draws nothing itself, and grades, blurs and adjusts everything under it, within its box
-  adjust:  ['x', 'y', 'w', 'h', 'rotation', 'opacity', 'blur', ...ADJUST, ...FINISH.filter(k => k !== 'matte')],
+  adjust:  ['x', 'y', 'w', 'h', 'rotation', 'opacity', 'blur', 'zblur', 'rgb', ...SMEAR, ...ADJUST, ...FINISH.filter(k => k !== 'matte')],
   shape3d: [...COMMON, ...DEPTH, 'w', 'h', 'd', 'shape', 'text', 'radius', 'fill', 'material', 'lightAngle'],
   model:   [...COMMON, ...DEPTH, 'w', 'h', 'lightAngle'],
   figure:  [...COMMON, 'w', 'h', 'fill', 'stroke', 'strokeWidth', 'side', 'limb', 'caps', ...Figure.JOINTS, ...PHYS],
@@ -122,7 +131,7 @@ const GROUPS = [['Transform', ['x', 'y', 'w', 'h', 'd', 'rotation', 'scale', 'sx
   ['3D', ['three', 'shape', 'rotX', 'rotY', 'z', 'material', 'lightAngle']], ['Camera', ['orbit', 'tilt', 'dolly', 'zoom']],
   ['Drawing', ['pathd', 'vb', 'pfill']], ['Style', ['fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', 'radius', 'points', 'wobble', 'morph', 'seed', 'sweep', 'opacity']],
   ['Text', ['text', 'font', 'weight', 'size', 'lineh', 'italic', 'align', 'tcase', 'spacing', 'reveal', 'retype']], ['Pose', ['side', 'limb', 'caps', ...Figure.JOINTS]], ['Physics', PHYS],
-  ['Clip', CLIP], ['Effects', ['blur', 'shadow', 'rgb', 'boil', 'vapor']], ['Adjust', ADJUST], ['Green screen', KEYP], ['Mask', MASK],
+  ['Clip', CLIP], ['Speed lines', ['count', 'lineLen', 'thick', 'hole', 'rush']], ['Effects', ['blur', 'zblur', 'shadow', 'rgb', 'boil', 'vapor']], ['Echo', ECHO], ['Pixel smear', SMEAR], ['Cut out', CUTP], ['Adjust', ADJUST], ['Green screen', KEYP], ['Mask', MASK],
   ['Grade', Grade.GRADE], ['Curves', ['curves']], ['Vignette and LUT', LOOKP]];
 GROUPS.splice(1, 0, ...World.GROUPS);
 const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', scale: 'Scale', sx: 'Stretch X', sy: 'Stretch Y',
@@ -130,6 +139,9 @@ const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', sca
   size: 'Font size', text: 'Text', points: 'Points', pathd: 'Path', vb: 'View box', pfill: 'Fill it', boil: 'Boil', vapor: 'Vaporize %', morph: 'Morph', wobble: 'Wobble', seed: 'Seed', weight: 'Weight', reveal: 'Reveal', retype: 'Retype to', sweep: 'Sweep°', spacing: 'Tracking',
   font: 'Font', italic: 'Italic', align: 'Align', tcase: 'Case', lineh: 'Leading',
   mask: 'Mask', matte: 'Track matte', mx: 'Mask X', my: 'Mask Y', mw: 'Mask W', mh: 'Mask H', mround: 'Corners', feather: 'Feather',
+  smear: 'Smear px', smearDir: 'Smear to°', smearAt: 'Brighter than %',
+  echo: 'Echoes', echoGap: 'Echo gap s', echoFade: 'Echo fade %', echoScale: 'Echo grow %', zblur: 'Zoom blur',
+  cutout: 'Cut out person', cutEdge: 'Edge soft', cutGrow: 'Grow', count: 'Lines', lineLen: 'Length %', thick: 'Thickness', hole: 'Clear middle %', rush: 'Rush %',
   minv: 'Invert', chroma: 'Key out', keyColor: 'Key colour', keyTol: 'Tolerance', keySoft: 'Softness', spill: 'Spill %',
   temp: 'Warmth', tint: 'Tint', expo: 'Exposure', lvBlack: 'In black', gamma: 'Gamma', lvWhite: 'In white', outBlack: 'Out black',
   outWhite: 'Out white', vig: 'Vignette', vigSize: 'Size %', lut: 'LUT', lutMix: 'LUT mix %',
@@ -142,9 +154,10 @@ const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', sca
 // a camera's position is the point it looks at, and its rotation turns the whole view
 const CAMERA_LABEL = { x: 'Look at X', y: 'Look at Y', rotation: 'Roll°' };
 Object.assign(LABEL, World.LABELS);
-const STEP = { gradMorph: 1, opacity: .05, scale: .05, sx: .05, sy: .05, reveal: .05, zoom: .05, expo: .05, gamma: .05, ...World.STEP };
+const STEP = { echoGap: .01, gradMorph: 1, opacity: .05, scale: .05, sx: .05, sy: .05, reveal: .05, zoom: .05, expo: .05, gamma: .05, ...World.STEP };
 const PALETTE = ['#7c5cff', '#ff5c8a', '#20c997', '#ffb020', '#3fa9ff', '#ff7a45'];
-const DEFAULTS = { pathd: '', vb: '0 0 100 100', pfill: false, boil: 0, vapor: 0, morph: 0, wobble: 40, seed: 1, rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0, rgb: 0,
+const DEFAULTS = { smear: 0, smearDir: 0, smearAt: 55, echo: 0, echoGap: .05, echoFade: 80, echoScale: 0, zblur: 0, cutout: false, cutEdge: 2, cutGrow: 0,
+  count: 90, lineLen: 30, thick: 3, hole: 35, rush: 100, pathd: '', vb: '0 0 100 100', pfill: false, boil: 0, vapor: 0, morph: 0, wobble: 40, seed: 1, rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0, rgb: 0,
   size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, retype: '', font: 'Inter', italic: false, align: 'center', tcase: 'none', lineh: 110,
   speed: 100, reverse: false, vol: 100, mute: false, afadeIn: 0, afadeOut: 0,
   mask: 'none', matte: 'none', mx: 0, my: 0, mw: 0, mh: 0, mround: 0, feather: 0, minv: false,
@@ -196,7 +209,8 @@ function makeLayer(type, p = {}, name) {
 }
 // a hand-drawn loop, and a clay blob: what the two hand-made layer types start as
 const NEW_LAYER = { path: { w: 420, h: 300, pathd: 'M8 70 C 18 20, 40 12, 52 40 S 70 92, 92 30', vb: '0 0 100 100', stroke: '#141413', strokeWidth: 10, fill: '#d97757', name: 'Line' },
-  blob: { w: 520, h: 500, fill: '#d97757', points: 8, wobble: 40, name: 'Blob' }, figure: { w: 210, h: 460, fill: '#e8c39e' }, adjust: () => ({ w: S.w, h: S.h, name: 'Adjustment', fill: '#8b8b98' }),
+  blob: { w: 520, h: 500, fill: '#d97757', points: 8, wobble: 40, name: 'Blob' },
+  speedlines: () => ({ w: S.w * 1.3, h: S.h * 1.3, fill: '#ffffff', opacity: .7, name: 'Speed lines' }), figure: { w: 210, h: 460, fill: '#e8c39e' }, adjust: () => ({ w: S.w, h: S.h, name: 'Adjustment', fill: '#8b8b98' }),
   world: () => ({ ...World.DEFAULTS, objects: [], w: S.w, h: S.h, name: '3D world', fill: '#d08a3c' }) };
 function newLayer(type) { const N = NEW_LAYER[type], { name, ...p } = (typeof N === 'function' ? N() : N) || {}; const L = makeLayer(type, p, name); sel = L.id; selKey = null; selKeys = []; freshLayer = L.id; refresh(); }
 
@@ -429,12 +443,23 @@ function filterOf(o, k = 1) {
   if (o.gray) f.push(`grayscale(${o.gray}%)`); if (o.sepia) f.push(`sepia(${o.sepia}%)`); if (o.invert) f.push(`invert(${o.invert}%)`);
   return f.join(' ');
 }
+// while an echo is drawn: how see-through it is, and how much bigger
+let echoing = null;
 function drawLayer(c, L, t) {
   if (L.type === 'camera') return;
   // a 3D shape or model standing in a 3D world is drawn by the world
   if (World.worldOf(L, t)) return;
   const o = state(L, t);
   o._t = t;
+  // its echoes first, the oldest furthest back, then the layer itself over them
+  if (o.echo >= 1 && !echoing && L.type !== 'world' && L.type !== 'adjust') {
+    const n = Math.min(16, Math.round(o.echo)), gap = Math.max(1 / 120, +o.echoGap || .05), fade = Math.max(0, Math.min(100, o.echoFade)) / 100;
+    for (let k = n; k >= 1; k--) {
+      echoing = { a: Math.max(0, 1 - fade * k / n), s: 1 + (o.echoScale || 0) / 100 * k };
+      if (echoing.a > 0.01) try { drawLayer(c, L, t - k * gap); } finally { echoing = null; }
+    }
+    echoing = null;
+  }
   if (L.id === editingId) o.reveal = 1;
   const tr = transitionAt(L, t), fx = tr ? shapeTransition(o, tr, L, t) : null;
   if (o.opacity <= 0) return;
@@ -442,10 +467,10 @@ function drawLayer(c, L, t) {
   // a layer in a group is moved, turned, scaled and faded with it, and hidden while it is
   const G = groupOf(L); let ga = 1;
   if (G) { if (!visibleAt(G, t)) { c.restore(); return; } ga = Math.max(0, Math.min(1, state(G, t).opacity)); groupTransform(c, G, t); }
-  c.globalAlpha = Math.min(1, o.opacity) * ga;
+  c.globalAlpha = Math.min(1, o.opacity) * ga * (echoing ? echoing.a : 1);
   // a 3D layer is placed by the 3D view, which is laid over the whole canvas; effects apply to what it drew
   const deep = R3D.wants(L) || L.type === 'world';
-  if (!deep) { c.translate(o.x, o.y); c.rotate(o.rotation * PI / 180); c.scale(o.scale * o.sx, o.scale * o.sy); }
+  if (!deep) { c.translate(o.x, o.y); c.rotate(o.rotation * PI / 180); c.scale(o.scale * o.sx, o.scale * o.sy); if (echoing) c.scale(echoing.s, echoing.s); }
   { const f = filterOf(o); if (f) c.filter = f; }
   if (o.shadow > 0) { c.shadowColor = 'rgba(0,0,0,.45)'; c.shadowBlur = o.shadow; c.shadowOffsetY = o.shadow / 3; }
   // a wipe shows the part of the layer the edge has crossed
@@ -511,6 +536,7 @@ function drawContent(c, L, o, t) {
   if (L.type === 'figure') return Figure.draw(c, o);
   c.fillStyle = o.fill; c.strokeStyle = o.stroke; c.lineWidth = o.strokeWidth; c.lineJoin = 'round'; c.lineCap = 'round';
   if (L.type === 'path') return drawPath(c, o);
+  if (L.type === 'speedlines') return drawSpeedLines(c, o, t);
   if (L.type === 'text') {
     setFont(c, o); c.textAlign = 'left'; c.textBaseline = 'middle';
     const full = caseText(o).split('\n'), shown = textOf(o).split('\n'), lh = lineH(o), y0 = -(full.length - 1) * lh / 2;
@@ -530,13 +556,71 @@ function drawContent(c, L, o, t) {
     if (L.type === 'image' || L.type === 'video') {
       const img = L.type === 'video' ? videoFrame(L, t) : imageFor(L.p.asset);
       c.save(); c.clip();
-      if ((L.type === 'video' ? img?.readyState >= 2 : img?.complete && img.naturalWidth)) c.drawImage(img, -o.w / 2, -o.h / 2, o.w, o.h);
+      const have = L.type === 'video' ? img?.readyState >= 2 : img?.complete && img.naturalWidth;
+      if (have && o.cutout) { const cut = Cutout.frame(L, img, o); if (cut) c.drawImage(cut, -o.w / 2, -o.h / 2, o.w, o.h); }
+      else if (have) c.drawImage(img, -o.w / 2, -o.h / 2, o.w, o.h);
       else { c.fillStyle = '#2a2a2a'; c.fill(); }
       c.restore();
     } else if (L.type !== 'arc' && L.type !== 'wave') c.fill();
     if (L.type === 'wave') { const len = Math.abs(o.w) * 1.35 + Math.abs(o.h) * 1.2, r = Math.max(0, Math.min(1, o.reveal));
       if (r < 1) c.setLineDash([len * r, len]); }
     if (o.strokeWidth > 0 && !(L.type === 'wave' && o.reveal <= 0)) { c.shadowColor = 'transparent'; c.stroke(); }
+  }
+}
+// Speed lines: Lines streaks, each on its own spoke from the middle, rushing out from Clear middle to the box's edge
+// and starting again, Rush quick. Where each is and how long is worked out from the time alone, so it scrubs.
+function drawSpeedLines(c, o, t) {
+  const n = Math.max(1, Math.min(600, Math.round(o.count))), rx = Math.abs(o.w) / 2, ry = Math.abs(o.h) / 2;
+  const hole = Math.max(0, Math.min(.95, o.hole / 100)), len = Math.max(.01, o.lineLen / 100), go = (o.rush || 0) / 100;
+  let s = (Math.round(o.seed) || 1) * 2654435761 >>> 0;
+  const r = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+  c.strokeStyle = o.fill; c.lineCap = 'round';
+  const base = c.globalAlpha;
+  for (let i = 0; i < n; i++) {
+    const ang = r() * PI * 2, ph = r(), pace = .6 + r() * .9, size = .5 + r(), wide = .4 + r() * 1.2;
+    const along = (ph + t * go * pace) % 1, d0 = hole + (1 - hole) * along, d1 = Math.min(1.05, d0 + len * size * (.4 + along));
+    const cx = Math.cos(ang), cy = Math.sin(ang);
+    // fading in as it leaves the clear middle, and out at the very edge
+    c.globalAlpha = base * Math.min(1, along * 4) * Math.min(1, (1.05 - d0) * 6);
+    c.lineWidth = Math.max(.5, o.thick * wide * (.5 + along));
+    c.beginPath(); c.moveTo(cx * rx * d0, cy * ry * d0); c.lineTo(cx * rx * d1, cy * ry * d1); c.stroke();
+  }
+  c.globalAlpha = base;
+}
+// Zoom blur: what is on sheet A smeared out from (cx, cy), as a rush forward does. Copies a little bigger each time
+// are averaged over it, then the sharp picture laid back over the middle, fading out, so only the edges streak.
+function zoomBlur(A, W, H, cx, cy, amount) {
+  const B = sheet(30, W, H), b = B.c, n = 14, reach = Math.min(2, amount / 100) * .35;
+  b.drawImage(A.cv, 0, 0);
+  const a = A.c; a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, W, H);
+  for (let i = 0; i < n; i++) {
+    const k = 1 + reach * i / (n - 1);
+    a.globalAlpha = 1 / (i + 1);
+    a.setTransform(k, 0, 0, k, cx - cx * k, cy - cy * k); a.drawImage(B.cv, 0, 0);
+  }
+  a.setTransform(1, 0, 0, 1, 0, 0); a.globalAlpha = 1;
+  // the middle kept sharp, the smear growing towards the edges
+  const r = Math.hypot(W, H) / 2, g = b.createRadialGradient(cx, cy, r * .12, cx, cy, r * .62);
+  g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  b.globalCompositeOperation = 'destination-in'; b.fillStyle = g; b.fillRect(0, 0, W, H); b.globalCompositeOperation = 'source-over';
+  a.drawImage(B.cv, 0, 0);
+}
+// Pixel smear: in the region RG of image data D (W wide), every pixel brighter than AT starts a streak that drags its
+// colour on for up to LEN pixels (each row's streaks a different length, the same every time that frame plays), in
+// direction DIR: 0° to the right, 90° down, 180° left, 270° up.
+function pixelSmear(img, len, dir, at, seed) {
+  const { width: w, height: h, data: d } = img, q = ((Math.round(dir / 90) % 4) + 4) % 4, horiz = q % 2 === 0, back = q >= 2;
+  const lines = horiz ? h : w, along = horiz ? w : h, lim = at / 100 * 255;
+  let s = (seed * 2654435761) >>> 0; const rnd = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+  for (let l = 0; l < lines; l++) {
+    const reach = len * (.25 + rnd() * .75);
+    let left = 0, r = 0, g = 0, b = 0, a = 0;
+    for (let k = 0; k < along; k++) {
+      const p = back ? along - 1 - k : k, i = ((horiz ? l * w + p : p * w + l)) * 4;
+      const lum = .2126 * d[i] + .7152 * d[i + 1] + .0722 * d[i + 2];
+      if (lum > lim && d[i + 3] > 20 && left <= 0) { left = reach; r = d[i]; g = d[i + 1]; b = d[i + 2]; a = d[i + 3]; continue; }
+      if (left > 0) { const f = left / reach; d[i] += (r - d[i]) * f; d[i + 1] += (g - d[i + 1]) * f; d[i + 2] += (b - d[i + 2]) * f; d[i + 3] = Math.max(d[i + 3], a * f); left--; }
+    }
   }
 }
 // a solid with nothing to show yet (its model or font still loading, or no WebGL): its box, faintly
@@ -586,7 +670,7 @@ const keyedAny = (L, ks) => ks.some(k => L.keys[k]?.length);
 const maskOn = L => L.p.mask === 'rect' || L.p.mask === 'ellipse' || (L.p.mask === 'pen' && (L.p.mpts?.length || 0) >= 3);
 function finishes(L) {
   const p = L.p;
-  return L.type === 'adjust' || maskOn(L) || (p.matte || 'none') !== 'none' || p.chroma || !!(p.lut && S.luts?.[p.lut])
+  return L.type === 'adjust' || maskOn(L) || (p.matte || 'none') !== 'none' || p.chroma || +p.zblur > 0 || !!L.keys.zblur?.length || +p.smear > 0 || !!L.keys.smear?.length || !!(p.lut && S.luts?.[p.lut])
     || Grade.graded(p, p.curves) || +p.vig > 0 || keyedAny(L, [...Grade.GRADE, 'vig']);
 }
 // scratch sheets the size of the canvas being drawn, reused frame to frame
@@ -610,8 +694,8 @@ function maskPath(c, L, o) {
 // where on the canvas (in its pixels) the layer can have drawn anything: its box with room for blur and shadow;
 // the whole canvas while a transition might have pushed it further
 function pixelRegion(L, t, o, M, W, H) {
-  if (transitionAt(L, t)) return { x: 0, y: 0, w: W, h: H };
-  const b = box(L, t), k = Math.hypot(M.a, M.b), pad = (o.blur * 3 + o.shadow * 2 + o.rgb + 4) * k;
+  if (transitionAt(L, t) || o.zblur > 0 || o.echo >= 1) return { x: 0, y: 0, w: W, h: H };
+  const b = box(L, t), k = Math.hypot(M.a, M.b), pad = (o.blur * 3 + o.shadow * 2 + o.rgb + 4 + (+o.smear || 0)) * k;
   const x0 = Math.max(0, Math.floor((b.x - b.ex) * k + M.e - pad)), y0 = Math.max(0, Math.floor((b.y - b.ey) * k + M.f - pad));
   const x1 = Math.min(W, Math.ceil((b.x + b.ex) * k + M.e + pad)), y1 = Math.min(H, Math.ceil((b.y + b.ey) * k + M.f + pad));
   return x1 > x0 && y1 > y0 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
@@ -624,15 +708,24 @@ function finishLayer(c, L, t, i, depth = 0) {
     // what is under it, adjusted, cut to its box
     if (o.opacity <= 0) return;
     a.filter = filterOf(o, k) || 'none'; a.drawImage(c.canvas, 0, 0); a.filter = 'none';
+    if (o.zblur > 0) zoomBlur(A, W, H, M.a * o.x + M.c * o.y + M.e, M.b * o.x + M.d * o.y + M.f, o.zblur);
     a.setTransform(M); a.globalCompositeOperation = 'destination-in'; toLayer(a, o); a.fillStyle = '#000'; a.fillRect(-o.w / 2, -o.h / 2, o.w, o.h);
     a.setTransform(1, 0, 0, 1, 0, 0); a.globalCompositeOperation = 'source-over';
-  } else { a.setTransform(M); drawLayer(a, L, t); a.setTransform(1, 0, 0, 1, 0, 0); }
+  } else {
+    a.setTransform(M); drawLayer(a, L, t); a.setTransform(1, 0, 0, 1, 0, 0);
+    if (o.zblur > 0) zoomBlur(A, W, H, M.a * o.x + M.c * o.y + M.e, M.b * o.x + M.d * o.y + M.f, o.zblur);
+  }
   const rg = L.type === 'adjust' ? { x: 0, y: 0, w: W, h: H } : pixelRegion(L, t, o, M, W, H);
   if (!rg) return;
   const lut = o.lut && S.luts?.[o.lut];
   if (o.chroma && PROPS[L.type].includes('chroma') || Grade.graded(o, L.p.curves) || lut) {
     const img = a.getImageData(rg.x, rg.y, rg.w, rg.h);
     Grade.apply(img.data, PROPS[L.type].includes('chroma') ? o : { ...o, chroma: false }, L.p.curves, lut);
+    a.putImageData(img, rg.x, rg.y);
+  }
+  if (o.smear > 0) {
+    const img = a.getImageData(rg.x, rg.y, rg.w, rg.h);
+    pixelSmear(img, o.smear * k, +o.smearDir || 0, +o.smearAt || 55, Math.floor(t * 12) + 1);
     a.putImageData(img, rg.x, rg.y);
   }
   // a vignette darkens the layer's own box towards its edges
@@ -681,6 +774,8 @@ function cameraMark(c, L, k) {
   c.moveTo(o.x - r * 1.8, o.y); c.lineTo(o.x + r * 1.8, o.y); c.moveTo(o.x, o.y - r * 1.8); c.lineTo(o.x, o.y + r * 1.8); c.stroke(); c.restore();
 }
 R3D.changed = () => { if (!exporting) render(); };
+Cutout.onReady = () => { if (!exporting) render(); };
+Cutout.onStatus = msg => status(msg);
 R3D.placeholder = placeholder3d;
 let guidesOn = false, snapGuides = null;
 // axis-aligned box of a layer as drawn (scale, stretch and rotation included): centre and half extents
@@ -1081,6 +1176,7 @@ const ICON = {
   arc: ic('<path d="M8 2.5a5.5 5.5 0 1 1-5.5 5.5"/>'),
   path: ic('<path d="M2 11c2-6 4.5-7 6-3.5S11 13 14 4"/>'),
   blob: ic('<path d="M8 2c3 0 6 1.8 5.6 5.4-.4 3.3-2.6 6.4-6 6.1C4.4 13.2 2 11 2.4 7.6 2.8 4.4 5 2 8 2z"/>'),
+  speedlines: ic('<path d="M8 6.5V2M8 14v-4.5M6.5 8H2M14 8H9.5M6.9 6.9 4 4M12 12 9.1 9.1M9.1 6.9 12 4M4 12l2.9-2.9"/>'),
   wave: ic('<path d="M1.5 9c1.6-3.4 2.8-3.4 4.2 0s2.6 3.4 4.2 0 2.6-3.4 4.4 0"/>'),
   text: ic('<path d="M3 4V3h10v1M8 3v10M6 13h4"/>'),
   figure: ic('<circle cx="8" cy="3" r="1.6"/><path d="M8 5v5M5 7.5l3-1.5 3 1.5M6 14l2-4 2 4"/>'),
@@ -1327,7 +1423,7 @@ function renderProps() {
         else if (k === 'weight') field = `<button class="selectbtn" data-menu="weight"><span>${WEIGHTS.find(w => w[0] == v)?.[1] || v}</span>${ICON.chev}</button>`;
         else if (k === 'font') field = `<button class="selectbtn" data-menu="font"><span style="font-family:${esc(Fonts.stack(v))}">${esc(v || 'Inter')}</span>${ICON.chev}</button>`;
         else if (k === 'mask' || k === 'matte' || k === 'lut') field = `<button class="selectbtn" data-menu="${k}"><span>${esc(k === 'lut' ? v || 'None' : ((k === 'mask' ? MASK_KINDS : TRACK_MATTES).find(x => x[0] === (v || 'none')) || ['', 'None'])[1])}</span>${ICON.chev}</button>`;
-        else if (k === 'minv' || k === 'chroma') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="${k}"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
+        else if (k === 'minv' || k === 'chroma' || k === 'cutout') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="${k}"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
         else if (k === 'reverse' || k === 'mute' || k === 'swayLoop') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="${k}"${k === 'swayLoop' ? ' title="Fit the sway to the video, so its last frame meets its first"' : ''}><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
         else if (k === 'italic') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="italic"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
         else if (k === 'align') field = `<button class="selectbtn" data-menu="align"><span>${(TEXT_ALIGNS.find(a => a[0] === v) || TEXT_ALIGNS[1])[1]}</span>${ICON.chev}</button>`;
@@ -1533,7 +1629,10 @@ Pn.addEventListener('click', e => {
   else if (t.dataset.cmd === 'flipx' || t.dataset.cmd === 'flipy') { const k = t.dataset.cmd === 'flipx' ? 'sx' : 'sy'; setProp(L, k, -state(L, time)[k]); refresh(); }
   else if (t.dataset.cmd === 'fitcanvas') fitCanvasToImage(L);
   else if (t.dataset.cmd === 'italic') { L.p.italic = !L.p.italic; refresh(); }
-  else if (t.dataset.cmd === 'minv' || t.dataset.cmd === 'chroma' || t.dataset.cmd === 'pfill') { L.p[t.dataset.cmd] = !L.p[t.dataset.cmd]; refresh(); }
+  else if (t.dataset.cmd === 'minv' || t.dataset.cmd === 'chroma' || t.dataset.cmd === 'pfill' || t.dataset.cmd === 'cutout') {
+    L.p[t.dataset.cmd] = !L.p[t.dataset.cmd];
+    if (t.dataset.cmd === 'cutout' && L.p.cutout) status('Cutting out the person: the first time, Riptide sets it up and downloads its model (about 170 MB)');
+    refresh(); }
   else if (t.dataset.cmd === 'maskedit') { maskEditing = maskEditing === L.id ? null : L.id; refresh();
     if (maskEditing) status(L.p.mask === 'pen' ? 'Click to place points, drag one to move it, Alt-click one to remove it' : 'Drag the mask to move it, its corners to resize it'); }
   else if (t.dataset.cmd === 'maskclear') { L.p.mpts = []; maskEditing = L.id; refresh(); status('Click on the canvas to place the mask\'s points'); }
@@ -3265,6 +3364,7 @@ const COMMANDS = [
   ['Add', 'Polygon', 'p', () => newLayer('polygon')],
   ['Add', 'Hand-drawn line', '', () => newLayer('path')],
   ['Add', 'Blob', '', () => newLayer('blob')],
+  ['Add', 'Speed lines', '', () => newLayer('speedlines')],
   ['Add', 'Star', 's', () => newLayer('star')],
   ['Add', 'Arc', 'a', () => newLayer('arc')],
   ['Add', 'Wave', 'w', () => newLayer('wave')],
@@ -3593,6 +3693,9 @@ async function seekVideos(t) {
     const done = () => { v.removeEventListener('seeked', done); clearTimeout(to); res(); }, to = setTimeout(done, 3000);
     v.addEventListener('seeked', done); v.currentTime = ct;
   })));
+  // people cut out of a picture or a video: each frame's cut-out is in before it is filmed
+  await Cutout.ready(S.layers.filter(L => (L.type === 'video' || L.type === 'image') && L.p.cutout && visibleAt(L, t))
+    .map(L => [L, L.type === 'video' ? videoFrame(L, t) : imageFor(L.p.asset)]));
   exporting = false;
 }
 async function addAssets(files) {
@@ -3947,15 +4050,18 @@ function canvasItems(px, py) {
   const add = type => () => { newLayer(type); const L = cur(); L.p.x = Math.round(px); L.p.y = Math.round(py); refresh(); };
   return [
     { head: 'Canvas', note: `${S.w}×${S.h}` },
-    { label: 'Add here', icon: ICON.plus, sub: [['rect', 'Rectangle', 'R'], ['ellipse', 'Ellipse', 'O'], ['polygon', 'Polygon', 'P'], ['star', 'Star', ''], ['blob', 'Blob', ''], ['path', 'Hand-drawn line', ''], ['arc', 'Arc', 'A'], ['text', 'Text', 'T']]
+    { label: 'Add here', icon: ICON.plus, sub: [['rect', 'Rectangle', 'R'], ['ellipse', 'Ellipse', 'O'], ['polygon', 'Polygon', 'P'], ['star', 'Star', ''], ['blob', 'Blob', ''], ['speedlines', 'Speed lines', ''], ['path', 'Hand-drawn line', ''], ['arc', 'Arc', 'A'], ['text', 'Text', 'T']]
       .map(([t, l, k]) => ({ label: l, icon: ICON[t], kbd: k, act: add(t) })) },
     { label: 'Paste', kbd: '⌘V', disabled: !clip, act: pasteLayer },
     { label: 'Import media…', icon: ICON.upload, act: () => assetInput.click() },
     '-',
     { label: 'Background', sub: [{ swatches: ['#ffffff', '#ece8e1', '#151515', '#0b1026', '#ff5a36', '#4c8dff', '#2fbf71', '#ffb020'], current: S.bg, act: c => { S.bg = c; refresh(); } }] },
     { label: 'Safe areas', check: guidesOn, kbd: "'", act: () => $('#guides').click() },
-    ...(typeof Remote !== 'undefined' && S.layers.some(L => L.type === 'world') ? [{ label: Remote.on || Remote.available ? 'Draw 3D on the server' : 'Draw 3D on the server (not available)', check: Remote.on,
-      disabled: !Remote.on && !Remote.available, act: () => Remote.set(!Remote.on) }] : []),
+    ...(typeof Remote !== 'undefined' && S.layers.some(L => L.type === 'world') ? [{ label: `Draw 3D: ${Remote.on ? 'on the server' : 'on this computer'}`, sub: [
+      { label: `Automatic${Remote.webgl ? ': this computer' : ': the server (no WebGL here)'}`, check: Remote.mode === 'auto', act: () => Remote.set('auto') },
+      { label: Remote.webgl ? 'This computer (WebGL)' : 'This computer (no WebGL here)', check: Remote.mode === 'off', disabled: !Remote.webgl, act: () => Remote.set('off') },
+      { label: Remote.available ? 'Riptide\'s server' : 'Riptide\'s server (not available)', check: Remote.mode === 'on', disabled: !Remote.available && Remote.mode !== 'on', act: () => Remote.set('on') },
+    ] }] : []),
     { label: S.mode === 'image' ? 'Switch to video mode' : 'Switch to image mode', act: () => setMode(S.mode === 'image' ? 'video' : 'image') },
     '-',
     { label: 'Save frame as image…', act: () => exportStill({ img: 'png', q: 1, scale: 1 }) },
@@ -4091,7 +4197,7 @@ const LIVE = (() => {
       return done(`added the 3D world "${L.name}"`, { id: L.id });
     },
     add_model: async a => {
-      const format = R3D.modelFormat(a.file || ''); if (!format) throw new Error('the file must be .glb, .gltf or .obj');
+      const format = R3D.modelFormat(a.file || ''); if (!format) throw new Error('the file must be .glb, .gltf, .fbx or .obj');
       const props = a.props || {}; for (const p in props) if (!PROPS.model.includes(p)) throw new Error(`model layers have no "${p}"`);
       const blob = await (await fetch(a.src)).blob(), ids = await addAssets([new File([blob], a.file, { type: R3D.MODEL_TYPES[format] })]);
       if (!ids.length) throw new Error(`could not add ${a.file}`);

@@ -20,6 +20,7 @@ from pathlib import Path
 
 from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory
 
+import cutout
 import native
 from launch import open_link
 import render_host as render_host_module
@@ -346,6 +347,23 @@ def render_frame():
 
 # installing Riptide as an app reads its manifest by this type
 mimetypes.add_type("application/manifest+json", ".webmanifest")
+
+
+@app.post("/api/cutout/mask")
+def cutout_mask():
+    # a person cut out of the picture sent, as a greyscale mask (cutout.py); "not yet" while it is first set up
+    if not cutout.ready():
+        return jsonify(cutout.status()), 202
+    try:
+        return Response(cutout.mask(request.get_data()), mimetype="image/png")
+    except cutout.CutoutError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@app.get("/api/cutout/status")
+def cutout_status():
+    cutout.ready()
+    return jsonify(cutout.status())
 
 
 @app.get("/<path:p>")

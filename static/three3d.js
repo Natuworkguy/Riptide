@@ -118,8 +118,8 @@ const R3D = (() => {
   }
 
   // ----- models -----
-  const MODEL_TYPES = { glb: 'model/gltf-binary', gltf: 'model/gltf+json', obj: 'model/obj' };
-  const modelFormat = name => (String(name).match(/\.(glb|gltf|obj)$/i)?.[1] || '').toLowerCase();
+  const MODEL_TYPES = { glb: 'model/gltf-binary', gltf: 'model/gltf+json', obj: 'model/obj', fbx: 'application/octet-stream' };
+  const modelFormat = name => (String(name).match(/\.(glb|gltf|obj|fbx)$/i)?.[1] || '').toLowerCase();
   function model(id) {
     if (models.has(id)) return models.get(id);
     const a = S.assets?.[id]; if (!a?.src || loading.has(id)) return null;
@@ -131,7 +131,8 @@ const R3D = (() => {
         g.traverse(m => { if (!m.isMesh) return; if (!m.geometry.attributes.normal) m.geometry.computeVertexNormals();
           m.material = new T.MeshStandardMaterial({ color: 0xb4b4b4, roughness: .7, metalness: 0, envMapIntensity: .45, side: T.DoubleSide }); });
         res(g);
-      } else new T.GLTFLoader().parse(buf, '', gl => res(gl.scene), rej);
+      } else if (a.format === 'fbx') res(new T.FBXLoader().parse(buf, ''));
+      else new T.GLTFLoader().parse(buf, '', gl => res(gl.scene), rej);
     })).then(group => {
       const box = new T.Box3().setFromObject(group), size = new T.Vector3(), centre = new T.Vector3();
       box.getSize(size); box.getCenter(centre);

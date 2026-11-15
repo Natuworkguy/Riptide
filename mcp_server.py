@@ -193,7 +193,7 @@ async def see_frames(count: int = 8, times: list[float] | None = None, width: in
 
 # ---------- changing ----------
 @mcp.tool()
-async def add_layer(type: Literal["rect", "ellipse", "polygon", "star", "arc", "text", "wave", "path", "blob", "speedlines", "shape3d", "camera", "figure", "adjust"], name: str | None = None,
+async def add_layer(type: Literal["rect", "ellipse", "polygon", "star", "arc", "text", "wave", "path", "blob", "speedlines", "through", "shape3d", "camera", "figure", "adjust"], name: str | None = None,
               props: dict | None = None, start: float | None = None, end: float | None = None) -> dict:
     """Add a layer on top. `props` are initial values, e.g. {"x": 540, "y": 300, "w": 400, "h": 120, "fill": "#ff5a36", "radius": 20}
     or for text {"text": "Hello", "size": 96, "weight": 800, "fill": "#111111"}. `start`/`end` limit when it is visible (seconds).
@@ -212,7 +212,12 @@ to the part both share, then type the rest of the new one (reveal 0-1 types, 1-2
     (pixels, 1 to 4 is hand-drawn): its edges tremble ten times a second, the way a frame redrawn by hand does.
     "speedlines" are streaks rushing out from the middle of the box to its edge: "count" of them, "lineLen" (% of
     the way out), "thick" (px), "hole" (% clear in the middle), "rush" (% speed), "seed", in "fill"; make the box
-    bigger than the canvas so they run off it. Any layer takes "echo" (copies of it from a moment before, fading:
+    bigger than the canvas so they run off it. A "through" is the shot-through look: something right in front of the
+    lens, so close it is only colour and light, parting round a clear spot that shows the subject. "thing" "ribbon"
+    (fabric or plastic folds) | "leaves" | "leak" (a light leak), "fill" and "fill2" its colours, "cover" (% of the
+    frame it fills), "hole" (clear spot size %), "holeX" and "holeY" (where the clear spot is, % across and down),
+    "soft" (% out of focus), "glints" (discs of out-of-focus light), "drift" (slow hand-held movement), "seed".
+    Put it above a photo or video of the subject and size it a little bigger than the canvas. Any layer takes "echo" (copies of it from a moment before, fading:
     a trail on a move, or with "echoScale" growing each copy %, rings pulsing off a logo), "echoGap" (seconds between
     copies), "echoFade" (% the oldest has faded), and "zblur" (zoom blur from its centre, 0 to 200: a rush forward;
     on a full-canvas "adjust" layer it smears the whole frame). Pictures and videos added by the user take "cutout"

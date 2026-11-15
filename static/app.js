@@ -74,7 +74,7 @@ function curveSVG(name, w = 34, h = 22, fn = null) {
 // ---------- model ----------
 const ANIM = ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'radius', 'fill', 'fill2', 'mid1', 'mid2', 'mid3', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth',
   'blur', 'shadow', 'rgb', 'size', 'reveal', 'sweep', 'spacing', 'bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert',
-  'boil', 'vapor', 'echo', 'echoGap', 'echoFade', 'echoScale', 'zblur', 'smear', 'smearAt', 'cutEdge', 'cutGrow', 'count', 'lineLen', 'thick', 'hole', 'rush', 'morph', 'wobble', 'rotX', 'rotY', 'z', 'd', 'lightAngle', 'orbit', 'tilt', 'dolly', 'zoom', ...Figure.JOINTS, 'side', 'limb', 'caps', 'lineh', 'speed', 'vol',
+  'boil', 'vapor', 'echo', 'echoGap', 'echoFade', 'echoScale', 'zblur', 'smear', 'smearAt', 'cutEdge', 'cutGrow', 'count', 'lineLen', 'thick', 'hole', 'rush', 'cover', 'holeX', 'holeY', 'soft', 'drift', 'glints', 'morph', 'wobble', 'rotX', 'rotY', 'z', 'd', 'lightAngle', 'orbit', 'tilt', 'dolly', 'zoom', ...Figure.JOINTS, 'side', 'limb', 'caps', 'lineh', 'speed', 'vol',
   'mx', 'my', 'mw', 'mh', 'mround', 'feather', 'keyTol', 'keySoft', 'spill', ...Grade.GRADE, 'vig', 'vigSize', 'lutMix'];
 const ADJUST = ['bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert'];
 // a video clip's own time and sound: its speed (keyframed, a ramp), playing backwards, and its volume and fades
@@ -115,6 +115,9 @@ const PROPS = {
   video:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...CLIP, ...CUTP, ...KEYP, ...PHYS],
   // speed lines: streaks rushing out from the middle of the box to its edge, as a dash forward or a hit
   speedlines: [...FLAT, 'w', 'h', 'count', 'lineLen', 'thick', 'hole', 'rush', 'seed', 'fill'],
+  // shoot through: something out of focus right in front of the lens (fabric, leaves, a light leak), a clear spot to
+  // see the subject through, and glints of light blurred into soft discs
+  through: [...FLAT, 'w', 'h', 'thing', 'fill', 'fill2', 'cover', 'hole', 'holeX', 'holeY', 'soft', 'drift', 'glints', 'seed'],
   // an adjustment layer: draws nothing itself, and grades, blurs and adjusts everything under it, within its box
   adjust:  ['x', 'y', 'w', 'h', 'rotation', 'opacity', 'blur', 'zblur', 'rgb', ...SMEAR, ...ADJUST, ...FINISH.filter(k => k !== 'matte')],
   shape3d: [...COMMON, ...DEPTH, 'w', 'h', 'd', 'shape', 'text', 'radius', 'fill', 'material', 'lightAngle'],
@@ -131,7 +134,7 @@ const GROUPS = [['Transform', ['x', 'y', 'w', 'h', 'd', 'rotation', 'scale', 'sx
   ['3D', ['three', 'shape', 'rotX', 'rotY', 'z', 'material', 'lightAngle']], ['Camera', ['orbit', 'tilt', 'dolly', 'zoom']],
   ['Drawing', ['pathd', 'vb', 'pfill']], ['Style', ['fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', 'radius', 'points', 'wobble', 'morph', 'seed', 'sweep', 'opacity']],
   ['Text', ['text', 'font', 'weight', 'size', 'lineh', 'italic', 'align', 'tcase', 'spacing', 'reveal', 'retype']], ['Pose', ['side', 'limb', 'caps', ...Figure.JOINTS]], ['Physics', PHYS],
-  ['Clip', CLIP], ['Speed lines', ['count', 'lineLen', 'thick', 'hole', 'rush']], ['Effects', ['blur', 'zblur', 'shadow', 'rgb', 'boil', 'vapor']], ['Echo', ECHO], ['Pixel smear', SMEAR], ['Cut out', CUTP], ['Adjust', ADJUST], ['Green screen', KEYP], ['Mask', MASK],
+  ['Clip', CLIP], ['Speed lines', ['count', 'lineLen', 'thick', 'hole', 'rush']], ['Shoot through', ['thing', 'cover', 'holeX', 'holeY', 'soft', 'drift', 'glints']], ['Effects', ['blur', 'zblur', 'shadow', 'rgb', 'boil', 'vapor']], ['Echo', ECHO], ['Pixel smear', SMEAR], ['Cut out', CUTP], ['Adjust', ADJUST], ['Green screen', KEYP], ['Mask', MASK],
   ['Grade', Grade.GRADE], ['Curves', ['curves']], ['Vignette and LUT', LOOKP]];
 GROUPS.splice(1, 0, ...World.GROUPS);
 const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', scale: 'Scale', sx: 'Stretch X', sy: 'Stretch Y',
@@ -141,7 +144,7 @@ const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', sca
   mask: 'Mask', matte: 'Track matte', mx: 'Mask X', my: 'Mask Y', mw: 'Mask W', mh: 'Mask H', mround: 'Corners', feather: 'Feather',
   smear: 'Smear px', smearDir: 'Smear to°', smearAt: 'Brighter than %',
   echo: 'Echoes', echoGap: 'Echo gap s', echoFade: 'Echo fade %', echoScale: 'Echo grow %', zblur: 'Zoom blur',
-  cutout: 'Cut out person', cutEdge: 'Edge soft', cutGrow: 'Grow', count: 'Lines', lineLen: 'Length %', thick: 'Thickness', hole: 'Clear middle %', rush: 'Rush %',
+  cutout: 'Cut out person', cutEdge: 'Edge soft', cutGrow: 'Grow', count: 'Lines', lineLen: 'Length %', thick: 'Thickness', hole: 'Clear middle %', rush: 'Rush %', thing: 'In front', cover: 'Covers %', holeX: 'Clear spot x %', holeY: 'Clear spot y %', soft: 'Out of focus %', drift: 'Drift', glints: 'Glints',
   minv: 'Invert', chroma: 'Key out', keyColor: 'Key colour', keyTol: 'Tolerance', keySoft: 'Softness', spill: 'Spill %',
   temp: 'Warmth', tint: 'Tint', expo: 'Exposure', lvBlack: 'In black', gamma: 'Gamma', lvWhite: 'In white', outBlack: 'Out black',
   outWhite: 'Out white', vig: 'Vignette', vigSize: 'Size %', lut: 'LUT', lutMix: 'LUT mix %',
@@ -157,7 +160,7 @@ Object.assign(LABEL, World.LABELS);
 const STEP = { echoGap: .01, gradMorph: 1, opacity: .05, scale: .05, sx: .05, sy: .05, reveal: .05, zoom: .05, expo: .05, gamma: .05, ...World.STEP };
 const PALETTE = ['#7c5cff', '#ff5c8a', '#20c997', '#ffb020', '#3fa9ff', '#ff7a45'];
 const DEFAULTS = { smear: 0, smearDir: 0, smearAt: 55, echo: 0, echoGap: .05, echoFade: 80, echoScale: 0, zblur: 0, cutout: false, cutEdge: 2, cutGrow: 0,
-  count: 90, lineLen: 30, thick: 3, hole: 35, rush: 100, pathd: '', vb: '0 0 100 100', pfill: false, boil: 0, vapor: 0, morph: 0, wobble: 40, seed: 1, rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0, rgb: 0,
+  count: 90, lineLen: 30, thick: 3, hole: 35, rush: 100, thing: 'ribbon', cover: 60, holeX: 56, holeY: 55, soft: 60, drift: 25, glints: 5, pathd: '', vb: '0 0 100 100', pfill: false, boil: 0, vapor: 0, morph: 0, wobble: 40, seed: 1, rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0, rgb: 0,
   size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, retype: '', font: 'Inter', italic: false, align: 'center', tcase: 'none', lineh: 110,
   speed: 100, reverse: false, vol: 100, mute: false, afadeIn: 0, afadeOut: 0,
   mask: 'none', matte: 'none', mx: 0, my: 0, mw: 0, mh: 0, mround: 0, feather: 0, minv: false,
@@ -210,7 +213,8 @@ function makeLayer(type, p = {}, name) {
 // a hand-drawn loop, and a clay blob: what the two hand-made layer types start as
 const NEW_LAYER = { path: { w: 420, h: 300, pathd: 'M8 70 C 18 20, 40 12, 52 40 S 70 92, 92 30', vb: '0 0 100 100', stroke: '#141413', strokeWidth: 10, fill: '#d97757', name: 'Line' },
   blob: { w: 520, h: 500, fill: '#d97757', points: 8, wobble: 40, name: 'Blob' },
-  speedlines: () => ({ w: S.w * 1.3, h: S.h * 1.3, fill: '#ffffff', opacity: .7, name: 'Speed lines' }), figure: { w: 210, h: 460, fill: '#e8c39e' }, adjust: () => ({ w: S.w, h: S.h, name: 'Adjustment', fill: '#8b8b98' }),
+  speedlines: () => ({ w: S.w * 1.3, h: S.h * 1.3, fill: '#ffffff', opacity: .7, name: 'Speed lines' }),
+  through: () => ({ w: S.w * 1.1, h: S.h * 1.1, fill: '#d9701a', fill2: '#f5a03c', hole: 38, opacity: .94, name: 'Shoot through' }), figure: { w: 210, h: 460, fill: '#e8c39e' }, adjust: () => ({ w: S.w, h: S.h, name: 'Adjustment', fill: '#8b8b98' }),
   world: () => ({ ...World.DEFAULTS, objects: [], w: S.w, h: S.h, name: '3D world', fill: '#d08a3c' }) };
 function newLayer(type) { const N = NEW_LAYER[type], { name, ...p } = (typeof N === 'function' ? N() : N) || {}; const L = makeLayer(type, p, name); sel = L.id; selKey = null; selKeys = []; freshLayer = L.id; refresh(); }
 
@@ -537,6 +541,7 @@ function drawContent(c, L, o, t) {
   c.fillStyle = o.fill; c.strokeStyle = o.stroke; c.lineWidth = o.strokeWidth; c.lineJoin = 'round'; c.lineCap = 'round';
   if (L.type === 'path') return drawPath(c, o);
   if (L.type === 'speedlines') return drawSpeedLines(c, o, t);
+  if (L.type === 'through') return drawThrough(c, o, t);
   if (L.type === 'text') {
     setFont(c, o); c.textAlign = 'left'; c.textBaseline = 'middle';
     const full = caseText(o).split('\n'), shown = textOf(o).split('\n'), lh = lineH(o), y0 = -(full.length - 1) * lh / 2;
@@ -587,6 +592,77 @@ function drawSpeedLines(c, o, t) {
   }
   c.globalAlpha = base;
 }
+// Shoot through: the subject seen past something right in front of the lens, so close it is only colour and light.
+// Drawn small, blurred, then laid over the frame: In front is fabric (wide sweeping folds with a sheen), leaves
+// (big dark shapes at the edges) or a light leak (glowing washes); Covers how much of the frame it fills; the clear
+// spot (Clear middle size, at Clear spot x and y) is where it parts to show the subject; Glints are lights behind or
+// on it, so far out of focus they are discs. Drift moves it slowly, as if held by hand. All from the time alone.
+const THINGS = [['ribbon', 'Fabric or plastic'], ['leaves', 'Leaves'], ['leak', 'A light leak']];
+const throughCv = {};
+function drawThrough(c, o, t) {
+  const w = Math.abs(o.w), h = Math.abs(o.h); if (w < 2 || h < 2) return;
+  const q = Math.min(1, 480 / Math.max(w, h)), W = Math.max(8, Math.round(w * q)), H = Math.max(8, Math.round(h * q));
+  const cv = throughCv.a || (throughCv.a = document.createElement('canvas')); if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+  const g = cv.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, W, H); g.filter = 'none'; g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
+  let s = (Math.round(o.seed) || 1) * 2654435761 >>> 0; const r = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+  const cover = Math.max(0, Math.min(100, +o.cover || 0)) / 100, sway = (+o.drift || 0) / 100, kind = o.thing || 'ribbon';
+  const hx = (+o.holeX || 50) / 100 * W, hy = (+o.holeY || 50) / 100 * H, hr = Math.max(0, +o.hole || 0) / 100 * Math.min(W, H);
+  const tone = (k, a) => { const x = mixHex(o.fill || '#e07a1c', o.fill2 || o.fill || '#ffb347', k); return a == null ? x : hexA(x, a); };
+  const blurPx = Math.max(.5, (+o.soft || 0) / 100 * H * .09);
+  if (kind === 'leak') {
+    g.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 3 + Math.round(cover * 5); i++) { const x = (r() < .5 ? r() * .35 : .65 + r() * .35) * W + Math.sin(t * sway * 1.3 + i) * W * .05, y = r() * H, rad = (.25 + r() * .5) * H;
+      const gr = g.createRadialGradient(x, y, 0, x, y, rad); gr.addColorStop(0, tone(r(), .9)); gr.addColorStop(.5, tone(r(), .35)); gr.addColorStop(1, tone(0, 0)); g.fillStyle = gr; g.fillRect(0, 0, W, H); }
+  } else if (kind === 'leaves') {
+    for (let i = 0; i < 6 + Math.round(cover * 14); i++) { const ang = r() * Math.PI * 2, d = .55 + r() * .5;
+      const x = W / 2 + Math.cos(ang) * W * d * .6 + Math.sin(t * sway + i) * W * .02, y = H / 2 + Math.sin(ang) * H * d * .6 + Math.cos(t * sway * .8 + i) * H * .02;
+      g.save(); g.translate(x, y); g.rotate(r() * Math.PI); g.fillStyle = tone(r() * .6, .85 + r() * .15);
+      g.beginPath(); g.ellipse(0, 0, H * (.12 + r() * .18) * (.6 + cover), H * (.05 + r() * .07), 0, 0, Math.PI * 2); g.fill(); g.restore(); }
+  } else {
+    // folds of fabric: wide strokes sweeping right across, one over another, each lit along one edge
+    const n = 2 + Math.round(cover * 4);
+    for (let i = 0; i < n; i++) {
+      const fromLeft = r() < .6, y0 = r() * H, y1 = r() * H, wide = H * (.22 + r() * .35) * (.5 + cover * .8), ph = r() * 6;
+      const bend = (r() - .5) * H * 1.2, sx = Math.sin(t * sway * .9 + ph) * W * .04, sy = Math.cos(t * sway * .7 + ph) * H * .04;
+      const ax = fromLeft ? -W * .1 : W * 1.1, bx = fromLeft ? W * 1.1 : -W * .1;
+      const path = () => { g.beginPath(); g.moveTo(ax, y0 + sy); g.bezierCurveTo(W * .35 + sx, y0 + bend, W * .65 - sx, y1 - bend, bx, y1 - sy); };
+      g.lineCap = 'round'; g.strokeStyle = tone(r() * .5, .78 + r() * .2); g.lineWidth = wide; path(); g.stroke();
+      // the fold's lit edge and a pale crease
+      g.save(); g.translate(0, -wide * .3); g.strokeStyle = hexA(mixHex(tone(1), '#fff1d8', .45), .5); g.lineWidth = wide * .14; path(); g.stroke(); g.restore();
+      g.save(); g.translate(0, wide * .1); g.strokeStyle = 'rgba(255,240,220,.18)'; g.lineWidth = wide * .04; path(); g.stroke(); g.restore();
+      g.save(); g.translate(0, wide * .34); g.strokeStyle = 'rgba(60,18,0,.4)'; g.lineWidth = wide * .22; path(); g.stroke(); g.restore();
+    }
+  }
+  // the clear spot, its edge soft (it is out of focus too)
+  if (hr > 0) { g.globalCompositeOperation = 'destination-out';
+    const gr = g.createRadialGradient(hx, hy, hr * .35, hx, hy, hr * 1.25); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.beginPath(); g.ellipse(hx, hy, hr * 1.25, hr * 1.9, -.35, 0, Math.PI * 2); g.fill(); }
+  g.globalCompositeOperation = 'source-over';
+  // out of focus: blurred hard, then glints laid on, already soft discs
+  const cv2 = throughCv.b || (throughCv.b = document.createElement('canvas')); if (cv2.width !== W || cv2.height !== H) { cv2.width = W; cv2.height = H; }
+  const b = cv2.getContext('2d'); b.setTransform(1, 0, 0, 1, 0, 0); b.clearRect(0, 0, W, H);
+  softBlur(b, cv, blurPx, W, H);
+  const n = Math.max(0, Math.round(+o.glints || 0));
+  if (n) { b.globalCompositeOperation = 'lighter';
+    // a string of them along a gentle curve, overlapping, a little different in size and brightness
+    const x0 = W * (.72 + r() * .2), y0 = -H * .02, step = H * .068, bend = (r() - .5) * .5;
+    for (let i = 0; i < n; i++) { const u = i / Math.max(1, n - 1), ang = 2.15 + bend * u;
+      const x = x0 + Math.cos(ang) * step * i + Math.sin(t * sway + i) * W * .006, y = y0 + Math.sin(ang) * step * i * 1.1, rad = H * (.03 + r() * .018), lit = .5 + r() * .5;
+      // a disc of light: brighter at its rim, as an out-of-focus highlight is through a lens
+      const gr = b.createRadialGradient(x, y, 0, x, y, rad); gr.addColorStop(0, `rgba(255,214,150,${.42 * lit})`); gr.addColorStop(.6, tone(1, .36 * lit)); gr.addColorStop(.86, `rgba(255,232,196,${.42 * lit})`); gr.addColorStop(1, 'rgba(255,232,196,0)');
+      b.fillStyle = gr; b.beginPath(); b.arc(x, y, rad, 0, Math.PI * 2); b.fill(); }
+    b.globalCompositeOperation = 'source-over'; }
+  c.save(); c.imageSmoothingQuality = 'high'; c.drawImage(cv2, -w / 2, -h / 2, w, h); c.restore();
+}
+// a blur that works where a canvas has no filter too: drawn smaller and back up, which softens as much
+function softBlur(dst, src, px, W, H) {
+  if ('filter' in dst) { dst.filter = `blur(${px}px)`; dst.drawImage(src, 0, 0); dst.filter = 'none'; return; }
+  const k = Math.max(1, Math.round(px / 2)), tw = Math.max(1, Math.round(W / k)), th = Math.max(1, Math.round(H / k)), tmp = document.createElement('canvas'); tmp.width = tw; tmp.height = th;
+  const x = tmp.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(src, 0, 0, tw, th); dst.imageSmoothingQuality = 'high'; dst.drawImage(tmp, 0, 0, W, H);
+}
+function mixHex(a, b, k) { const p = x => [1, 3, 5].map(i => parseInt(String(x).slice(i, i + 2), 16) || 0), A = p(a), B = p(b);
+  return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * k).toString(16).padStart(2, '0')).join(''); }
+function hexA(x, a) { const p = [1, 3, 5].map(i => parseInt(String(x).slice(i, i + 2), 16) || 0); return `rgba(${p[0]},${p[1]},${p[2]},${a})`; }
 // Zoom blur: what is on sheet A smeared out from (cx, cy), as a rush forward does. Copies a little bigger each time
 // are averaged over it, then the sharp picture laid back over the middle, fading out, so only the edges streak.
 function zoomBlur(A, W, H, cx, cy, amount) {
@@ -1176,6 +1252,7 @@ const ICON = {
   arc: ic('<path d="M8 2.5a5.5 5.5 0 1 1-5.5 5.5"/>'),
   path: ic('<path d="M2 11c2-6 4.5-7 6-3.5S11 13 14 4"/>'),
   blob: ic('<path d="M8 2c3 0 6 1.8 5.6 5.4-.4 3.3-2.6 6.4-6 6.1C4.4 13.2 2 11 2.4 7.6 2.8 4.4 5 2 8 2z"/>'),
+  through: ic('<circle cx="9.5" cy="7" r="3"/><path d="M1.5 14c2-5 4.5-9 7-12.5M1.5 9.5C3 6 4.5 3.5 6 1.5" stroke-width="2.4" opacity=".55"/>'),
   speedlines: ic('<path d="M8 6.5V2M8 14v-4.5M6.5 8H2M14 8H9.5M6.9 6.9 4 4M12 12 9.1 9.1M9.1 6.9 12 4M4 12l2.9-2.9"/>'),
   wave: ic('<path d="M1.5 9c1.6-3.4 2.8-3.4 4.2 0s2.6 3.4 4.2 0 2.6-3.4 4.4 0"/>'),
   text: ic('<path d="M3 4V3h10v1M8 3v10M6 13h4"/>'),
@@ -1427,6 +1504,7 @@ function renderProps() {
         else if (k === 'reverse' || k === 'mute' || k === 'swayLoop') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="${k}"${k === 'swayLoop' ? ' title="Fit the sway to the video, so its last frame meets its first"' : ''}><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
         else if (k === 'italic') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="italic"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
         else if (k === 'align') field = `<button class="selectbtn" data-menu="align"><span>${(TEXT_ALIGNS.find(a => a[0] === v) || TEXT_ALIGNS[1])[1]}</span>${ICON.chev}</button>`;
+        else if (k === 'thing') field = `<button class="selectbtn" data-menu="thing"><span>${(THINGS.find(a => a[0] === v) || THINGS[0])[1]}</span>${ICON.chev}</button>`;
         else if (k === 'tcase') field = `<button class="selectbtn" data-menu="tcase"><span>${(TEXT_CASES.find(a => a[0] === v) || TEXT_CASES[0])[1]}</span>${ICON.chev}</button>`;
         else if (k === 'three') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="three" title="${v ? 'Make it flat again' : 'Turn it in 3D, push it back, and let a camera move around it'}"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
         else if (k === 'hdri' || k === 'floorFinish') { const a = S.assets?.[String(v || '').replace(/^lib:/, '')];
@@ -1437,7 +1515,7 @@ function renderProps() {
         else if (k === 'phys') field = `<button class="selectbtn" data-menu="phys"><span>${(Physics.KINDS.find(x => x[0] === (v || 'none')) || Physics.KINDS[0])[1]}</span>${ICON.chev}</button>`;
         else if (k === 'walls') field = `<button class="selectbtn" data-menu="walls"><span>${(Physics.WALLS.find(x => x[0] === v) || Physics.WALLS[0])[1]}</span>${ICON.chev}</button>`;
         else field = `<input data-p="${k}" value="${fmt(v)}" inputmode="decimal" spellcheck="false"${isFixed ? ' disabled' : ''}>`;
-        const wide = ['fill', 'fill2', ...MIDS, 'grad', 'stroke', 'text', 'weight', 'font', 'italic', 'three', 'shape', 'material', 'phys', 'walls', 'sky', 'ground', 'render', 'letterbox', 'hdri', 'floorFinish', ...World.COLORS, 'mask', 'matte', 'lut', 'keyColor', 'chroma', 'minv'].includes(k) ? ' wide' : '';
+        const wide = ['fill', 'fill2', 'thing', ...MIDS, 'grad', 'stroke', 'text', 'weight', 'font', 'italic', 'three', 'shape', 'material', 'phys', 'walls', 'sky', 'ground', 'render', 'letterbox', 'hdri', 'floorFinish', ...World.COLORS, 'mask', 'matte', 'lut', 'keyColor', 'chroma', 'minv'].includes(k) ? ' wide' : '';
         // Keeping the proportions means nothing once either side is locked.
         const lock = k === 'w' && list.includes('h') && !L.fix?.w && !L.fix?.h ? `<button class="ib aspect ${aspectLocked(L) ? 'on' : ''}" data-cmd="aspect" title="${aspectLocked(L) ? 'Aspect ratio locked: click to unlock' : 'Lock aspect ratio'}">${aspectLocked(L) ? ICON.link : ICON.unlink}</button>` : '';
         const drop = MIDS.includes(k) ? `<button class="ib" data-cmd="delstop" data-k="${k}" title="Take this colour out of the gradient">${ICON.trash}</button>` : '';
@@ -1711,6 +1789,8 @@ Pn.addEventListener('click', e => {
   }
   else if (t.dataset.menu === 'align')
     UI.menu(t, TEXT_ALIGNS.map(([v, l]) => ({ value: v, label: l })), L.p.align || 'center', v => { L.p.align = v; refresh(); });
+  else if (t.dataset.menu === 'thing')
+    UI.menu(t, THINGS.map(([v, l]) => ({ value: v, label: l })), L.p.thing || 'ribbon', v => { L.p.thing = v; refresh(); });
   else if (t.dataset.menu === 'tcase')
     UI.menu(t, TEXT_CASES.map(([v, l]) => ({ value: v, label: l })), L.p.tcase || 'none', v => { L.p.tcase = v; refresh(); });
   else if (t.dataset.menu === 'weight')
@@ -3365,6 +3445,7 @@ const COMMANDS = [
   ['Add', 'Hand-drawn line', '', () => newLayer('path')],
   ['Add', 'Blob', '', () => newLayer('blob')],
   ['Add', 'Speed lines', '', () => newLayer('speedlines')],
+  ['Add', 'Shoot through (something out of focus in front)', '', () => newLayer('through')],
   ['Add', 'Star', 's', () => newLayer('star')],
   ['Add', 'Arc', 'a', () => newLayer('arc')],
   ['Add', 'Wave', 'w', () => newLayer('wave')],
@@ -4050,7 +4131,7 @@ function canvasItems(px, py) {
   const add = type => () => { newLayer(type); const L = cur(); L.p.x = Math.round(px); L.p.y = Math.round(py); refresh(); };
   return [
     { head: 'Canvas', note: `${S.w}×${S.h}` },
-    { label: 'Add here', icon: ICON.plus, sub: [['rect', 'Rectangle', 'R'], ['ellipse', 'Ellipse', 'O'], ['polygon', 'Polygon', 'P'], ['star', 'Star', ''], ['blob', 'Blob', ''], ['speedlines', 'Speed lines', ''], ['path', 'Hand-drawn line', ''], ['arc', 'Arc', 'A'], ['text', 'Text', 'T']]
+    { label: 'Add here', icon: ICON.plus, sub: [['rect', 'Rectangle', 'R'], ['ellipse', 'Ellipse', 'O'], ['polygon', 'Polygon', 'P'], ['star', 'Star', ''], ['blob', 'Blob', ''], ['speedlines', 'Speed lines', ''], ['through', 'Shoot through', ''], ['path', 'Hand-drawn line', ''], ['arc', 'Arc', 'A'], ['text', 'Text', 'T']]
       .map(([t, l, k]) => ({ label: l, icon: ICON[t], kbd: k, act: add(t) })) },
     { label: 'Paste', kbd: '⌘V', disabled: !clip, act: pasteLayer },
     { label: 'Import media…', icon: ICON.upload, act: () => assetInput.click() },

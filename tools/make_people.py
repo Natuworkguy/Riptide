@@ -321,6 +321,15 @@ def build(data: Path, eye_png: Path, name: str, look: dict):
     uv = np.array(tex, float)
     uv[:, 1] = 1 - uv[:, 1]
 
+    # an eye bone in the middle of each eyeball, under the head, that the eyeball (and only it) turns with: so the
+    # eyes can be posed like any joint, or aimed (Riptide's Look)
+    eye_verts = {}
+    for side, g in (("Left", "helper-l-eye"), ("Right", "helper-r-eye")):
+        bones[f"mixamorig:{side}Eye"] = {"head": eye_c[g], "tail": eye_c[g] + [0, 0, 0.02], "parent": "mixamorig:Head"}
+        for gg, c in faces:
+            if gg == g:
+                eye_verts.update({i: f"mixamorig:{side}Eye" for i, _ in c})
+
     # skin weights: the four strongest bones of each vertex
     names = list(bones)
     w = json.loads((data / "rigs" / "standard" / "weights.mixamo.json").read_text())["weights"]
@@ -334,7 +343,7 @@ def build(data: Path, eye_png: Path, name: str, look: dict):
     W = np.zeros((len(src), 4), np.float32)
     head_i = names.index("mixamorig:Head")
     for k, vi in enumerate(src):
-        top = sorted(per[hair_of.get(vi, vi)], reverse=True)[:4] or [(1.0, head_i)]
+        top = [(1.0, names.index(eye_verts[vi]))] if vi in eye_verts else sorted(per[hair_of.get(vi, vi)], reverse=True)[:4] or [(1.0, head_i)]
         tot = sum(x for x, _ in top)
         for s, (wt, bi) in enumerate(top):
             J[k, s] = bi

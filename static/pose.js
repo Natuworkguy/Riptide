@@ -50,8 +50,14 @@ const Pose = (() => {
     const pose = poseAt(P, World.worldTime ? t : t), bones = [];
     g.traverse(n => { if (n.isBone) bones.push(n); });
     for (const b of bones) { b.userData.rest = b.quaternion.clone(); const a = pose[b.name]; if (a) b.quaternion.multiply(qOf(a)); }
+    // where the eyes look (the pose's "@look": degrees up, degrees across to the viewer's right), over the eye bones'
+    // own turns, so it eases from key to key with the rest of the pose
+    const look = pose[LOOK];
+    if (look) for (const b of bones) if (isEye(b.name)) b.quaternion.multiply(new T.Quaternion().setFromEuler(new T.Euler(deg(-clampLook(look[0], 30)), deg(clampLook(look[1], 40)), 0, 'YXZ')));
     if (bones.length) g.userData.posable = true;
   };
+  const LOOK = '@look', isEye = n => /^(left|right)eye$|^eye(left|right|l|r)$|^(l|r)eye$/.test(clean(n));
+  const clampLook = (v, m) => Math.max(-m, Math.min(m, +v || 0));
   // a bone's turn from its rest, in degrees: what the gizmo wrote, back into the pose
   function turnOf(b) {
     const q = (b.userData.rest || new T.Quaternion()).clone().invert().multiply(b.quaternion), e = new T.Euler().setFromQuaternion(q, 'XYZ');
@@ -181,12 +187,22 @@ const Pose = (() => {
           h += ['X', 'Y', 'Z'].map((ax, i) => `<label class="f"><span>Turn ${ax}°</span><input type="number" step="1" data-poseaxis="${i}" value="${r1(a[i])}"></label>`).join('') + `<div class="acts">${b('clearbone', 'Reset joint')}</div>`; }
         h += `<p class="note">Click a joint in the view, then turn it with the rings; Esc lets go.</p>`;
       }
+      if (bones.some(isEye)) {
+        const lk = pose[LOOK] || [0, 0, 0];
+        h += `<div class="hd">Eyes</div>
+          <label class="f"><span>Look up°</span><input type="number" step="1" min="-30" max="30" data-look="0" value="${r1(lk[0])}" title="Up is positive, down negative"></label>
+          <label class="f"><span>Look across°</span><input type="number" step="1" min="-40" max="40" data-look="1" value="${r1(lk[1])}" title="Positive is to your right as you face them"></label>
+          <div class="acts">${b('look:0,-28', '← Left')}${b('look:18,0', '↑ Up')}${b('look:-15,0', '↓ Down')}${b('look:0,28', 'Right →')}${b('lookcentre', 'Ahead')}</div>
+          <p class="note">Where the eyes look, over the rest of the pose. Key the pose to move them over time; each eye can also be turned as a joint.</p>`;
+      }
       if (keyed(P)) h += `<p class="note">${P.poseKeys.length} pose key${P.poseKeys.length > 1 ? 's' : ''}: ${P.poseKeys.map(k => k.t.toFixed(2) + 's').join(', ')}</p>`;
       return h;
     },
     click(btn) {
       const a = btn.dataset.pose, P = P_(); if (!a || !P) return false;
-      if (a.startsWith('preset:')) { write(P, presetPose(nodeOf(P), P, a.slice(7))); status(`Posed: ${PRESETS[a.slice(7)].label}`); }
+      if (a.startsWith('preset:')) { const keep = current(P)[LOOK], pose = presetPose(nodeOf(P), P, a.slice(7)); if (keep) pose[LOOK] = keep; write(P, pose); status(`Posed: ${PRESETS[a.slice(7)].label}`); }
+      else if (a === 'lookcentre') { const pose = current(P); delete pose[LOOK]; write(P, pose); }
+      else if (a.startsWith('look:')) { const [up, across] = a.slice(5).split(',').map(Number), pose = current(P); pose[LOOK] = [up, across, 0]; write(P, pose); }
       else if (a === 'reset') write(P, {});
       else if (a === 'bones') { st.on = !st.on; if (!st.on) { st.bone = ''; ed().gizmo.detach(); } }
       else if (a === 'key') { const pose = current(P), t = Math.round(SceneEd.time * 1000) / 1000;
@@ -201,6 +217,7 @@ const Pose = (() => {
   document.addEventListener('change', e => {
     const P = P_(); if (!P || !e.target.closest?.('.sced')) return;
     if (e.target.matches('[data-posebone]')) { st.bone = e.target.value; SceneEd.refreshUI(); }
+    else if (e.target.matches('[data-look]')) { const pose = current(P), a = pose[LOOK] || [0, 0, 0]; a[+e.target.dataset.look] = clampLook(e.target.value, +e.target.dataset.look ? 40 : 30); pose[LOOK] = a; write(P, pose); }
     else if (e.target.matches('[data-poseaxis]') && st.bone) { const pose = current(P), a = pose[st.bone] || [0, 0, 0]; a[+e.target.dataset.poseaxis] = +e.target.value || 0; pose[st.bone] = a; write(P, pose); }
   }, true);
   return { PRESETS, presetPose, poseAt, rolesOf };

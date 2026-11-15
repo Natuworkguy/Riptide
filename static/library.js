@@ -47,9 +47,11 @@ const Library = (() => {
     if (images.length) { const id = await importMaterial(images), P = SceneEd.selected;
       if (P && !['group', 'light', 'model', 'label'].includes(P.type)) { P.finish = 'lib:' + id; delete P.color; done.push(`${P.name || P.type} is ${S.assets[id].name}`); }
       else done.push(`${S.assets[id].name} is a finish now: pick a prop and choose it, or use it for the ground`); }
+    for (const f of files.filter(f => /\.(nbt|schem|schematic)$/i.test(f.name))) { const id = await Blocks.importFile(f), P = { type: 'structure', asset: id, name: stem(f.name), at: SceneEd.spot(), block: 1 };
+      (L.p.objects ||= []).push(P); World.ensureIds(L.p.objects); SceneEd.select(P.id); const a = S.assets[id]; done.push(`${P.name} is built in the scene (${a.size.join(' × ')} blocks)`); }
     for (const f of models) { const id = await importModel(f), P = { type: 'model', asset: id, name: stem(f.name), at: SceneEd.spot() };
       (L.p.objects ||= []).push(P); World.ensureIds(L.p.objects); SceneEd.select(P.id); done.push(`${P.name} is in the scene`); }
-    if (!done.length) throw new Error('Riptide takes .hdr sky photos, a material\'s images (.jpg, .png, .webp) and .glb, .gltf or .obj models');
+    if (!done.length) throw new Error('Riptide takes .hdr sky photos, a material\'s images (.jpg, .png, .webp), .glb, .gltf or .obj models, and block builds (.nbt structure files, .schem)');
     World.version++; SceneEd.refreshUI(); refresh(); status(done.join('; '));
   }
 
@@ -139,10 +141,10 @@ const Library = (() => {
     mount(where) {
       if (where.querySelector('[data-lib]')) return;
       const b = document.createElement('button'); b.className = 'tb small'; b.dataset.lib = '1'; b.textContent = 'Import';
-      b.title = 'Sky photos, materials from images, and models, from your files (or drop them on the view)';
+      b.title = 'Sky photos, materials from images, models and block builds, from your files (or drop them on the view)';
       b.onclick = () => UI.menu(b, [{ value: 'sky', label: 'Sky photo…', hint: '.hdr' }, { value: 'mat', label: 'Material from images…', hint: 'colour, normal, roughness, AO' },
-        { value: 'model', label: 'Model…', hint: '.glb .gltf .obj' }], null,
-        v => choose(SceneEd.layer, v === 'sky' ? '.hdr' : v === 'mat' ? 'image/*' : '.glb,.gltf,.obj'));
+        { value: 'model', label: 'Model…', hint: '.glb .gltf .obj' }, { value: 'blocks', label: 'Block build…', hint: '.nbt structure file, .schem' }], null,
+        v => choose(SceneEd.layer, v === 'sky' ? '.hdr' : v === 'mat' ? 'image/*' : v === 'blocks' ? '.nbt,.schem,.schematic' : '.glb,.gltf,.obj'));
       where.appendChild(b);
       const vp = where.closest('.sced').querySelector('.vp');
       vp.addEventListener('dragover', e => { if (e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); vp.classList.add('drop'); } });

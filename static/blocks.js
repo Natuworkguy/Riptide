@@ -1,0 +1,600 @@
+// ---------- block structures: builds made of blocks, brought in from a structure file ----------
+// A structure block's .nbt file (or a .schem schematic) is read here, in the page, and built in 3D: every block on
+// its grid, faces hidden where blocks touch, the corners where blocks meet shaded softly, and the blocks that are not
+// whole cubes given their shapes (slabs, stairs, fences, panes, carpets, plants, torches, doors). Each block is drawn
+// with a small pixel picture Riptide paints itself from the block's name (its stone, wood, wool or glass), so a build
+// reads as itself without any game's own pictures. Around it, the parts that make a block world: square clouds
+// drifting in a flat layer, a square sun and moon that go where the world's sun is, and block figures to pose.
+const Blocks = (() => {
+  const T = window.RiptideThree, M = World.M, clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const num = (v, d) => (v === '' || v == null || !isFinite(+v) ? d : +v);
+
+  // ----- reading NBT: the binary format structure files are saved in -----
+  async function gunzip(buf) {
+    const u8 = new Uint8Array(buf);
+    if (u8[0] !== 0x1f || u8[1] !== 0x8b) return buf;
+    const out = new Response(new Blob([u8]).stream().pipeThrough(new DecompressionStream('gzip')));
+    return await out.arrayBuffer();
+  }
+  function readNBT(buf) {
+    const d = new DataView(buf), dec = new TextDecoder(); let o = 0;
+    const str = () => { const n = d.getUint16(o); o += 2; const s = dec.decode(new Uint8Array(buf, o, n)); o += n; return s; };
+    const read = type => {
+      switch (type) {
+        case 1: return d.getInt8(o++);
+        case 2: { const v = d.getInt16(o); o += 2; return v; }
+        case 3: { const v = d.getInt32(o); o += 4; return v; }
+        case 4: { const v = Number(d.getBigInt64(o)); o += 8; return v; }
+        case 5: { const v = d.getFloat32(o); o += 4; return v; }
+        case 6: { const v = d.getFloat64(o); o += 8; return v; }
+        case 7: { const n = d.getInt32(o); o += 4; const a = new Uint8Array(buf.slice(o, o + n)); o += n; return a; }
+        case 8: return str();
+        case 9: { const t = d.getUint8(o++), n = d.getInt32(o); o += 4; const a = []; for (let i = 0; i < n; i++) a.push(read(t)); return a; }
+        case 10: { const c = {}; for (;;) { const t = d.getUint8(o++); if (t === 0) break; const k = str(); c[k] = read(t); } return c; }
+        case 11: { const n = d.getInt32(o); o += 4; const a = new Int32Array(n); for (let i = 0; i < n; i++) { a[i] = d.getInt32(o); o += 4; } return a; }
+        case 12: { const n = d.getInt32(o); o += 4; const a = []; for (let i = 0; i < n; i++) { a.push(d.getBigInt64(o)); o += 8; } return a; }
+        default: throw new Error('this is not an NBT file (tag ' + type + ')');
+      }
+    };
+    const t = d.getUint8(o++); if (t !== 10) throw new Error('this is not an NBT file');
+    str(); return read(10);
+  }
+  const AIR = /^(minecraft:)?(air|cave_air|void_air|structure_void|barrier|light)$/;
+  const short = n => String(n || '').replace(/^minecraft:/, '');
+  // "oak_stairs[facing=east,half=bottom]" as a name and its properties
+  function parseState(s) {
+    const m = String(s).match(/^([^\[]+)(?:\[(.*)\])?$/); const props = {};
+    if (m && m[2]) for (const kv of m[2].split(',')) { const [k, v] = kv.split('='); if (k) props[k.trim()] = String(v ?? '').trim(); }
+    return { name: short(m ? m[1] : s), props };
+  }
+
+  // A structure as Riptide keeps it: its size, its palette (name and properties) and, for every cell in order (x, then
+  // z, then y), its palette entry plus one (0 is air), run-length coded so a project holding one stays small.
+  function fromStructure(root) {
+    const size = (root.size || []).map(Number); if (size.length !== 3) throw new Error('this .nbt has no size: is it a structure block file?');
+    const pal = root.palette || root.palettes?.[0]; if (!pal) throw new Error('this .nbt has no palette');
+    const palette = pal.map(p => ({ name: short(p.Name), props: Object.fromEntries(Object.entries(p.Properties || {}).map(([k, v]) => [k, String(v)])) }));
+    const [X, Y, Z] = size, grid = new Uint16Array(X * Y * Z);
+    for (const b of root.blocks || []) {
+      const [x, y, z] = b.pos || []; if (!(x >= 0 && y >= 0 && z >= 0 && x < X && y < Y && z < Z)) continue;
+      if (AIR.test(palette[b.state]?.name || 'air')) continue;
+      grid[(y * Z + z) * X + x] = b.state + 1;
+    }
+    return { size, palette, grid };
+  }
+  function fromSchem(root) {
+    const s = root.Schematic || root, X = s.Width, Y = s.Height, Z = s.Length;
+    if (!(X > 0 && Y > 0 && Z > 0)) throw new Error('this schematic has no size');
+    const palObj = s.Blocks?.Palette || s.Palette, data = s.Blocks?.Data || s.BlockData;
+    if (!palObj || !data) throw new Error('this schematic has no blocks (only Sponge schematics, version 2 or 3, are read)');
+    const palette = []; for (const [k, i] of Object.entries(palObj)) palette[i] = parseState(k);
+    const grid = new Uint16Array(X * Y * Z); let at = 0, i = 0;
+    while (at < data.length && i < grid.length) {
+      let v = 0, shift = 0, b; do { b = data[at++]; v |= (b & 127) << shift; shift += 7; } while (b & 128);
+      // the schematic's order is x, then z, then y: the same as ours
+      if (palette[v] && !AIR.test(palette[v].name)) grid[i] = v + 1; i++;
+    }
+    for (let k = 0; k < palette.length; k++) palette[k] ||= { name: 'air', props: {} };
+    return { size: [X, Y, Z], palette, grid };
+  }
+  const pack = grid => { const out = []; for (let i = 0; i < grid.length;) { const v = grid[i]; let n = 1; while (i + n < grid.length && grid[i + n] === v) n++; out.push(v, n); i += n; } return out; };
+  const unpack = (runs, n) => { const g = new Uint16Array(n); let i = 0; for (let k = 0; k < runs.length; k += 2) { g.fill(runs[k], i, i + runs[k + 1]); i += runs[k + 1]; } return g; };
+  const MOST = 6e6;
+  async function read(file) {
+    const buf = await gunzip(await file.arrayBuffer()), root = readNBT(buf);
+    const st = /\.schem(atic)?$/i.test(file.name) || root.Schematic || root.Width ? fromSchem(root) : fromStructure(root);
+    if (st.size[0] * st.size[1] * st.size[2] > MOST) throw new Error(`that build is ${st.size.join(' × ')} blocks: Riptide takes up to 6 million cells`);
+    return st;
+  }
+  // a file as a project asset
+  async function importFile(file) {
+    const st = await read(file), id = 'blk' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const used = new Set(st.grid); const count = st.grid.reduce((n, v) => n + (v ? 1 : 0), 0);
+    if (!count) throw new Error(`${file.name} has no blocks in it`);
+    S.assets[id] = { kind: 'structure', name: file.name.replace(/\.[^.]+$/, ''), size: st.size, palette: st.palette, runs: pack(st.grid), blocks: count, kinds: used.size - (used.has(0) ? 1 : 0) };
+    return id;
+  }
+  const grids = new Map();
+  function structureOf(P) {
+    if (P.demo || !P.asset) return demo(P.demo || 'cottage');
+    const a = S.assets?.[P.asset]; if (!a || a.kind !== 'structure') return null;
+    if (!grids.has(P.asset)) grids.set(P.asset, { size: a.size, palette: a.palette, grid: unpack(a.runs, a.size[0] * a.size[1] * a.size[2]) });
+    return grids.get(P.asset);
+  }
+
+  // ----- what each block looks like: its shape, how it lets light through, and its pictures -----
+  const DYES = { white: '#e4e6e4', orange: '#e8742a', magenta: '#b84cb0', light_blue: '#4aa6d6', yellow: '#eec435', lime: '#74b72a', pink: '#e693ae', gray: '#4a5052',
+    light_gray: '#9a9a92', cyan: '#1e8b92', purple: '#7a35a8', blue: '#3a429c', brown: '#77502f', green: '#566f26', red: '#a8312c', black: '#1c1c20' };
+  const WOODS = { oak: '#b2925e', spruce: '#77593a', birch: '#cdb77d', jungle: '#ae7f5e', acacia: '#b46437', dark_oak: '#4c3320', mangrove: '#783b36',
+    cherry: '#dcb0a6', bamboo: '#c4b25c', crimson: '#6b3550', warped: '#2d6b66', pale_oak: '#e4d9d2' };
+  const BARK = { oak: '#7d6343', spruce: '#5a4129', birch: '#dcd9cc', jungle: '#5a4a24', acacia: '#6a6458', dark_oak: '#3b2c19', mangrove: '#5a3a2c', cherry: '#3c2028', crimson: '#5b2335', warped: '#3a4a52', pale_oak: '#8a8580' };
+  // the colour a name speaks of, most particular first
+  const STUFF = [
+    [/mossy_(stone_brick|cobble)/, '#76806a'], [/stone_brick|chiseled_stone|cracked_stone/, '#7f7f80'],
+    [/deepslate/, '#4c4c52'], [/blackstone/, '#2c2730'], [/basalt/, '#55555a'], [/tuff/, '#6d6d63'], [/calcite/, '#dcdcd6'], [/granite/, '#9a6b58'], [/diorite/, '#bebebb'], [/andesite/, '#87878a'],
+    [/end_stone/, '#dcdea2'], [/purpur/, '#a77ca7'], [/prismarine/, '#5ea193'], [/quartz/, '#ebe5dc'], [/red_sandstone|red_sand/, '#b8642a'], [/sandstone|^sand$|suspicious_sand/, '#dccf9e'],
+    [/nether_brick/, '#3a1d22'], [/netherrack/, '#6e3532'], [/soul_s/, '#4f3d31'], [/obsidian/, '#17121f'], [/mud_brick/, '#8a6a52'], [/packed_mud|^mud$/, '#4a3d3a'],
+    [/terracotta/, '#97604a'], [/clay/, '#a2a7b4'], [/gravel/, '#857f7d'], [/snow|powder_snow/, '#f2f8f8'], [/blue_ice|packed_ice|^ice$|frosted_ice/, '#8db4f4'],
+    [/copper/, '#c06e50'], [/iron/, '#d8d8d8'], [/gold/, '#f1cf47'], [/diamond/, '#68e0d8'], [/emerald/, '#30c763'], [/lapis/, '#2a4ea6'], [/redstone/, '#a3170f'], [/coal/, '#252526'],
+    [/amethyst/, '#8a63bd'], [/hay/, '#b39b2a'], [/melon/, '#79a42b'], [/pumpkin/, '#d58425'], [/sponge/, '#c9c04f'], [/honey/, '#e9a02a'], [/slime/, '#76be6d'],
+    [/moss/, '#5f7a32'], [/dirt|farmland|rooted|podzol|mycelium/, '#866043'], [/bricks?$/, '#94574a'], [/bone/, '#e2dccb'], [/glowstone|sea_lantern|shroomlight|froglight/, '#f3d797'],
+    [/stone|cobble|furnace|smoker|dispenser|dropper|observer|piston/, '#7d7d7f'],
+  ];
+  const woodOf = n => Object.keys(WOODS).sort((a, b) => b.length - a.length).find(w => n.includes(w));
+  const dyeOf = n => Object.keys(DYES).sort((a, b) => b.length - a.length).find(d => n.startsWith(d + '_') || n.includes('_' + d + '_'));
+  const PLANT = /(^|_)(sapling|flower|poppy|dandelion|tulip|orchid|allium|azure_bluet|oxeye_daisy|cornflower|lily_of_the_valley|wither_rose|torchflower|short_grass|tall_grass|fern|large_fern|dead_bush|wheat|carrots|potatoes|beetroots|sugar_cane|bamboo_sapling|sweet_berry_bush|mushroom|fungus|roots|sprouts|seagrass|kelp|vine|lilac|rose_bush|peony|sunflower|cobweb|pink_petals|nether_wart|glow_lichen|hanging_roots|bush)$|^grass$/;
+  const GLOW = /glowstone|sea_lantern|shroomlight|froglight|lantern|torch|lava|campfire|redstone_lamp\b|beacon|end_rod|magma|jack_o_lantern|candle/;
+
+  // A block's look: { shape, pass: 'solid' | 'cut' | 'clear' | 'water', glow, tiles: { top, side, bottom } } where a
+  // tile is a paint order: [style, colour, second colour].
+  const looks = new Map();
+  function lookOf(b) {
+    const key = b.name + JSON.stringify(b.props || {}); if (looks.has(key)) return looks.get(key);
+    const n = b.name, p = b.props || {}, wood = woodOf(n), dye = dyeOf(n);
+    let base = dye ? DYES[dye] : wood ? WOODS[wood] : (STUFF.find(([re]) => re.test(n)) || [0, '#8a8a8a'])[1];
+    let shape = 'cube', pass = 'solid', glow = GLOW.test(n) && !/redstone_torch|soul_torch/.test(n) ? 1 : /soul_torch|soul_lantern|redstone_torch/.test(n) ? .6 : 0;
+    const t = s => ({ top: s, side: s, bottom: s });
+    let tiles = t(['noise', base]);
+    // the style of a block's picture, from what it is made of
+    if (/_planks$|bookshelf|crafting_table|barrel|chest|composter|lectern|cartography|fletching|loom|smithing/.test(n)) tiles = t(['planks', base]);
+    if (/_log$|_wood$|_stem$|_hyphae$|bamboo_block/.test(n) && !/stripped/.test(n)) { const bark = BARK[wood] || '#5c4630';
+      tiles = /_wood$|_hyphae$/.test(n) ? t(['bark', bark]) : { top: ['rings', base, bark], side: ['bark', bark], bottom: ['rings', base, bark] }; }
+    if (/stripped_.*(_log|_wood|_stem|_hyphae)$/.test(n)) tiles = { top: ['rings', base, base], side: ['grain', base], bottom: ['rings', base, base] };
+    if (/bricks?$|brick_(stairs|slab|wall)/.test(n) && !/mud_brick|deepslate_brick|nether_brick|stone_brick/.test(n)) tiles = t(['bricks', base]);
+    if (/stone_brick|deepslate_brick|deepslate_tile|polished_blackstone_brick|nether_brick|mud_brick|end_stone_brick|prismarine_brick|quartz_brick|tuff_brick/.test(n)) tiles = t(['blocks', base]);
+    if (/cobble|mossy_cobble/.test(n)) tiles = t(['cobble', base]);
+    if (/_ore$/.test(n)) { const host = /deepslate/.test(n) ? '#4c4c52' : /nether/.test(n) ? '#6e3532' : '#7d7d7f';
+      tiles = t(['ore', host, (STUFF.find(([re]) => re.test(n.replace(/_ore$|deepslate_|nether_/g, ''))) || [0, '#e0e0e0'])[1]]); }
+    if (/concrete$/.test(n)) tiles = t(['flat', base]);
+    if (/concrete_powder|wool$|carpet$/.test(n)) tiles = t(['wool', base]);
+    if (/terracotta/.test(n)) { if (dye) base = new T.Color(DYES[dye]).lerp(new T.Color('#97604a'), .45).getStyle(); tiles = t(/glazed/.test(n) ? ['glazed', base, DYES[dye] || '#ffffff'] : ['flat', base]); }
+    if (/_block$/.test(n) && /iron|gold|diamond|emerald|lapis|netherite|copper|coal|redstone|amethyst/.test(n)) tiles = t(['metal', base]);
+    if (n === 'grass_block') tiles = { top: ['grass', '#6fae3f'], side: ['grassside', '#866043', '#6fae3f'], bottom: ['noise', '#866043'] };
+    if (/podzol|mycelium/.test(n)) tiles = { top: ['noise', n === 'mycelium' ? '#6f6268' : '#5b3f1d'], side: ['grassside', '#866043', n === 'mycelium' ? '#6f6268' : '#5b3f1d'], bottom: ['noise', '#866043'] };
+    if (/^(sand|red_sand|gravel|snow_block|clay|dirt|coarse_dirt|soul_sand|soul_soil)$/.test(n)) tiles = t(['grains', base]);
+    if (/sandstone/.test(n) && !/smooth|cut|chiseled/.test(n)) tiles = { top: ['grains', base], side: ['layers', base], bottom: ['grains', base] };
+    if (/glowstone|sea_lantern|shroomlight|froglight|redstone_lamp/.test(n)) tiles = t(['lamp', base]);
+    if (/furnace|smoker|blast_furnace/.test(n)) tiles = { top: ['noise', '#6a6a6c'], side: ['furnace', '#6a6a6c', p.lit === 'true' ? '#ffb347' : '#1c1c1c'], bottom: ['noise', '#6a6a6c'] };
+    if (/bookshelf/.test(n)) tiles = { top: ['planks', WOODS.oak], side: ['books', WOODS.oak], bottom: ['planks', WOODS.oak] };
+    if (/crafting_table/.test(n)) tiles = { top: ['grid', WOODS.oak], side: ['planks', WOODS.oak], bottom: ['planks', WOODS.oak] };
+    if (/pumpkin|melon/.test(n) && !/stem/.test(n)) tiles = { top: ['rings', base, '#6a8a2a'], side: [/jack_o_lantern/.test(n) ? 'face' : 'ribs', base], bottom: ['rings', base, base] };
+    if (/hay_block/.test(n)) tiles = { top: ['rings', base, '#8c6f1c'], side: ['straw', base], bottom: ['rings', base, '#8c6f1c'] };
+    if (/tnt/.test(n)) tiles = { top: ['flat', '#d43b2b'], side: ['band', '#d43b2b', '#efe9df'], bottom: ['flat', '#d43b2b'] };
+    // what light goes through
+    if (/glass/.test(n)) { pass = 'clear'; tiles = t(['glass', dye ? DYES[dye] : '#cfe6ee']); }
+    if (/ice$/.test(n) && !/packed|blue/.test(n)) { pass = 'clear'; tiles = t(['glass', '#9ec4f6']); }
+    if (/leaves/.test(n)) { pass = 'cut'; const c = /birch/.test(n) ? '#80a755' : /spruce/.test(n) ? '#5f7d4a' : /cherry/.test(n) ? '#eaa7c0' : /azalea/.test(n) ? '#6c8f2f' : /mangrove/.test(n) ? '#8db127' : '#4f8f2a'; tiles = t(['leaves', c]); }
+    if (/^water$|bubble_column/.test(n)) { pass = 'water'; tiles = t(['water', '#3f6fd8']); }
+    if (/^lava$/.test(n)) { glow = 1.2; tiles = t(['lava', '#e5641a']); }
+    // shapes
+    if (/_slab$/.test(n)) shape = p.type === 'double' ? 'cube' : p.type === 'top' ? 'slabTop' : 'slab';
+    else if (/_stairs$/.test(n)) shape = 'stairs';
+    else if (/_fence$/.test(n) && !/gate/.test(n)) shape = 'fence';
+    else if (/_fence_gate$/.test(n)) shape = 'gate';
+    else if (/_wall$/.test(n) && !/sign|banner|torch|fan|head|skull/.test(n)) shape = 'wall';
+    else if (/_pane$|^iron_bars$/.test(n)) { shape = 'pane'; pass = /iron_bars/.test(n) ? 'cut' : 'clear'; if (/iron_bars/.test(n)) tiles = t(['bars', '#5d5f60']); }
+    else if (/carpet$|pressure_plate$|^moss_carpet$|^snow$|lily_pad/.test(n)) shape = n === 'snow' ? 'layer' : 'carpet';
+    else if (/torch$/.test(n)) { shape = /wall_torch/.test(n) ? 'wallTorch' : 'torch'; pass = 'cut'; tiles = t(['torch', '#6a5132', /soul/.test(n) ? '#7fe3f0' : /redstone/.test(n) ? '#ff3b2b' : '#ffd36b']); }
+    else if (/lantern$/.test(n)) { shape = 'lantern'; pass = 'cut'; tiles = t(['lamp', /soul/.test(n) ? '#7fe3f0' : '#f6c35a']); }
+    else if (/_door$/.test(n)) { shape = 'door'; pass = 'cut'; tiles = t(['door', wood ? WOODS[wood] : '#d8d8d8']); }
+    else if (/_trapdoor$/.test(n)) { shape = 'trapdoor'; pass = 'cut'; tiles = t(['door', wood ? WOODS[wood] : '#d8d8d8']); }
+    else if (/_sign$|_banner$|button$|lever$|ladder$|rail$|_head$|_skull$|flower_pot|candle|tripwire|redstone_wire|frame|painting/.test(n)) shape = 'none';
+    else if (PLANT.test(n) || /_(sapling|tulip|orchid)$/.test(n)) { shape = 'cross'; pass = 'cut';
+      const c = /wheat|hay/.test(n) ? '#c9b14a' : /dead_bush/.test(n) ? '#8a6a3c' : /mushroom|fungus/.test(n) ? (/red/.test(n) ? '#c8302a' : '#b08a64') : /cobweb/.test(n) ? '#e8e8e8' : '#5a9a34';
+      const flower = /poppy|rose|red_tulip/.test(n) ? '#d8322a' : /dandelion|sunflower/.test(n) ? '#f2d33a' : /orchid|cornflower/.test(n) ? '#4aa2e0' : /allium|lilac|peony/.test(n) ? '#b86ad0'
+        : /oxeye|azure|lily_of|white_tulip/.test(n) ? '#f1efe6' : /orange_tulip|torchflower/.test(n) ? '#ef8a2a' : /pink/.test(n) ? '#f2a0c0' : '';
+      tiles = t([flower ? 'flower' : 'plant', c, flower]); }
+    else if (/chest$/.test(n)) shape = 'chest';
+    else if (/^bed$|_bed$/.test(n)) shape = 'bed';
+    const look = { shape, pass, glow, tiles, props: p, name: n };
+    looks.set(key, look); return look;
+  }
+
+  // ----- the pictures: 16 pixels square, painted from a few styles, all on one sheet -----
+  const TILE = 16;
+  function hash(a, b, c) { let h = (a * 374761393 + b * 668265263 + c * 2147483647) | 0; h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+  function paint(g, ox, oy, [style, c1, c2], seed) {
+    const A = new T.Color(c1 || '#888'), B = new T.Color(c2 || c1 || '#888');
+    const px = (x, y, col, a = 1) => { g.fillStyle = `rgba(${Math.round(col.r * 255)},${Math.round(col.g * 255)},${Math.round(col.b * 255)},${a})`; g.fillRect(ox + x, oy + y, 1, 1); };
+    const shade = (col, k) => col.clone().multiplyScalar(k);
+    const r = (x, y, s = 0) => hash(x + seed * 31, y + s * 17, seed);
+    g.clearRect(ox, oy, TILE, TILE);
+    for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) {
+      let col = A, a = 1, k = .9 + r(x, y) * .2;
+      switch (style) {
+        case 'flat': k = .97 + r(x, y) * .06; break;
+        case 'wool': k = .92 + r(x, y) * .1 + ((x + y) % 4 === 0 ? -.04 : 0); break;
+        case 'grains': k = .82 + r(x, y) * .3; break;
+        case 'metal': k = (x === 0 || y === 0 ? 1.12 : x === 15 || y === 15 ? .78 : .97 + r(x, y) * .05); break;
+        case 'planks': { const row = Math.floor(y / 4), seam = y % 4 === 3, cut = (x + row * 7) % 16 === 0; k = seam || cut ? .68 : .88 + r(x >> 1, y, row) * .16 + (r(row, 0, 9) - .5) * .1; break; }
+        case 'grain': k = .86 + r(x, 0, 3) * .2 + r(x, y) * .05; break;
+        case 'bark': k = .72 + r(x, y >> 2, 5) * .4 - (x % 3 === 0 ? .12 : 0); break;
+        case 'rings': { const d = Math.max(Math.abs(x - 7.5), Math.abs(y - 7.5)); col = d > 6.5 ? B : A; k = d > 6.5 ? .9 + r(x, y) * .15 : (Math.floor(d) % 2 ? .82 : 1) + r(x, y) * .06; break; }
+        case 'bricks': { const row = Math.floor(y / 4), seam = y % 4 === 3 || (x + (row % 2 ? 4 : 0)) % 8 === 7; col = seam ? new T.Color('#c9c2b6') : A; k = seam ? .9 : .85 + r(x >> 2, row) * .25 + r(x, y) * .06; break; }
+        case 'blocks': { const row = Math.floor(y / 8), seam = y % 8 === 7 || (x + (row % 2 ? 8 : 0)) % 16 === 15; k = seam ? .62 : .9 + r(x, y) * .14; break; }
+        case 'cobble': { const cx = Math.floor((x + r(0, y >> 2, 4) * 3) / 5), cy = Math.floor((y + r(x >> 2, 0, 8) * 3) / 5), e = hash(cx, cy, seed); k = .62 + e * .5 + r(x, y) * .1;
+          if ((x + Math.round(e * 3)) % 5 === 0 || (y + Math.round(e * 2)) % 5 === 0) k = .5; break; }
+        case 'ore': { const spot = hash(x >> 1, y >> 1, seed + 5) > .82 && x > 1 && y > 1 && x < 14 && y < 14; if (spot) { col = B; k = .85 + r(x, y) * .3; } break; }
+        case 'grass': k = .8 + r(x, y) * .35; break;
+        case 'grassside': { const edge = 3 + Math.floor(r(x, 0, 2) * 3); if (y < edge) { col = B; k = .8 + r(x, y) * .3; } else k = .82 + r(x, y) * .3; break; }
+        case 'layers': k = (y % 5 === 4 ? .8 : .93) + r(x, y) * .1; break;
+        case 'lamp': { const d = Math.max(Math.abs(x - 7.5), Math.abs(y - 7.5)); k = d > 6.5 ? .7 : 1 + r(x, y) * .15 - (d > 4 ? .1 : 0); break; }
+        case 'glass': { const edge = x === 0 || y === 0 || x === 15 || y === 15, glint = (x - y === 3 || x - y === 4) && x > 3 && x < 11; a = edge ? .85 : glint ? .45 : .14; k = edge ? .85 : 1.15; break; }
+        case 'leaves': { a = r(x, y, 2) > .22 ? 1 : 0; k = .7 + r(x, y) * .45; break; }
+        case 'water': k = .85 + Math.sin((x + y * 1.7) * .9 + r(0, y) * 2) * .08 + r(x, y) * .05; a = .8; break;
+        case 'lava': k = .8 + r(x >> 1, y >> 1, 3) * .45; col = r(x >> 1, y >> 1, 4) > .7 ? new T.Color('#ffd25a') : A; break;
+        case 'furnace': { const mouth = x > 3 && x < 12 && y > 8 && y < 14; if (mouth) { col = B; k = 1; } else k = (y === 0 || x === 0 ? 1.08 : .9) + r(x, y) * .1; break; }
+        case 'books': { const shelf = y < 2 || y > 13 || y === 7 || y === 8; if (!shelf) { col = new T.Color(['#8a2e2a', '#2c4f8a', '#3c6a2e', '#7a6a2a', '#5a2e6a'][Math.floor(hash(x >> 1, y > 7 ? 1 : 0, 3) * 5)]); k = .85 + r(x, y) * .2; } else k = .8 + r(x, y) * .1; break; }
+        case 'grid': k = x % 5 === 0 || y % 5 === 0 ? .6 : .95 + r(x, y) * .1; break;
+        case 'ribs': k = (x % 4 === 0 ? .78 : .95) + r(x, y) * .08; break;
+        case 'face': { const eye = (y > 4 && y < 7 && (x === 4 || x === 5 || x === 10 || x === 11)), mouth = y > 9 && y < 12 && x > 3 && x < 12 && (x + y) % 3 !== 0; if (eye || mouth) { col = new T.Color('#ffd25a'); k = 1.1; } else k = (x % 4 === 0 ? .78 : .95) + r(x, y) * .08; break; }
+        case 'straw': k = (x % 3 === 0 ? .78 : .95) + r(x, y >> 1) * .15; break;
+        case 'band': if (y > 4 && y < 11) { col = B; k = 1; if (y > 5 && y < 10 && x > 2 && x < 13 && (x + y) % 2) col = new T.Color('#1c1c1c'); } break;
+        case 'glazed': { const d = Math.abs(x - y), e = Math.abs(x + y - 15); if (d < 2 || e < 2) { col = B; k = .95; } else k = .95 + r(x, y) * .06; break; }
+        case 'bars': { a = (x % 4 === 1 || y === 1 || y === 14) ? 1 : 0; k = .9 + r(x, y) * .15; break; }
+        case 'door': { const frame = x === 0 || x === 15 || y === 0 || y === 15 || y === 7, win = x > 2 && x < 13 && y > 1 && y < 6 && !(x === 7 || x === 8); if (win) a = 0; k = frame ? .75 : .9 + r(x >> 1, y) * .14; break; }
+        case 'torch': { a = 0; if (x === 7 || x === 8) { if (y >= 9) { a = 1; col = A; k = .9 + r(x, y) * .1; } else if (y >= 6) { a = 1; col = B; k = 1.2; } } break; }
+        case 'plant': { const blade = Math.abs(x - 7.5 - Math.sin(y * .7 + x) * 2) < 1.2 + (y > 8 ? .6 : 0) || (hash(x, y, seed) > .8 && y > 5); a = blade ? 1 : 0; k = .7 + r(x, y) * .4 + (15 - y) * .01; break; }
+        case 'flower': { const stem = (x === 7 || x === 8) && y > 6, leaf = y > 10 && y < 13 && (x === 5 || x === 6 || x === 9 || x === 10), head = Math.hypot(x - 7.5, y - 4.5) < 3.2;
+          a = stem || leaf || head ? 1 : 0; if (head) { col = B; k = .9 + r(x, y) * .2; if (Math.hypot(x - 7.5, y - 4.5) < 1) col = new T.Color('#f2d33a'); } else k = .8 + r(x, y) * .2; break; }
+        default: k = .86 + r(x, y) * .24;
+      }
+      if (a > 0) px(x, y, shade(col, k), a);
+    }
+  }
+  function atlasFor(looksUsed) {
+    const tiles = new Map();   // paint order (as text) -> index
+    for (const l of looksUsed) for (const f of ['top', 'side', 'bottom']) { const k = JSON.stringify(l.tiles[f]); if (!tiles.has(k)) tiles.set(k, tiles.size); }
+    const cols = Math.min(64, Math.ceil(Math.sqrt(tiles.size))), rows = Math.ceil(tiles.size / cols);
+    const cv = document.createElement('canvas'); cv.width = cols * TILE; cv.height = Math.max(1, rows) * TILE; const g = cv.getContext('2d');
+    for (const [k, i] of tiles) paint(g, (i % cols) * TILE, Math.floor(i / cols) * TILE, JSON.parse(k), i * 7 + 3);
+    const tex = new T.CanvasTexture(cv); tex.magFilter = T.NearestFilter; tex.minFilter = T.NearestFilter; tex.generateMipmaps = false; tex.colorSpace = T.SRGBColorSpace;
+    return { tex, cols, rows, at: order => { const i = tiles.get(JSON.stringify(order)) ?? 0; return [i % cols, Math.floor(i / cols)]; } };
+  }
+
+  // ----- building it: faces where a block meets air, shaded in the corners -----
+  // each face: its normal, and from its origin corner the u and v directions (u x v = the normal), as unit vectors
+  const FACES = [
+    { n: [1, 0, 0], u: [0, 0, -1], v: [0, 1, 0], o: (a, b) => [b[0], a[1], b[2]], tile: 'side' },
+    { n: [-1, 0, 0], u: [0, 0, 1], v: [0, 1, 0], o: (a, b) => [a[0], a[1], a[2]], tile: 'side' },
+    { n: [0, 1, 0], u: [1, 0, 0], v: [0, 0, -1], o: (a, b) => [a[0], b[1], b[2]], tile: 'top' },
+    { n: [0, -1, 0], u: [1, 0, 0], v: [0, 0, 1], o: (a, b) => [a[0], a[1], a[2]], tile: 'bottom' },
+    { n: [0, 0, 1], u: [1, 0, 0], v: [0, 1, 0], o: (a, b) => [a[0], a[1], b[2]], tile: 'side' },
+    { n: [0, 0, -1], u: [-1, 0, 0], v: [0, 1, 0], o: (a, b) => [b[0], a[1], a[2]], tile: 'side' },
+  ];
+  const AOK = [.5, .68, .84, 1];
+  function build(st) {
+    const [X, Y, Z] = st.size, grid = st.grid, lk = st.palette.map(p => (AIR.test(p.name) ? null : lookOf(p)));
+    const at = (x, y, z) => (x < 0 || y < 0 || z < 0 || x >= X || y >= Y || z >= Z ? 0 : grid[(y * Z + z) * X + x]);
+    const look = (x, y, z) => { const v = at(x, y, z); return v ? lk[v - 1] : null; };
+    const solid = (x, y, z) => { const l = look(x, y, z); return !!l && l.shape === 'cube' && l.pass === 'solid'; };
+    const used = new Set(); for (let i = 0; i < grid.length; i++) if (grid[i] && lk[grid[i] - 1]) used.add(lk[grid[i] - 1]);
+    const atlas = atlasFor([...used]);
+    const buckets = {}; const bucket = k => (buckets[k] ||= { pos: [], nor: [], uv: [], col: [], idx: [] });
+    const passOf = l => (l.glow ? 'glow' : l.pass);
+    // one face of the box A..B (block-local, 0..1) of the block at X,Y,Z
+    function face(Bk, f, a, b, bx, by, bz, order, ao) {
+      const o = f.o(a, b), du = Math.abs(f.u[0]) * (b[0] - a[0]) + Math.abs(f.u[1]) * (b[1] - a[1]) + Math.abs(f.u[2]) * (b[2] - a[2]);
+      const dv = Math.abs(f.v[0]) * (b[0] - a[0]) + Math.abs(f.v[1]) * (b[1] - a[1]) + Math.abs(f.v[2]) * (b[2] - a[2]);
+      const [tx, ty] = atlas.at(order), base = Bk.pos.length / 3;
+      const corners = [[0, 0], [1, 0], [1, 1], [0, 1]];
+      corners.forEach(([cu, cv], i) => {
+        const p = [0, 1, 2].map(k => o[k] + f.u[k] * du * cu + f.v[k] * dv * cv);
+        Bk.pos.push(bx + p[0], by + p[1], bz + p[2]); Bk.nor.push(...f.n);
+        // where in the picture: how far along u and v, measured in the block from its own corner
+        const s = [0, 1, 2].reduce((m, k) => m + f.u[k] * p[k], 0) + (f.u.some(c => c < 0) ? 1 : 0);
+        const t = [0, 1, 2].reduce((m, k) => m + f.v[k] * p[k], 0) + (f.v.some(c => c < 0) ? 1 : 0);
+        Bk.uv.push((tx + clamp(s, 0, 1)) / atlas.cols, 1 - (ty + 1 - clamp(t, 0, 1)) / atlas.rows);
+        const k = ao ? ao[i] : 1; Bk.col.push(k, k, k);
+      });
+      // turn the quad so the shading runs smoothly across it
+      if (ao && ao[0] + ao[2] < ao[1] + ao[3]) Bk.idx.push(base + 1, base + 2, base + 3, base + 1, base + 3, base);
+      else Bk.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    }
+    const box = (Bk, l, x, y, z, a, b, skip = () => false) => FACES.forEach(f => { if (!skip(f)) face(Bk, f, a, b, x, y, z, l.tiles[f.tile]); });
+    const cross = (Bk, l, x, y, z, h = 1) => {
+      const [tx, ty] = atlas.at(l.tiles.side), base = Bk.pos.length / 3, e = .15;
+      for (const [p0, p1] of [[[e, e], [1 - e, 1 - e]], [[e, 1 - e], [1 - e, e]]]) {
+        const b0 = Bk.pos.length / 3;
+        for (const [px, pz, py, s, t] of [[p0[0], p0[1], 0, 0, 0], [p1[0], p1[1], 0, 1, 0], [p1[0], p1[1], h, 1, 1], [p0[0], p0[1], h, 0, 1]]) {
+          Bk.pos.push(x + px, y + py, z + pz); Bk.nor.push(0, 1, 0); Bk.uv.push((tx + s) / atlas.cols, 1 - (ty + 1 - t) / atlas.rows); Bk.col.push(1, 1, 1); }
+        Bk.idx.push(b0, b0 + 1, b0 + 2, b0, b0 + 2, b0 + 3);
+      }
+      void base;
+    };
+    const facing = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] };
+    const joins = (x, y, z, l) => { const o = look(x, y, z); return !!o && (solid(x, y, z) || o.shape === l.shape || (l.shape === 'fence' && o.shape === 'gate') || (/pane|wall/.test(l.shape) && /pane|wall/.test(o.shape))); };
+    for (let y = 0; y < Y; y++) for (let z = 0; z < Z; z++) for (let x = 0; x < X; x++) {
+      const v = grid[(y * Z + z) * X + x]; if (!v) continue; const l = lk[v - 1]; if (!l || l.shape === 'none') continue;
+      const Bk = bucket(passOf(l)), p = l.props;
+      if (l.shape === 'cube') {
+        for (const f of FACES) {
+          const nx = x + f.n[0], ny = y + f.n[1], nz = z + f.n[2], o = look(nx, ny, nz);
+          if (o && ((o.shape === 'cube' && o.pass === 'solid') || (o === l && l.pass !== 'cut') || (o.pass === l.pass && l.pass !== 'solid' && l.pass !== 'cut' && o.shape === 'cube'))) continue;
+          if (l.pass === 'water' && f.n[1] === 1 && o) continue;
+          // shade each corner by what touches it in front of the face
+          const ao = [[0, 0], [1, 0], [1, 1], [0, 1]].map(([cu, cv]) => {
+            const su = cu ? 1 : -1, sv = cv ? 1 : -1, d = [0, 1, 2].map(k => f.n[k]);
+            const side1 = solid(nx + f.u[0] * su, ny + f.u[1] * su, nz + f.u[2] * su), side2 = solid(nx + f.v[0] * sv, ny + f.v[1] * sv, nz + f.v[2] * sv);
+            const corner = solid(nx + f.u[0] * su + f.v[0] * sv, ny + f.u[1] * su + f.v[1] * sv, nz + f.u[2] * su + f.v[2] * sv); void d;
+            return AOK[side1 && side2 ? 0 : 3 - (side1 + side2 + corner)];
+          });
+          const top = l.pass === 'water' && !look(x, y + 1, z) ? .875 : 1;
+          face(Bk, f, [0, 0, 0], [1, top, 1], x, y, z, l.tiles[f.tile], l.pass === 'solid' || l.pass === 'cut' ? ao : null);
+        }
+        continue;
+      }
+      switch (l.shape) {
+        case 'slab': box(Bk, l, x, y, z, [0, 0, 0], [1, .5, 1], f => f.n[1] === -1 && solid(x, y - 1, z)); break;
+        case 'slabTop': box(Bk, l, x, y, z, [0, .5, 0], [1, 1, 1], f => f.n[1] === 1 && solid(x, y + 1, z)); break;
+        case 'stairs': {
+          const up = p.half === 'top', [fx, fz] = facing[p.facing] || [0, -1];
+          box(Bk, l, x, y, z, [0, up ? .5 : 0, 0], [1, up ? 1 : .5, 1]);
+          // the step rises on the side it faces
+          const a = [fx > 0 ? .5 : 0, up ? 0 : .5, fz > 0 ? .5 : 0], b = [fx < 0 ? .5 : 1, up ? .5 : 1, fz < 0 ? .5 : 1];
+          if (!fx) { a[0] = 0; b[0] = 1; } if (!fz) { a[2] = 0; b[2] = 1; }
+          box(Bk, l, x, y, z, a, b); break; }
+        case 'carpet': box(Bk, l, x, y, z, [0, 0, 0], [1, 1 / 16, 1]); break;
+        case 'layer': box(Bk, l, x, y, z, [0, 0, 0], [1, Math.min(8, +p.layers || 1) * 2 / 16, 1]); break;
+        case 'fence': case 'wall': case 'pane': case 'gate': {
+          const w = l.shape === 'wall' ? .25 : l.shape === 'pane' ? 1 / 16 : .125, top = l.shape === 'wall' ? .875 : 1;
+          if (l.shape !== 'pane' && l.shape !== 'gate') box(Bk, l, x, y, z, [.5 - w, 0, .5 - w], [.5 + w, l.shape === 'wall' ? 1 : 1, .5 + w]);
+          const arm = l.shape === 'pane' ? [0, 1] : l.shape === 'wall' ? [0, top] : null;
+          const dirs = l.shape === 'gate' ? (p.facing === 'east' || p.facing === 'west' ? [[0, -1], [0, 1]] : [[-1, 0], [1, 0]])
+            : [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dz]) => joins(x + dx, y, z + dz, l));
+          if (l.shape === 'pane' && !dirs.length) dirs.push([1, 0], [-1, 0]);
+          for (const [dx, dz] of dirs) {
+            const a = [dx > 0 ? .5 : dx < 0 ? 0 : .5 - w, 0, dz > 0 ? .5 : dz < 0 ? 0 : .5 - w], b = [dx > 0 ? 1 : dx < 0 ? .5 : .5 + w, 1, dz > 0 ? 1 : dz < 0 ? .5 : .5 + w];
+            if (arm) { a[1] = arm[0]; b[1] = arm[1]; if (l.shape === 'pane') { /* a full-height glass sheet */ } box(Bk, l, x, y, z, a, b); }
+            else for (const [y0, y1] of [[.375, .5625], [.75, .9375]]) { const aa = [...a], bb = [...b]; aa[1] = y0; bb[1] = y1; if (dx) { aa[2] = .5 - w / 2; bb[2] = .5 + w / 2; } else { aa[0] = .5 - w / 2; bb[0] = .5 + w / 2; } box(Bk, l, x, y, z, aa, bb); }
+          }
+          break; }
+        case 'torch': box(bucket('glow'), l, x, y, z, [7 / 16, 0, 7 / 16], [9 / 16, 10 / 16, 9 / 16]); break;
+        case 'wallTorch': { const [fx, fz] = facing[p.facing] || [0, 1]; const cx = .5 - fx * .32, cz = .5 - fz * .32;
+          box(bucket('glow'), l, x, y, z, [cx - 1 / 16, .2, cz - 1 / 16], [cx + 1 / 16, .8, cz + 1 / 16]); break; }
+        case 'lantern': box(bucket('glow'), l, x, y, z, [5 / 16, p.hanging === 'true' ? .3 : 0, 5 / 16], [11 / 16, p.hanging === 'true' ? .75 : .45, 11 / 16]); break;
+        case 'door': case 'trapdoor': {
+          const t = 3 / 16, [fx, fz] = facing[p.facing] || [0, 1], open = p.open === 'true';
+          if (l.shape === 'trapdoor' && !open) { const top = p.half === 'top'; box(Bk, l, x, y, z, [0, top ? 1 - t : 0, 0], [1, top ? 1 : t, 1]); break; }
+          // a closed door stands on the far side of its block from where it faces; open, it swings to the hinge side
+          let ax = fx, az = fz; if (open) { const hinge = p.hinge === 'left' ? 1 : -1; [ax, az] = [-fz * hinge, fx * hinge]; }
+          const a = [ax > 0 ? 0 : ax < 0 ? 1 - t : 0, 0, az > 0 ? 0 : az < 0 ? 1 - t : 0], b = [ax > 0 ? t : 1, 1, az > 0 ? t : 1];
+          box(Bk, l, x, y, z, a, b); break; }
+        case 'chest': box(Bk, l, x, y, z, [1 / 16, 0, 1 / 16], [15 / 16, 14 / 16, 15 / 16]); break;
+        case 'bed': box(Bk, l, x, y, z, [0, 0, 0], [1, 9 / 16, 1]); break;
+        case 'cross': cross(Bk, l, x, y, z, 1); break;
+      }
+    }
+    // the materials: solid, cut-out (leaves, plants), glass, water, and what glows
+    const mats = {
+      solid: new T.MeshStandardMaterial({ map: atlas.tex, vertexColors: true, roughness: .92, metalness: 0 }),
+      cut: new T.MeshStandardMaterial({ map: atlas.tex, vertexColors: true, roughness: .9, alphaTest: .5, side: T.DoubleSide }),
+      clear: new T.MeshPhysicalMaterial({ map: atlas.tex, vertexColors: true, roughness: .05, transparent: true, depthWrite: false, side: T.DoubleSide, envMapIntensity: 1.2 }),
+      water: new T.MeshPhysicalMaterial({ map: atlas.tex, vertexColors: true, roughness: .08, transparent: true, opacity: .78, depthWrite: false, side: T.DoubleSide }),
+      glow: new T.MeshStandardMaterial({ map: atlas.tex, emissiveMap: atlas.tex, emissive: new T.Color('#ffffff'), emissiveIntensity: 1.6, vertexColors: true, roughness: .8, alphaTest: .5, side: T.DoubleSide }),
+    };
+    const g = new T.Group();
+    for (const [k, Bk] of Object.entries(buckets)) {
+      if (!Bk.idx.length) continue;
+      const geo = new T.BufferGeometry();
+      geo.setAttribute('position', new T.Float32BufferAttribute(Bk.pos, 3)); geo.setAttribute('normal', new T.Float32BufferAttribute(Bk.nor, 3));
+      geo.setAttribute('uv', new T.Float32BufferAttribute(Bk.uv, 2)); geo.setAttribute('color', new T.Float32BufferAttribute(Bk.col, 3));
+      geo.setIndex(Bk.pos.length / 3 > 65535 ? new T.Uint32BufferAttribute(Bk.idx, 1) : new T.Uint16BufferAttribute(Bk.idx, 1));
+      geo.computeBoundingSphere();
+      const m = new T.Mesh(geo, mats[k]); m.castShadow = k !== 'water' && k !== 'clear'; m.receiveShadow = true; if (k === 'clear' || k === 'water') m.renderOrder = 2;
+      g.add(m);
+    }
+    // a few real lights from what glows, so a build at night lights itself (the brightest dozen, spread out)
+    const lamps = []; for (let y = 0; y < Y; y++) for (let z = 0; z < Z; z++) for (let x = 0; x < X; x++) { const v = at(x, y, z); if (v && lk[v - 1]?.glow) lamps.push([x + .5, y + .6, z + .5, lk[v - 1]]); }
+    const chosen = []; for (const L of lamps) if (chosen.length < 12 && chosen.every(c => Math.hypot(c[0] - L[0], c[1] - L[1], c[2] - L[2]) > 6)) chosen.push(L);
+    for (const [x, y, z, l] of chosen) { const c = new T.Color(l.tiles.side[2] || l.tiles.side[1] || '#ffcf7a'); const pl = new T.PointLight(c, 1.2 * l.glow, 12 * M, 2); pl.position.set(x, y, z); pl.userData.blockLamp = true; g.add(pl); }
+    g.userData.size = st.size;
+    return g;
+  }
+
+  // ----- a build to start from: a cottage on a floating island, made in code -----
+  const demos = new Map();
+  function demo(kind) {
+    if (demos.has(kind)) return demos.get(kind);
+    const X = 26, Y = 26, Z = 26, grid = new Uint16Array(X * Y * Z), palette = [], ids = new Map();
+    const id = (name, props = {}) => { const k = name + JSON.stringify(props); if (!ids.has(k)) { ids.set(k, palette.length); palette.push({ name, props }); } return ids.get(k) + 1; };
+    const set = (x, y, z, name, props) => { if (x >= 0 && y >= 0 && z >= 0 && x < X && y < Y && z < Z) grid[(y * Z + z) * X + x] = id(name, props); };
+    const get = (x, y, z) => grid[(y * Z + z) * X + x];
+    let s = 11; const rnd = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+    // the island: grass on top, dirt, then stone tapering to a point
+    const top = 10, cx = 12.5, cz = 12.5;
+    for (let y = 0; y <= top; y++) for (let z = 0; z < Z; z++) for (let x = 0; x < X; x++) {
+      const d = Math.hypot(x - cx, z - cz), wob = Math.sin(x * .9) * .8 + Math.cos(z * .7) * .8 + Math.sin((x + z) * .4) * .6;
+      const r = (11.5 + wob * .6) * Math.pow((y + 1) / (top + 1), .55);
+      if (d > r) continue;
+      set(x, y, z, y === top ? 'grass_block' : y > top - 3 ? 'dirt' : rnd() < .06 ? 'coal_ore' : rnd() < .03 ? 'iron_ore' : rnd() < .2 ? 'andesite' : 'stone');
+    }
+    const ground = top + 1;
+    if (kind === 'island') {
+      for (let i = 0; i < 30; i++) { const x = Math.floor(rnd() * X), z = Math.floor(rnd() * Z), d = Math.hypot(x - cx, z - cz);
+        if (d > 8 && get(x, top, z) === id('grass_block')) set(x, ground, z, ['short_grass', 'poppy', 'dandelion', 'short_grass', 'cornflower'][Math.floor(rnd() * 5)]); }
+      const st = { size: [X, Y, Z], palette, grid }; demos.set(kind, st); return st;
+    }
+    // the cottage: cobble footing, oak log corners, plank walls, glass windows, a door, a stair roof, a chimney
+    const x0 = 7, x1 = 15, z0 = 7, z1 = 13;
+    for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) set(x, ground - 1, z, 'cobblestone');
+    for (let y = ground; y < ground + 4; y++) for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
+      const edgeX = x === x0 || x === x1, edgeZ = z === z0 || z === z1; if (!edgeX && !edgeZ) continue;
+      if (edgeX && edgeZ) set(x, y, z, 'oak_log', { axis: 'y' });
+      else if (y === ground) set(x, y, z, 'cobblestone');
+      else set(x, y, z, 'oak_planks');
+    }
+    for (const x of [9, 10, 12, 13]) for (const y of [ground + 1, ground + 2]) set(x, y, z1, 'glass_pane');
+    for (const z of [9, 11]) for (const y of [ground + 1, ground + 2]) { set(x0, y, z, 'glass_pane'); set(x1, y, z, 'glass_pane'); }
+    set(11, ground, z1, 'oak_door', { facing: 'south', half: 'lower', hinge: 'left', open: 'false' }); set(11, ground + 1, z1, 'oak_door', { facing: 'south', half: 'upper', hinge: 'left', open: 'false' });
+    for (let i = 0; i <= 4; i++) for (let x = x0 - 1; x <= x1 + 1; x++) {
+      const y = ground + 4 + i; if (z0 - 1 + i > z1 + 1 - i) break;
+      set(x, y, z0 - 1 + i, 'spruce_stairs', { facing: 'south', half: 'bottom' }); set(x, y, z1 + 1 - i, 'spruce_stairs', { facing: 'north', half: 'bottom' });
+      if (x === x0 || x === x1) for (let z = z0 + i; z <= z1 - i; z++) set(x, y, z, 'oak_planks');
+      if (z0 - 1 + i === z1 + 1 - i) set(x, y, z0 - 1 + i, 'spruce_slab', { type: 'bottom' });
+    }
+    for (let y = ground; y < ground + 10; y++) set(x1 - 1, y, z0 + 1, y < ground + 3 ? 'cobblestone' : 'bricks');
+    set(x1 - 1, ground, z0 + 1, 'furnace', { lit: 'true', facing: 'south' });
+    set(x0 + 1, ground, z0 + 1, 'crafting_table'); set(x0 + 1, ground, z1 - 1, 'bookshelf'); set(x0 + 2, ground + 2, z0 + 1, 'wall_torch', { facing: 'south' });
+    // a path to the door, a lantern on a fence post, flowers
+    for (let z = z1 + 1; z < 21; z++) set(11, ground - 1, z, 'gravel');
+    set(13, ground, z1 + 2, 'oak_fence'); set(13, ground + 1, z1 + 2, 'lantern');
+    // a tree
+    const tx = 19, tz = 8;
+    for (let y = ground; y < ground + 5; y++) set(tx, y, tz, 'oak_log', { axis: 'y' });
+    for (let y = ground + 3; y < ground + 7; y++) { const r = y < ground + 5 ? 2 : 1;
+      for (let x = tx - r; x <= tx + r; x++) for (let z = tz - r; z <= tz + r; z++) if (!(Math.abs(x - tx) === r && Math.abs(z - tz) === r && rnd() < .7) && !get(x, y, z)) set(x, y, z, 'oak_leaves'); }
+    // a little pond
+    for (const [x, z] of [[17, 15], [18, 15], [17, 16], [18, 16], [19, 16], [18, 17]]) { set(x, top, z, 'water'); set(x, top - 1, z, 'sand'); }
+    for (let i = 0; i < 26; i++) { const x = Math.floor(rnd() * X), z = Math.floor(rnd() * Z);
+      if (get(x, top, z) === id('grass_block') && !get(x, ground, z)) set(x, ground, z, ['short_grass', 'poppy', 'dandelion', 'short_grass', 'cornflower', 'oxeye_daisy'][Math.floor(rnd() * 6)]); }
+    const st = { size: [X, Y, Z], palette, grid };
+    demos.set(kind, st); return st;
+  }
+
+  // ----- the parts -----
+  const built = new Map();
+  World.custom.structure = (P, t) => {
+    const st = structureOf(P); const g = new T.Group(); g.scale.setScalar(M * clamp(num(P.block, 1), .01, 100));
+    if (!st) return g;
+    const key = P.demo || P.asset || 'cottage';
+    let mesh = built.get(key); if (!mesh) { mesh = build(st); built.set(key, mesh); }
+    const inst = mesh.clone(); inst.children.forEach(c => { if (c.isPointLight) c.visible = P.lamps !== false; });
+    // stood on its middle, its lowest blocks on the ground (or lifted by Lift)
+    const [X, , Z] = st.size; inst.position.set(-X / 2, -num(P.sink, 0), -Z / 2);
+    g.add(inst); return g;
+  };
+
+  // drifting square clouds: a flat layer of puffs on a grid, each a box, sides hidden where they touch
+  World.custom.blockclouds = (P, t) => {
+    const cell = clamp(num(P.cell, 12), 1, 100), thick = clamp(num(P.thick, 4), .2, 50), cover = clamp(num(P.cover, 40), 0, 100) / 100, n = 48;
+    const key = ['cl', cell, thick, cover, P.seed || 1].join('|');
+    let geo = built.get(key);
+    if (!geo) {
+      const seed = num(P.seed, 1), on = (x, z) => { x = (x + n) % n; z = (z + n) % n;
+        // a smooth noise, thresholded: puffs of a few cells, holes between
+        const f = (a, b, s) => { const ix = Math.floor(a), iz = Math.floor(b), fx = a - ix, fz = b - iz, h = (i, j) => hash(((i % (n / s)) + n / s) % (n / s), ((j % (n / s)) + n / s) % (n / s), seed * 13 + s);
+          const sm = v => v * v * (3 - 2 * v); return (h(ix, iz) * (1 - sm(fx)) + h(ix + 1, iz) * sm(fx)) * (1 - sm(fz)) + (h(ix, iz + 1) * (1 - sm(fx)) + h(ix + 1, iz + 1) * sm(fx)) * sm(fz); };
+        return f(x / 6, z / 6, 6) * .7 + f(x / 3, z / 3, 3) * .3 > 1 - cover * .75; };
+      const pos = [], nor = [], idx = [];
+      const quad = (pts, nn) => { const b = pos.length / 3; for (const p of pts) pos.push(...p); for (let i = 0; i < 4; i++) nor.push(...nn); idx.push(b, b + 1, b + 2, b, b + 2, b + 3); };
+      for (let z = 0; z < n; z++) for (let x = 0; x < n; x++) {
+        if (!on(x, z)) continue; const a = [x * cell, 0, z * cell], b = [(x + 1) * cell, thick, (z + 1) * cell];
+        quad([[a[0], b[1], b[2]], [b[0], b[1], b[2]], [b[0], b[1], a[2]], [a[0], b[1], a[2]]], [0, 1, 0]);
+        quad([[a[0], a[1], a[2]], [b[0], a[1], a[2]], [b[0], a[1], b[2]], [a[0], a[1], b[2]]], [0, -1, 0]);
+        if (!on(x + 1, z)) quad([[b[0], a[1], b[2]], [b[0], a[1], a[2]], [b[0], b[1], a[2]], [b[0], b[1], b[2]]], [1, 0, 0]);
+        if (!on(x - 1, z)) quad([[a[0], a[1], a[2]], [a[0], a[1], b[2]], [a[0], b[1], b[2]], [a[0], b[1], a[2]]], [-1, 0, 0]);
+        if (!on(x, z + 1)) quad([[a[0], a[1], b[2]], [b[0], a[1], b[2]], [b[0], b[1], b[2]], [a[0], b[1], b[2]]], [0, 0, 1]);
+        if (!on(x, z - 1)) quad([[b[0], a[1], a[2]], [a[0], a[1], a[2]], [a[0], b[1], a[2]], [b[0], b[1], a[2]]], [0, 0, -1]);
+      }
+      geo = new T.BufferGeometry(); geo.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); geo.setAttribute('normal', new T.Float32BufferAttribute(nor, 3));
+      geo.setIndex(pos.length / 3 > 65535 ? new T.Uint32BufferAttribute(idx, 1) : new T.Uint16BufferAttribute(idx, 1)); geo.computeBoundingSphere();
+      built.set(key, geo);
+    }
+    const mkey = 'clm' + (P.color || '#ffffff') + num(P.opacity, 85);
+    let mat = built.get(mkey);
+    if (!mat) { mat = new T.MeshStandardMaterial({ color: new T.Color(P.color || '#ffffff'), roughness: 1, transparent: true, opacity: clamp(num(P.opacity, 85), 5, 100) / 100,
+      emissive: new T.Color(P.color || '#ffffff'), emissiveIntensity: .35, depthWrite: true }); built.set(mkey, mat); }
+    const span = cell * n, drift = ((num(P.speed, 2) * t) % span + span) % span;
+    const g = new T.Group();
+    // two copies side by side, so the layer drifts on forever with no gap
+    for (const k of [-1, 0]) { const m = new T.Mesh(geo, mat); m.position.set(-span / 2 + drift + k * span, num(P.height, 110) - (+P.at?.[1] || 0), -span / 2); m.castShadow = P.shadows === true; m.receiveShadow = false; g.add(m); }
+    g.scale.setScalar(M); g.userData.blockClouds = true; return g;
+  };
+
+  // the square sun and moon: flat squares far off, where the world's sun is and opposite it
+  function bodyTex(kind, phase) {
+    const key = 'body' + kind + phase; if (built.has(key)) return built.get(key);
+    const S = 32, cv = document.createElement('canvas'); cv.width = cv.height = S; const g = cv.getContext('2d');
+    if (kind === 'sun') {
+      g.fillStyle = 'rgba(255,236,170,.35)'; g.fillRect(0, 0, S, S); g.fillStyle = '#fff6c8'; g.fillRect(4, 4, S - 8, S - 8); g.fillStyle = '#ffffff'; g.fillRect(8, 8, S - 16, S - 16);
+    } else {
+      g.fillStyle = '#dfe3ee'; g.fillRect(4, 4, S - 8, S - 8);
+      g.fillStyle = '#aeb4c6'; for (const [x, y, w] of [[9, 9, 5], [18, 7, 3], [16, 17, 6], [8, 20, 3], [22, 22, 3]]) g.fillRect(x, y, w, w);
+      // the dark part of the moon, by its phase (0 full .. 4 new .. 7)
+      const p = ((+phase || 0) % 8 + 8) % 8, dark = p <= 4 ? p / 4 : (8 - p) / 4, w = Math.round((S - 8) * dark);
+      // the unlit part lets the sky through, as the moon does by day (and at night it is all but black)
+      if (p <= 4) g.clearRect(S - 4 - w, 4, w, S - 8); else g.clearRect(4, 4, w, S - 8);
+    }
+    const tex = new T.CanvasTexture(cv); tex.magFilter = T.NearestFilter; tex.minFilter = T.NearestFilter; tex.colorSpace = T.SRGBColorSpace; built.set(key, tex); return tex;
+  }
+  World.custom.skybodies = P => {
+    const g = new T.Group();
+    for (const kind of ['sun', 'moon']) {
+      if (P[kind] === false) continue;
+      const m = new T.Mesh(new T.PlaneGeometry(1, 1), new T.MeshBasicMaterial({ map: bodyTex(kind, P.phase), transparent: true, fog: false, depthWrite: false, toneMapped: false,
+        color: new T.Color(kind === 'sun' ? '#ffffff' : '#ffffff').multiplyScalar(kind === 'sun' ? clamp(num(P.glow, 300), 0, 2000) / 100 : 1.1) }));
+      m.renderOrder = -5; m.userData.skyBody = kind;
+      if (kind === 'moon' && P.moonEl !== undefined && P.moonEl !== '' && P.moonEl !== null) m.userData.at = [num(P.moonEl, 20), num(P.moonAz, 0)]; m.userData.size = clamp(num(kind === 'sun' ? P.sunSize : P.moonSize, kind === 'sun' ? 7 : 6), .2, 60); m.frustumCulled = false;
+      g.add(m);
+    }
+    return g;
+  };
+  // each frame: put the sun where the world's sun is and the moon opposite, far off and facing the camera
+  World.stageHooks.push(({ B, o, cam }) => {
+    if (!B.props) return;
+    const deg = v => (+v || 0) * Math.PI / 180, e = deg(clamp(+o.sunEl, -90, 90)), a = deg(o.sunAz);
+    const sun = new T.Vector3(Math.sin(a) * Math.cos(e), Math.sin(e), -Math.cos(a) * Math.cos(e)).normalize();
+    const far = 1500 * M, inv = new T.Matrix4();
+    B.props.traverse(n => {
+      if (!n.userData.skyBody) return;
+      // the moon is opposite the sun, unless it is placed itself (a moon by day)
+      const own = n.userData.skyBody === 'moon' && n.userData.at;
+      const dir = n.userData.skyBody === 'sun' ? sun : own ? new T.Vector3(Math.sin(deg(own[1])) * Math.cos(deg(own[0])), Math.sin(deg(own[0])), -Math.cos(deg(own[1])) * Math.cos(deg(own[0]))) : sun.clone().negate();
+      const world = cam.position.clone().addScaledVector(dir, far);
+      n.parent.updateMatrixWorld(true); inv.copy(n.parent.matrixWorld).invert();
+      n.position.copy(world.applyMatrix4(inv));
+      const side = 2 * far * Math.tan(deg(n.userData.size) / 2), sc = new T.Vector3(); n.parent.getWorldScale(sc);
+      n.scale.set(side / sc.x, side / sc.y, 1);
+      n.quaternion.copy(cam.quaternion); const pq = new T.Quaternion(); n.parent.getWorldQuaternion(pq); n.quaternion.premultiply(pq.invert());
+      n.visible = dir.y > -.08;
+    });
+  });
+
+  World.PARTS.push('structure', 'blockclouds', 'skybodies');
+  SceneEd.add('structure', { type: 'structure', demo: 'cottage', block: 1 }, 'Block build');
+  SceneEd.add('blockclouds', { type: 'blockclouds', height: 110, cell: 12, thick: 4, cover: 40, speed: 2, opacity: 85 }, 'Square clouds');
+  SceneEd.add('skybodies', { type: 'skybodies', sunSize: 7, moonSize: 6, phase: 0, glow: 300 }, 'Square sun and moon');
+  SceneEd.extras.push({
+    inspector(P) {
+      const n = (k, label, v, step = 1) => `<label class="f"><span>${label}</span><input type="number" step="${step}" data-k="${k}" value="${v}"></label>`;
+      if (P.type === 'structure') {
+        const builds = Object.entries((typeof S !== 'undefined' && S.assets) || {}).filter(([, a]) => a.kind === 'structure');
+        const cur = P.asset && !P.demo ? P.asset : '';
+        const a = cur ? S.assets[cur] : null;
+        return `<div class="hd">Block build</div>
+          <label class="f wide"><span>Build</span><select data-k="asset">${[['', 'The cottage (built in)'], ...builds.map(([id, b]) => [id, b.name])].map(([v, l]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+          ${n('block', 'Block size m', num(P.block, 1), .1)}${n('sink', 'Sink blocks', num(P.sink, 0), 1)}
+          <p class="note">${a ? `${a.size.join(' × ')} blocks, ${a.blocks.toLocaleString()} placed, ${a.kinds} kinds. ` : ''}Import a structure block's .nbt file (or a .schem) under Import, or drop it on the viewport, and pick it here. Blocks are drawn with Riptide's own pixel pictures, by what each is made of.</p>`;
+      }
+      if (P.type === 'blockclouds') return `<div class="hd">Square clouds</div>${n('height', 'Height m', num(P.height, 110))}${n('cover', 'Cover %', num(P.cover, 40))}${n('cell', 'Square m', num(P.cell, 12))}
+        ${n('thick', 'Thickness m', num(P.thick, 4), .5)}${n('speed', 'Drift m/s', num(P.speed, 2), .5)}${n('opacity', 'Opacity %', num(P.opacity, 85))}${n('seed', 'Pattern', num(P.seed, 1))}
+        <label class="f"><span>Colour</span><input type="color" data-k="color" value="${P.color || '#ffffff'}"></label>`;
+      if (P.type === 'skybodies') return `<div class="hd">Square sun and moon</div>${n('sunSize', 'Sun size°', num(P.sunSize, 7), .5)}${n('moonSize', 'Moon size°', num(P.moonSize, 6), .5)}
+        ${n('phase', 'Moon phase (0 full, 4 new)', num(P.phase, 0))}${n('glow', 'Sun glow %', num(P.glow, 300), 10)}
+        <label class="f"><span>Moon height°</span><input type="number" data-k="moonEl" value="${P.moonEl ?? ''}" placeholder="opposite the sun"></label>
+        <label class="f"><span>Moon around°</span><input type="number" data-k="moonAz" value="${P.moonAz ?? ''}" placeholder="opposite the sun"></label>
+        <p class="note">The sun sits where the world's sun is (World: Sun height and Sun around) and the moon opposite it, unless you place the moon yourself: lower the sun below the horizon for night.</p>`;
+      return '';
+    },
+  });
+  // the inspector's Build select: an imported build, or back to the cottage
+  const was = World.custom.structure;
+  World.custom.structure = (P, t) => was(P.asset ? { ...P, demo: '' } : { ...P, demo: P.demo || 'cottage' }, t);
+
+  // ----- the scene: a cottage on a floating island, square clouds, the sun and moon, a figure waving -----
+  World.PRESETS.blocks = { label: 'Block world', hint: 'A block build on a floating island under square clouds, a square sun and moon, and a block figure to pose',
+    p: { sky: 'day', sunEl: 34, sunAz: 150, sunPower: 110, clouds: 0, wind: 0, ground: 'none', fog: 6, dust: 0, eye: 0, heading: 0, pitch: 0, travel: 0,
+      lens: 35, focus: 0, dof: 0, exposure: 0, bloom: 22, grain: 6, fringe: 2, ao: 40, streaks: 0, flare: 0, godrays: 0, letterbox: 'none', render: 'preview' },
+    objects: () => [
+      { type: 'structure', name: 'Cottage', at: [0, -11, 0], demo: 'cottage', block: 1 },
+      { type: 'blockclouds', name: 'Clouds', at: [0, 0, 0], height: 34, cell: 8, thick: 2, cover: 42, speed: 1.5, opacity: 88 },
+      // the sun lights the cottage's front from behind the camera; a pale moon by day hangs over the island
+      { type: 'skybodies', name: 'Sun and moon', at: [0, 0, 0], sunSize: 8, moonSize: 6, phase: 2, glow: 320, moonEl: 9, moonAz: -24 },
+      { type: 'blocky', name: 'Figure', at: [5.2, 0, 6.2], turn: [0, 30, 0], move: 'wave', height: 1.8, pose: { Head: [-8, 10, 0] } },
+      { type: 'camera', id: 'cam', name: 'Camera', at: [15, 5, 22], turn: [-9, 34, 0], lens: 28 },
+    ],
+    shots: [{ t: 0, cam: 'cam' }] };
+
+  return { readNBT, read, importFile, lookOf, build, demo, pack, unpack, fromStructure, fromSchem, gunzip };
+})();

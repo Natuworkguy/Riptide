@@ -258,7 +258,7 @@ to the part both share, then type the rest of the new one (reveal 0-1 types, 1-2
 
 
 @mcp.tool()
-async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "mountain", "neon", "oculus", ""] = "", name: str | None = None,
+async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "mountain", "neon", "oculus", "blocks", ""] = "", name: str | None = None,
                     props: dict | None = None) -> dict:
     """Add a 3D world at the bottom of the layers: a whole place to film, with a sky, a sun that casts shadows,
     the ground, the air, props, and a lens. 3D shapes and models above it stand inside it, lit and shadowed by
@@ -267,7 +267,8 @@ async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "
     for your shapes and models), "desert" (dunes and a monolith at dusk), "night" (moonlit sea), "mountain" (a red car up a winding
     road through pine forest under snowy peaks, filmed by a chase camera), "neon" (a wet city street at night in the rain:
     shopfronts, hanging neon signs, lamp posts, parked cars, traffic and people), "oculus" (looking up into a coffered
-    dome, a disc of sun on it from the opening at the top); "" is an empty
+    dome, a disc of sun on it from the opening at the top), "blocks" (a block cottage on a floating island under square
+    clouds, a square sun and a moon by day, a block figure waving; add_structure builds your own .nbt there); "" is an empty
     world. `props` then changes any of its settings (all the numbers and colours animate, with update_layer or
     set_keyframes like any layer's):
 
@@ -504,6 +505,26 @@ async def add_swf(path: str, open_as_project: bool = False, name: str | None = N
     with open(p, "rb") as f:
         src = "data:application/x-shockwave-flash;base64," + base64.b64encode(f.read()).decode()
     return await acall("add_swf", {"src": src, "file": os.path.basename(p), "open": open_as_project, "name": name, "x": x, "y": y}, timeout=900)
+
+
+@mcp.tool()
+async def add_structure(path: str, layer: str | None = None, x: float = 0, y: float = 0, z: float = 0, block: float = 1) -> dict:
+    """Build a block structure in 3D from a structure block's .nbt file (or a Sponge .schem schematic; up to 6 million
+    cells). Every block is placed on its grid with its shape (slabs, stairs, fences, panes, plants, torches, doors) and
+    drawn with Riptide's own pixel pictures by what it is made of; what glows lights the build. Without layer it opens
+    a new Block world: the build on a floating island (or a grassy floor, if it is wider than 20 blocks) under square
+    clouds, a square sun and moon, and a block figure, the camera framed on it. With layer (a world layer's id) it
+    is added to that world at x, y, z metres. block is the size of one block in metres. Returns the world's id."""
+    p = os.path.abspath(os.path.expanduser(path))
+    if not p.lower().endswith((".nbt", ".schem", ".schematic")):
+        raise RiptideError("That is not a .nbt or .schem file")
+    if not os.path.isfile(p):
+        raise RiptideError(f"No such file: {p}")
+    if os.path.getsize(p) > 50e6:
+        raise RiptideError("That file is over 50 MB")
+    with open(p, "rb") as f:
+        src = "data:application/octet-stream;base64," + base64.b64encode(f.read()).decode()
+    return await acall("add_structure", {"src": src, "file": os.path.basename(p), "layer": layer, "at": [x, y, z], "block": block}, timeout=300)
 
 
 @mcp.tool()

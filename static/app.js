@@ -4315,6 +4315,28 @@ const LIVE = (() => {
       return done(`added the image "${L.name}"`, { id: L.id });
     },
     // a Flash file: played, recorded and added as a video layer (with open true, it becomes the whole project)
+    add_structure: async a => {
+      const blob = await (await fetch(a.src)).blob(), f = new File([blob], a.file || 'build.nbt');
+      const id = await Blocks.importFile(f), A = S.assets[id];
+      let L = a.layer ? findL({ id: a.layer }) : null;
+      if (L && L.type !== 'world') throw new Error(`"${L.name}" is not a 3D world`);
+      // a world of its own, the Block world scene with this build in place of its cottage
+      if (!L) { L = addWorld('blocks'); const P = L.p.objects.find(o => o.type === 'structure'); P.asset = id; P.demo = ''; P.name = A.name;
+        // on a grassy floor, the figure just in front of it, the camera stood back enough to see it whole
+        // a build that fits stands on the floating island; a bigger one on a grassy floor
+        const [X, Y, Z] = A.size; P.at = [0, 0, 0];
+        if (X <= 20 && Z <= 20) L.p.objects.unshift({ type: 'structure', name: 'Island', at: [0, -11, 0], demo: 'island', block: 1 });
+        else { L.p.ground = 'floor'; L.p.groundColor = '#5f8f3a'; }
+        World.ensureIds(L.p.objects);
+        const fig = L.p.objects.find(o => o.type === 'blocky'); if (fig) { fig.at = [Math.min(3, X / 4), 0, Z / 2 + 2.5]; fig.turn = [0, 30, 0]; }
+        const cam = L.p.objects.find(o => o.type === 'camera'), d = Math.max(X, Y, Z) * 1.1 + 8, look = [0, Y * .35, 0];
+        if (cam) { cam.at = [d * .55, Y * .5 + 3, Z / 2 + d * .8]; const dx = look[0] - cam.at[0], dy = look[1] - cam.at[1], dz = look[2] - cam.at[2];
+          cam.turn = [Math.round(Math.atan2(dy, Math.hypot(dx, dz)) * 180 / Math.PI), Math.round(Math.atan2(-dx, -dz) * 180 / Math.PI), 0]; }
+        const cl = L.p.objects.find(o => o.type === 'blockclouds'); if (cl) cl.height = Math.max(34, Y + 20); }
+      else { const P = { type: 'structure', asset: id, name: A.name, at: a.at || [0, 0, 0], block: a.block || 1 }; (L.p.objects ||= []).push(P); World.ensureIds(L.p.objects); }
+      World.version++; refresh();
+      return done(`built "${A.name}" (${A.size.join(' × ')} blocks, ${A.blocks} placed) in "${L.name}"`, { id: L.id, asset: id, size: A.size, blocks: A.blocks });
+    },
     add_swf: async a => {
       const f = new File([await (await fetch(a.src)).blob()], a.file || 'movie.swf', { type: 'application/x-shockwave-flash' });
       if (a.open) { await openSwf(f, true); const L = S.layers[0]; if (!L) throw new Error(`could not open ${f.name}`); return done(`opened ${f.name}`, { id: L.id, w: S.w, h: S.h, dur: S.dur }); }

@@ -315,6 +315,10 @@ async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "
     "building" ("size" [w, h, d], "seed", "lit" %, "wall" "brick" | "darkbrick" | "concrete" | "tile" | "panel":
     storeys of lit rooms over shopfronts), a "sign" (a sign hanging out over a pavement: "text", "color", "kind" "neon"
     | "box", "glow", "flicker"), a "lamppost" ("reach", "power", "color") and "wires" ("count", "sag", "size" [length, 1, 1]).
+    A "blocky" is a block figure (six boxes on a skeleton, posed with "pose" like a person: bones "Hips", "Spine",
+    "Head", "RightArm", "LeftArm", "RightUpLeg", "LeftUpLeg"): "move" "idle" | "walk" | "wave", "height" m, "skin" an image
+    asset id of a 64 x 64 skin in the usual block-figure layout (else painted from "skinTone", "hair", "eyes", "shirt",
+    "pants", "shoes"), "outer" false to hide the skin's outer layer.
     A "coffers" is a coffered dome you stand in the middle of ("radius", "rows", "cols", "span" degrees round, "from"/"to"
     degrees up, "steps", "depth", "rib" m, "color", "ambient" % light in the shade, "ambientColor"); a "sunbeam" is the
     sun through one opening, shining along its own +z ("size" [disc width m, 1, 1], "reach", "soft", "power", "color").

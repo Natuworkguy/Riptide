@@ -60,6 +60,11 @@ def shaped(data: Path, base: np.ndarray, gender: str) -> np.ndarray:
     v = base + target(m / f"universal-{gender}-young-averagemuscle-averageweight.target.gz", len(base))
     for race in ("african", "asian", "caucasian"):
         v += target(m / f"{race}-{gender}-young.target.gz", len(base)) / 3
+    # eyes open and awake: the base mesh's lids hang half shut, which reads as sleepy, or worse
+    e = data / "targets" / "eyes"
+    for side in ("l", "r"):
+        for name, w in (("height2-incr", 0.9), ("height1-incr", 0.4), ("eyefold-up", 0.5), ("scale-incr", 0.25)):
+            v += target(e / f"{side}-eye-{name}.target.gz", len(base)) * w
     return v
 
 
@@ -225,6 +230,7 @@ def build(data: Path, eye_png: Path, name: str, look: dict):
     neck_y = bones["mixamorig:Neck"]["head"][1]
     head = bones["mixamorig:Head"]["head"]
     hands = [bones[f"mixamorig:{s}Hand"]["head"] for s in ("Left", "Right")]
+    forearms = [bones[f"mixamorig:{s}ForeArm"]["head"] for s in ("Left", "Right")]
     # the scalp: the body's skin on the head above the ears, but not the face or the ears (MakeHuman's masks)
     tex = data / "textures"
     face_m = np.asarray(Image.open(tex / "mpfb_face.jpg").convert("L").resize((512, 512)), float) / 255
@@ -236,6 +242,13 @@ def build(data: Path, eye_png: Path, name: str, look: dict):
     # where the eyes are: their centres, and the level and depth of them
     eye_c = {g: v[sorted({i for gg, c in faces if gg == g for i, _ in c})].mean(0) for g in ("helper-l-eye", "helper-r-eye")}
     eyes_y = np.mean([c[1] for c in eye_c.values()])
+    # where each eye looks: from its centre to MakeHuman's eye-target joint
+    def cube(name):
+        return v[sorted({i for gg, c in faces if gg == name for i, _ in c})].mean(0)
+    gaze = {}
+    for g, side in (("helper-l-eye", "l"), ("helper-r-eye", "r")):
+        to = cube(f"joint-{side}-eye-target") - eye_c[g]
+        gaze[g] = to / max(np.linalg.norm(to), 1e-9)
     eye_z = np.mean([c[2] for c in eye_c.values()])
     scalp, feet, brows = [], [], []
     for g, corners in faces:
@@ -243,9 +256,19 @@ def build(data: Path, eye_png: Path, name: str, look: dict):
         ys = pts[:, 1]
         c = pts.mean(0)
         if g == "body":
-            parts["skin"].append(corners)
+            # the clothes are the body's own skin, coloured as cloth: nothing to tear through when they bend.
+            # The feet go under the shoes, the hands and head stay bare
             if ys.max() < ankle_y + 0.05:
                 feet.append(corners)
+                continue
+            beyond_wrist = any(np.linalg.norm(c - h) < 0.25 and np.dot(c - h, (h - fa) / max(np.linalg.norm(h - fa), 1e-9)) > -0.035
+                               for h, fa in zip(hands, forearms))
+            if c[1] < neck_y - 0.022 and c[1] > hips_y + 0.03 and not beyond_wrist:
+                parts["top"].append(corners)
+            elif c[1] <= hips_y + 0.03 and c[1] > ankle_y + 0.03 and not beyond_wrist:
+                parts["pants"].append(corners)
+            else:
+                parts["skin"].append(corners)
             not_ear = max(masked(ear_m, t) for _, t in corners) < 0.2
             not_face = max(masked(face_m, t) for _, t in corners) < 0.35
             if c[1] > neck_y + 0.03 and not_ear and (
@@ -256,20 +279,15 @@ def build(data: Path, eye_png: Path, name: str, look: dict):
             for ec in eye_c.values():
                 if eyes_y + 0.016 < c[1] < eyes_y + 0.027 and abs(c[0] - ec[0]) < 0.024 - abs(c[1] - eyes_y - .021) * .5 and c[2] > eye_z - 0.006:
                     brows.append([uvs[t] for _, t in corners])
-        elif g == "helper-tights":
-            # a crew neck, cuffs short of the wrists, and the feet left to the shoes
-            if ys.max() > neck_y - 0.01 or ys.min() < ankle_y + 0.03:
-                continue
-            if abs(c[0]) > 0.25 and min(np.linalg.norm(c - h) for h in hands) < 0.07:
-                continue
-            parts["top" if ys.mean() > hips_y + 0.02 else "pants"].append(corners)
         elif g in eye_c:
             # the eyeball: white, a brown iris and a black pupil, by how far from straight ahead each part is
             d = (c - eye_c[g]) / max(np.linalg.norm(c - eye_c[g]), 1e-9)
-            parts["pupil" if d[2] > 0.982 else "iris" if d[2] > 0.86 else "limbus" if d[2] > 0.83 else "sclera"].append(corners)
+            k = float(np.dot(d, gaze[g]))
+            parts["pupil" if k > 0.982 else "iris" if k > 0.86 else "limbus" if k > 0.83 else "sclera"].append(corners)
 
     # clothes cut along smooth lines, not the mesh's staircase
-    smooth_edges(v, parts["top"] + parts["pants"], rounds=10)
+    smooth_edges(v, parts["top"], rounds=6, keep=0.6)
+    smooth_edges(v, parts["pants"], rounds=6, keep=0.6)
 
     # short hair: the scalp grown out a few millimetres, its own copy of those vertices
     body_tris = np.array([[c[0][0], c[k][0], c[k + 1][0]] for g, c in faces if g == "body" for k in range(1, len(c) - 1)])
@@ -280,21 +298,27 @@ def build(data: Path, eye_png: Path, name: str, look: dict):
     parts["hair"] = [[(shell[vi], ti) for vi, ti in c] for c in scalp]
     smooth_edges(v, parts["hair"], rounds=12)
     hair_of = {shell[vi]: vi for vi in scalp_v}
-    # shoes: the feet grown out and smoothed, so toes do not show through
-    foot_v = sorted({i for c in feet for i, _ in c})
-    fshell = {vi: len(v) + k for k, vi in enumerate(foot_v)}
-    fp = v[foot_v] + vn[foot_v] * 0.007
-    nb = {k: set() for k in range(len(foot_v))}
-    pos_of = {vi: k for k, vi in enumerate(foot_v)}
-    for c in feet:
-        ids = [pos_of[i] for i, _ in c]
-        for a in ids:
-            nb[a].update(b for b in ids if b != a)
-    for _ in range(6):
-        fp = np.array([0.5 * fp[k] + 0.5 * fp[list(nb[k])].mean(0) if nb[k] else fp[k] for k in range(len(fp))])
-    v = np.vstack([v, fp])
-    parts["shoes"] = [[(fshell[vi], ti) for vi, ti in c] for c in feet]
-    hair_of.update({fshell[vi]: vi for vi in foot_v})
+    # shoes: a rounded solid around each foot (the convex hull of its skin, grown a little), so there are no toes;
+    # each corner of it moves with the foot vertex it came from
+    from scipy.spatial import ConvexHull
+    foot_v = np.array(sorted({i for c in feet for i, _ in c}))
+    parts["shoes"] = []
+    for side in (1, -1):
+        mine = foot_v[v[foot_v][:, 0] * side > 0]
+        hull = ConvexHull(v[mine])
+        used = sorted(set(hull.simplices.reshape(-1)))
+        mid = v[mine].mean(0)
+        grow = v[mine[used]] - mid
+        grow = v[mine[used]] + grow / np.maximum(np.linalg.norm(grow, axis=1, keepdims=True), 1e-9) * 0.006
+        at = {u: len(v) + k for k, u in enumerate(used)}
+        v = np.vstack([v, grow])
+        for tri in hull.simplices:
+            a, b, c3 = (v[at[t]] for t in tri)
+            # facing outwards
+            if np.dot(np.cross(b - a, c3 - a), (a + b + c3) / 3 - mid) < 0:
+                tri = tri[[0, 2, 1]]
+            parts["shoes"].append([(at[t], -1) for t in tri])
+        hair_of.update({at[u]: int(mine[u]) for u in used})
 
     # vertices: one for each (position, texture point) a face uses
     index: dict[tuple, int] = {}

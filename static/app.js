@@ -3111,7 +3111,7 @@ function refresh(full = true, record = true) {
 let projectName = 'Untitled', fileHandle = null;
 const FS = 'showSaveFilePicker' in window;
 // .rip is the project file; .wob files from before the rename still open
-const FILE_TYPES = [{ description: 'Riptide project', accept: { 'application/x-riptide+json': ['.rip', '.wob'] } }];
+const FILE_TYPES = [{ description: 'Riptide project or Flash file', accept: { 'application/x-riptide+json': ['.rip', '.wob'], 'application/x-shockwave-flash': ['.swf'] } }];
 // video files live outside the project state (so undo stays fast) and are embedded only when saving
 async function serialize() {
   const P = JSON.parse(JSON.stringify(S));
@@ -3152,13 +3152,13 @@ function loadText(text, name, handle = null) {
   refresh(true, false); resetHistory(); setDirty(false); setMode(S.mode || 'video'); status('Opened ' + name);
 }
 async function confirmDiscard() { return !dirty || await UI.dialog({ title: 'Discard unsaved changes?', body: `${projectName}.rip has changes that are not saved.`, ok: 'Discard' }); }
-const picker = Object.assign(document.createElement('input'), { type: 'file', accept: '.rip,.wob,application/json' });
-picker.onchange = async () => { const f = picker.files[0]; picker.value = ''; if (!f) return;
+const picker = Object.assign(document.createElement('input'), { type: 'file', accept: '.rip,.wob,.swf,application/json' });
+picker.onchange = async () => { const f = picker.files[0]; picker.value = ''; if (!f) return; if (Swf.isSwf(f)) return openSwf(f);
   try { loadText(await f.text(), f.name); } catch (e) { UI.alert('Could not open ' + f.name, e.message); } };
 async function openFile() {
   if (!await confirmDiscard()) return;
   if (!('showOpenFilePicker' in window)) return picker.click();
-  try { const [h] = await showOpenFilePicker({ types: FILE_TYPES }); const f = await h.getFile(); loadText(await f.text(), f.name, h); }
+  try { const [h] = await showOpenFilePicker({ types: FILE_TYPES }); const f = await h.getFile(); if (Swf.isSwf(f)) return openSwf(f); loadText(await f.text(), f.name, h); }
   catch (e) { if (e.name !== 'AbortError') UI.alert('Could not open file', e.message); }
 }
 async function newFile() {
@@ -3170,7 +3170,7 @@ $('#new').onclick = newFile; $('#open').onclick = openFile; $('#save').onclick =
 addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
 // drop files anywhere: images, video and audio are imported (placed where you drop them on the viewer), a .rip (or old .wob) opens.
 // Images dragged straight from another web page arrive as a URL and are fetched.
-const isMedia = f => /^(image|audio|video)\//.test(f.type) || !!R3D.modelFormat(f.name);
+const isMedia = f => /^(image|audio|video)\//.test(f.type) || !!R3D.modelFormat(f.name) || Swf.isSwf(f);
 const dragKinds = e => [...e.dataTransfer.types];
 addEventListener('dragover', e => { const t = dragKinds(e); if (t.includes('Files') || t.includes('text/uri-list')) { e.preventDefault(); document.body.classList.add('dropping'); } });
 addEventListener('dragleave', e => { if (!e.relatedTarget) document.body.classList.remove('dropping'); });
@@ -3689,6 +3689,25 @@ const readURL = f => new Promise((res, rej) => { const r = new FileReader(); r.o
 // Each video asset keeps its file as a Blob (VBLOB) with an object URL (VURL); each video layer gets its own
 // <video> element so two layers can show different moments of the same clip.
 const VBLOB = {}, VURL = {}, VEL = {};
+// a Flash file: played and recorded (swf.js), then a video like any other; its length is known from the recording
+async function swfAsset(f, quiet = false) {
+  let r; try { r = await Swf.toVideo(f, status); } catch (e) { if (quiet) throw e; UI.alert('Could not open ' + f.name, e.message); return null; }
+  const id = await addVideoAsset(r.file); if (!id) return null;
+  const a = S.assets[id]; if (!Number.isFinite(a.dur) || !a.dur) a.dur = r.dur; a.name = f.name;
+  return { id, ...r };
+}
+// Opening a Flash file starts a project the size of its stage and the length of its recording, the recording filling it
+async function openSwf(f, quiet = false) {
+  status(`Opening ${f.name}…`);
+  const keep = S; S = { ...S, assets: { ...S.assets } };
+  let got; try { got = await swfAsset(f, quiet); } catch (e) { S = keep; throw e; } if (!got) { S = keep; return; }
+  const a = S.assets[got.id];
+  S = { w: got.w, h: got.h, bg: '#000000', dur: Math.min(600, Math.ceil(a.dur * FPS) / FPS), layers: [], assets: { [got.id]: a }, sounds: {}, audioTracks: [] };
+  selClip = null; projectName = f.name.replace(/\.swf$/i, ''); fileHandle = null; sel = null; selKey = null; selKeys = []; time = 0;
+  const L = makeLayer('video', { asset: got.id, x: got.w / 2, y: got.h / 2, w: got.w, h: got.h, radius: 0, strokeWidth: 0 }, projectName);
+  L.in = 0; L.out = S.dur;
+  refresh(true, false); resetHistory(); setDirty(true); status(`Opened ${f.name}: ${got.w}×${got.h}, ${fmtTime(a.dur)}`);
+}
 async function addVideoAsset(f) {
   if (f.size > 500e6) { status(`${f.name} is over 500 MB`); return null; }
   const url = URL.createObjectURL(f), v = document.createElement('video'); v.muted = true; v.preload = 'metadata'; v.src = url;
@@ -3783,6 +3802,7 @@ async function addAssets(files) {
   S.assets ||= {}; const ids = [];
   for (const f of files) {
     if (f.type.startsWith('audio/')) { if (f.size > 40e6) status(`${f.name} is over 40 MB`); else await addSound(f.name, await readURL(f)); continue; }
+    if (Swf.isSwf(f)) { const got = await swfAsset(f); if (got) ids.push(got.id); continue; }
     if (f.type.startsWith('video/')) { const id = await addVideoAsset(f); if (id) ids.push(id); continue; }
     if (R3D.modelFormat(f.name)) { const id = await addModelAsset(f); if (id) ids.push(id); continue; }
     if (!f.type.startsWith('image/')) { status(`${f.name} is not an image, video or audio file`); continue; }
@@ -3864,7 +3884,7 @@ function renderAssets() {
       <button class="ib" data-rm="${id}" title="Remove asset">${ICON.trash}</button></div>`; }).join('')
     : `<button class="assetdrop" id="assetEmpty">${ICON.upload}<b>Import media</b><span>Images, video or audio. You can also drop or paste files.</span></button>`;
 }
-const assetInput = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*,video/*,audio/*,.glb,.gltf,.obj', multiple: true });
+const assetInput = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*,video/*,audio/*,.glb,.gltf,.obj,.swf', multiple: true });
 const modelInput = Object.assign(document.createElement('input'), { type: 'file', accept: '.glb,.gltf,.obj' });
 modelInput.onchange = async () => { const fs = [...modelInput.files]; modelInput.value = ''; const ids = await addAssets(fs); ids.forEach(id => addImageLayer(id)); };
 assetInput.onchange = async () => { const fs = [...assetInput.files]; assetInput.value = ''; await addAssets(fs); };
@@ -4293,6 +4313,14 @@ const LIVE = (() => {
       if (!ids.length) throw new Error(`could not add ${a.file || 'the image'}`);
       addImageLayer(ids[0], a.x ?? undefined, a.y ?? undefined); const L = cur(); if (a.name) L.name = String(a.name);
       return done(`added the image "${L.name}"`, { id: L.id });
+    },
+    // a Flash file: played, recorded and added as a video layer (with open true, it becomes the whole project)
+    add_swf: async a => {
+      const f = new File([await (await fetch(a.src)).blob()], a.file || 'movie.swf', { type: 'application/x-shockwave-flash' });
+      if (a.open) { await openSwf(f, true); const L = S.layers[0]; if (!L) throw new Error(`could not open ${f.name}`); return done(`opened ${f.name}`, { id: L.id, w: S.w, h: S.h, dur: S.dur }); }
+      const got = await swfAsset(f, true); if (!got) throw new Error(`could not bring in ${f.name}`);
+      addImageLayer(got.id, a.x ?? undefined, a.y ?? undefined); const L = cur(); if (a.name) L.name = String(a.name);
+      return done(`added the Flash file "${L.name}" as a video`, { id: L.id, dur: S.assets[got.id].dur });
     },
     update_layer: a => {
       const L = findL(a), t = a.time != null ? +a.time : time, props = a.props || {};

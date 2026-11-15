@@ -480,6 +480,25 @@ IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
 
 
 @mcp.tool()
+async def add_swf(path: str, open_as_project: bool = False, name: str | None = None, x: float | None = None, y: float | None = None) -> dict:
+    """Bring in a Flash file (.swf; up to 100 MB). Riptide plays it with Ruffle, the free Flash player (fetched once,
+    the first time), and records what it shows and its sound into a video: a timeline animation for its whole
+    length, a one-frame file (ActionScript, a game) for 15 seconds. With open_as_project the recording becomes a new
+    project the size of the Flash stage and as long as the recording; otherwise it is added as a video layer.
+    Interactive content just plays: nothing clicks it. Returns the layer id."""
+    p = os.path.abspath(os.path.expanduser(path))
+    if not p.lower().endswith(".swf"):
+        raise RiptideError("That is not a .swf file")
+    if not os.path.isfile(p):
+        raise RiptideError(f"No such file: {p}")
+    if os.path.getsize(p) > 100e6:
+        raise RiptideError("That file is over 100 MB")
+    with open(p, "rb") as f:
+        src = "data:application/x-shockwave-flash;base64," + base64.b64encode(f.read()).decode()
+    return await acall("add_swf", {"src": src, "file": os.path.basename(p), "open": open_as_project, "name": name, "x": x, "y": y}, timeout=900)
+
+
+@mcp.tool()
 async def add_image(path: str, name: str | None = None, x: float | None = None, y: float | None = None) -> dict:
     """Add a picture from this computer (png, jpg, webp, gif or svg; up to 15 MB) as an image layer, sized to fit the
     canvas, centred unless x and y place its centre. Returns the new layer id."""

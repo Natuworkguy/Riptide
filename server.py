@@ -21,6 +21,7 @@ from pathlib import Path
 from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory
 
 import cutout
+import ruffle
 import native
 from launch import open_link
 import render_host as render_host_module
@@ -364,6 +365,21 @@ def cutout_mask():
 def cutout_status():
     cutout.ready()
     return jsonify(cutout.status())
+
+
+@app.get("/api/ruffle/status")
+def ruffle_status():
+    # the Flash player for .swf files (ruffle.py): fetched the first time it is asked for
+    ruffle.ready()
+    return jsonify(ruffle.status())
+
+
+@app.get("/ruffle/<name>")
+def ruffle_file(name):
+    f = ruffle.file(name)
+    if not f:
+        abort(404)
+    return send_file(f, mimetype="application/wasm" if name.endswith(".wasm") else "text/javascript", max_age=86400)
 
 
 @app.get("/<path:p>")

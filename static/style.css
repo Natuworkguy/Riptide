@@ -669,3 +669,12 @@ html.mac-app .sced header{padding-left:84px}html.mac-app.mac-full .sced header{p
 .sess-wants{position:fixed;top:54px;left:50%;transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:10px;padding:8px 8px 8px 14px;border-radius:12px;
   background:var(--panel,#1c1c1c);border:1px solid var(--line-2,#333);box-shadow:0 10px 30px rgba(0,0,0,.45);font-size:13px;animation:sess-in .25s ease both}
 @keyframes sess-in{from{opacity:0;transform:translate(-50%,-8px)}}
+
+/* a Flash file playing while it is recorded */
+.swfrec { position: fixed; inset: 0; z-index: 400; display: grid; place-items: center; background: rgba(0,0,0,.6); }
+.swfrec .swfbox { background: var(--panel, #1c1c1e); border: 1px solid var(--line, #333); border-radius: 12px; padding: 14px; display: grid; gap: 10px; max-width: 92vw; }
+.swfrec .swfstage { position: relative; overflow: hidden; border-radius: 6px; background: #000; }
+.swfrec .swfstage > * { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.swfrec .swfbar { height: 4px; border-radius: 2px; background: rgba(255,255,255,.12); overflow: hidden; }
+.swfrec .swfbar i { display: block; height: 100%; width: 0; background: var(--accent, #4aa3ff); }
+.swfrec .swfrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--muted, #aaa); }

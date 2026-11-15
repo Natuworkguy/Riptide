@@ -29,7 +29,76 @@ const Actors = (() => {
   }
   const BODY = [[-2.25, .3], [2.15, .3], [2.3, .44], [2.27, .62], [1.65, .78], [.6, .9], [-1.3, .93], [-2.12, .9], [-2.3, .64]];
   const CABIN = [[.6, .88], [.02, 1.33], [-.86, 1.34], [-1.38, .91]];
+  // ----- a real-looking car: built by tools/make_cars.py (a sedan, a hatchback, an SUV, a taxi) -----
+  const CAR_KINDS = [['sedan', 'Saloon'], ['hatch', 'Hatchback'], ['suv', 'SUV'], ['taxi', 'Taxi'], ['classic', 'Simple (the old block car)']];
+  const carCache = new Map(), carLooks = new Map();
+  function carModel(kind) {
+    let c = carCache.get(kind);
+    if (!c) {
+      c = {}; carCache.set(kind, c); World.pending++;
+      new T.GLTFLoader().load(`cars/${kind}.glb`, gl => {
+        c.scene = gl.scene; c.info = gl.parser.json.extras || {};
+        c.wheel = gl.scene.getObjectByName('wheel'); c.wheel.removeFromParent();
+        gl.scene.traverse(n => { if (n.isMesh) { n.castShadow = n.receiveShadow = true; n.material = carMaterial(n.material); } });
+        World.pending--; World.version++; SceneEd.redraw?.(); if (typeof render === 'function') render();
+      }, undefined, () => { c.failed = true; World.pending--; });
+    }
+    return c.scene ? c : null;
+  }
+  // what each part is made of, made to look real: clear-coated paint, deep glass, lenses that light up
+  function carMaterial(m) {
+    const name = m.name, P = (o) => new T.MeshPhysicalMaterial({ name, ...o });
+    if (name === 'paint') return P({ map: m.map, color: m.color, roughness: .38, metalness: .55, clearcoat: 1, clearcoatRoughness: .04 });
+    if (name === 'glass') return P({ color: new T.Color('#06080a'), roughness: .02, metalness: .1, clearcoat: 1, clearcoatRoughness: 0, envMapIntensity: 1.6 });
+    if (name === 'trim_gloss') return P({ color: new T.Color('#050506'), roughness: .1, clearcoat: 1, clearcoatRoughness: .05 });
+    if (name === 'headlight') return P({ color: new T.Color('#5a6068'), roughness: .12, metalness: .3, clearcoat: 1, clearcoatRoughness: .05, envMapIntensity: .5, emissive: new T.Color('#fff2dc'), emissiveIntensity: 0 });
+    if (name === 'drl') return P({ color: new T.Color('#ffffff'), roughness: .2, emissive: new T.Color('#eef4ff'), emissiveIntensity: 0 });
+    if (name === 'taillight') return P({ color: new T.Color('#5a0306'), roughness: .05, clearcoat: 1, emissive: new T.Color('#ff1208'), emissiveIntensity: 0 });
+    if (name === 'chrome' || name === 'mirror') return P({ color: m.color, roughness: .06, metalness: 1 });
+    if (name === 'alloy') return P({ color: m.color, roughness: .25, metalness: 1, clearcoat: .6 });
+    if (name === 'sign') return P({ color: m.color, emissive: new T.Color('#ffd27a'), emissiveIntensity: 0 });
+    return m;
+  }
+  // its paint in the colour given, and its lights on or off: each combination its own set of materials
+  function carLook(c, P) {
+    const key = [P.model, P.color, P.finish, P.lights !== false].join('|');
+    let set = carLooks.get(key);
+    if (!set) {
+      set = new Map(); carLooks.set(key, set);
+      const on = P.lights !== false;
+      c.scene.traverse(n => { if (!n.isMesh || set.has(n.material)) return;
+        const m = n.material, name = m.name; let x = m;
+        if (name === 'paint') { x = m.clone(); x.color = new T.Color(P.color || '#c0392b');
+          if (P.finish && P.finish !== 'paint') { const f = mat(P.finish, P.color || '#c0392b'); x = f.clone(); } }
+        else if (name === 'headlight') { x = m.clone(); x.emissiveIntensity = on ? 6 : 0; if (on) x.color = new T.Color('#cfd6dd'); }
+        else if (name === 'drl') { x = m.clone(); x.emissiveIntensity = on ? 9 : .2; }
+        else if (name === 'taillight') { x = m.clone(); x.emissiveIntensity = on ? 3.2 : 0; }
+        else if (name === 'sign') { x = m.clone(); x.emissiveIntensity = on ? 3 : 0; }
+        set.set(m, x); });
+    }
+    return set;
+  }
+  function realCar(P, t) {
+    const c = carModel(P.model || 'sedan'); if (!c) return null;
+    const g = new T.Group(), body = c.scene.clone(), look = carLook(c, P);
+    body.traverse(n => { if (n.isMesh) n.material = look.get(n.material) || n.material; });
+    g.add(body);
+    const dist = travelled(P, t), R = c.info.wheel_r || .33, spin = dist / R;
+    const h0 = World.heading(P, t - .15), h1 = World.heading(P, t + .15);
+    let steer = 0; if (h0 != null && h1 != null) { let d = h1 - h0; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; steer = clamp(d * 2.2, -.55, .55); }
+    for (const [x, y, z] of c.info.wheels || []) {
+      const holder = new T.Group(), spinner = new T.Group(), w = c.wheel.clone();
+      w.traverse(n => { if (n.isMesh) n.material = look.get(n.material) || n.material; });
+      if (x < 0) w.rotation.y = Math.PI;
+      holder.position.set(x, y, z); if (z > 0) holder.rotation.y = steer;
+      spinner.rotation.x = spin; spinner.add(w); holder.add(spinner); g.add(holder);
+    }
+    if (P.beams) for (const x of [-.6, .6]) { const s = new T.SpotLight(0xfff1d8, 1.1, 40 * M, deg(24), .6, 0); s.position.set(x, .7, 2.3); s.target.position.set(x * 1.4, -.2, 16); s.castShadow = false; g.add(s, s.target); }
+    if (P.lights !== false) for (const x of [-.6, .6]) { const r = new T.PointLight(0xff1a0a, .5, 3 * M, 2); r.position.set(x, .8, -2.5); g.add(r); }
+    g.scale.setScalar(M); return g;
+  }
   World.custom.car = (P, t = 0) => {
+    if (P.model !== 'classic') { const real = realCar(P, t); if (real) return real; }
     const g = new T.Group(), paint = mat(P.finish || 'paint', P.color || '#c0392b');
     g.add(new T.Mesh(once('carBody', () => extrude(BODY, 1.84, .06)), paint));
     const glass = new T.Mesh(once('carCabin', () => extrude(CABIN, 1.5, .05)), mat('glass', '#20262c'));
@@ -281,7 +350,7 @@ const Actors = (() => {
   const color = (k, v, label) => `<label class="f"><span>${label}</span><input type="color" data-k="${k}" value="${v}"></label>`;
   SceneEd.extras.push({
     inspector(P) {
-      if (P.type === 'car') return `<div class="hd">Car</div><label class="f"><span>Lights</span>${opt('lights', P.lights === false ? 'off' : '', [['', 'On'], ['off', 'Off']])}</label>
+      if (P.type === 'car') return `<div class="hd">Car</div><label class="f"><span>Kind</span>${opt('model', P.model || 'sedan', CAR_KINDS)}</label><label class="f"><span>Lights</span>${opt('lights', P.lights === false ? 'off' : '', [['', 'On'], ['off', 'Off']])}</label>
         <label class="f"><span>Beams</span>${opt('beams', P.beams ? '1' : '', [['', 'None'], ['1', 'Light the road (night)']])}</label>
         <p class="note">Key its place two or more times and it drives: its wheels turn and steer, and it faces the way it goes.</p>`;
       if (P.type === 'person') return `<div class="hd">Person</div><label class="f"><span>Body</span>${opt('body', P.body || 'man', [['man', 'Man'], ['woman', 'Woman'], ['mannequin', 'Mannequin']])}</label>

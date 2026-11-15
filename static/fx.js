@@ -30,7 +30,7 @@ const FX = (() => {
   function wetMirror() {
     const r = new T.Reflector(new T.PlaneGeometry(1, 1), { textureWidth: 1024, textureHeight: 1024, clipBias: .003, color: 0xffffff });
     r.rotation.x = -Math.PI / 2;
-    const m = r.material; m.transparent = true; m.uniforms.uWet = { value: .5 };
+    const m = r.material; m.polygonOffset = true; m.polygonOffsetFactor = -6; m.polygonOffsetUnits = -12; m.transparent = true; m.uniforms.uWet = { value: .5 };
     m.vertexShader = m.vertexShader.replace('void main() {', 'varying vec3 vW;\nvoid main() { vW = (modelMatrix * vec4(position, 1.)).xyz;');
     m.fragmentShader = m.fragmentShader.replace('varying vec4 vUv;', `varying vec4 vUv; varying vec3 vW; uniform float uWet; ${NOISE}`)
       .replace('gl_FragColor = vec4( blendOverlay( base.rgb, color ), 1.0 );', `vec2 q = vW.xz / 100.; float pud = smoothstep(.45, .62, vn(q * .35) * .65 + vn(q * 1.3) * .35);
@@ -48,7 +48,7 @@ const FX = (() => {
     // wet ground
     const wet = o.ground !== 'ocean' && o.ground !== 'none' ? clamp(+o.wet || 0, 0, 100) / 100 : 0;
     if (wet > 0 && !B.wetFx) { B.wetFx = wetMirror(); B.scene.add(B.wetFx); }
-    if (B.wetFx) { B.wetFx.visible = wet > 0; B.wetFx.position.set(cam.position.x, ground + .6, cam.position.z); B.wetFx.scale.setScalar(40000); B.wetFx.material.uniforms.uWet.value = wet; }
+    if (B.wetFx) { B.wetFx.visible = wet > 0; B.wetFx.position.set(cam.position.x, ground + 2.4, cam.position.z); B.wetFx.scale.setScalar(40000); B.wetFx.material.uniforms.uWet.value = wet; }
     if (B.land?.material) { const m = B.land.material; m.userData.dry ??= m.roughness; m.roughness = m.userData.dry * (1 - wet * .8); m.envMapIntensity = 1 + wet * 1.5; }
     // the size of a point on the screen, for effects' particles
     const px = (S.h * (k || 1)) / (2 * Math.tan(deg(cam.fov) / 2));
@@ -203,25 +203,27 @@ const FX = (() => {
 
   // ----- a scene to start from: a wet neon street at night -----
   World.PRESETS.neon = { label: 'Neon night', hint: 'A wet city street at night: rain, neon, traffic, people',
-    p: { sky: 'night', sunEl: 18, sunAz: 160, sunPower: 60, clouds: 60, wind: 2, ground: 'floor', groundColor: '#1d1e22', floorFinish: '', fog: 22, dust: 0, rain: 45, wet: 80,
-      eye: 1.2, heading: 0, pitch: 2, travel: 0, lens: 28, focus: 0, dof: 25, exposure: .1, bloom: 40, grain: 28, fringe: 22, ao: 30, streaks: 45, flare: 0, godrays: 0,
+    p: { sky: 'night', sunEl: 18, sunAz: 160, sunPower: 60, clouds: 60, wind: 2, ground: 'floor', groundColor: '#1a1b1e', floorFinish: '', fog: 18, dust: 0, rain: 25, wet: 85,
+      eye: 1.1, heading: 4, pitch: 1, travel: 0, lens: 32, focus: 9, dof: 8, exposure: .15, bloom: 35, grain: 20, fringe: 12, ao: 30, streaks: 25, flare: 0, godrays: 0,
       letterbox: '2.39', shutter: 180, render: 'preview' },
     objects: d => {
-      const out = [], colors = ['#ff2fb0', '#29e7ff', '#ffb02e', '#8a5bff', '#3dff8a'], words = ['MOTEL', 'OPEN 24H', 'NOODLES', 'BAR', 'ARCADE', 'TATTOO', 'LIQUOR', 'DINER'];
+      // a real street: tarmac between kerbs and paving, shopfronts under storeys of rooms, signs hanging out over the
+      // pavement, lamp posts, cars parked along both kerbs, traffic, people walking
+      const out = [{ type: 'street', name: 'Street', roadWidth: 12, pavement: 4, size: [1, 1, 240], at: [0, 0, -60] }];
+      const colors = ['#ff3b6b', '#2fe0ff', '#ffb02e', '#9b6bff', '#3dff8a'], words = ['BAR', 'HOTEL', 'RAMEN', 'KARAOKE', 'OPEN', 'CLUB', 'SUSHI', 'LIVE'];
+      const paint = ['#1b1d22', '#8c9096', '#e8e6e0', '#5a0f12', '#22334a', '#3a3d40'], kinds = ['sedan', 'hatch', 'suv', 'sedan'];
       for (let i = 0; i < 8; i++) for (const side of [-1, 1]) {
-        const z = -6 - i * 14, w = 10 + (i * 7 + (side > 0 ? 3 : 0)) % 6, h = 14 + ((i * 13 + side * 5 + 20) % 40);
-        out.push({ type: 'building', name: `Building ${out.length + 1}`, at: [side * (9 + w / 2), 0, z], size: [w, h, 12], lit: 35 + (i * 17) % 40, seed: i * 2 + (side > 0 ? 1 : 0), glow: 1.1 });
-        if (i % 2 === (side > 0 ? 0 : 1)) out.push({ type: 'neon', text: words[(i + (side > 0 ? 3 : 0)) % words.length], color: colors[(i + (side > 0 ? 2 : 0)) % colors.length], glow: 4, flicker: i === 3 ? '1' : '',
-          at: [side * 8.9, 4.2, z + 3], turn: [0, side > 0 ? -90 : 90, 0], size: [1, 1.1, 1] });
-        if (i < 6) out.push({ type: 'light', light: 'spot', name: 'Street light', at: [side * 6.5, 6.5, z - 4], turn: [-90, 0, 0], angle: 38, soft: 60, power: 160, color: '#ffc77a', beam: 40, reach: 7, shadows: false });
+        const z = -4 - i * 13, w = 10 + (i * 7 + (side > 0 ? 3 : 0)) % 6, k = side > 0 ? 1 : 0;
+        out.push({ type: 'building', name: `Building ${out.length}`, at: [side * (10 + w / 2), 0, z], size: [w, 16 + ((i * 13 + side * 5 + 20) % 30), 12], seed: i * 2 + k, lit: 50 });
+        out.push({ type: 'sign', name: 'Sign', text: words[(i + k * 3) % 8], color: colors[(i + side + 5) % 5], at: [side * 9.3, 4.2, z + 2.5], size: [.7, 2.8, .22], glow: 5, flicker: i === 3 && side > 0 ? '1' : '' });
+        if (i < 6) out.push({ type: 'lamppost', name: 'Lamp post', at: [side * 6.6, .14, z - 5], turn: [0, 90 + side * 90, 0], reach: 1.6, power: 260 });
+        if (i % 2 === 0) out.push({ type: 'car', name: 'Parked car', model: kinds[(i + k) % 4], color: paint[(i * 2 + k) % 6], lights: false, at: [side * 4.9, 0, z - 2], turn: [0, side > 0 ? 0 : 180, 0] });
       }
-      out.push({ type: 'car', name: 'Car', color: '#0e0f12', finish: 'paint', face: 'travel', beams: '1',
-        keys: { at: [{ t: 0, v: [1.8, 0, -90] }, { t: d * .6, v: [1.8, 0, -25] }, { t: d, v: [2.2, 0, 4] }] } });
-      out.push({ type: 'car', name: 'Car going away', color: '#8a1414', finish: 'paint', face: 'travel', keys: { at: [{ t: 0, v: [-1.8, 0, -8] }, { t: d, v: [-1.8, 0, -70] }] } });
-      out.push({ type: 'crowd', name: 'People on the left', count: 14, move: 'walk', at: [-7.2, 0, -30], size: [2.5, 1, 50], seed: 3 });
-      out.push({ type: 'crowd', name: 'People on the right', count: 14, move: 'walk', at: [7.2, 0, -30], size: [2.5, 1, 50], seed: 11 });
+      out.push({ type: 'car', name: 'Car', model: 'sedan', color: '#101114', beams: '1', face: 'travel', keys: { at: [{ t: 0, v: [1.9, 0, -40] }, { t: d, v: [1.9, 0, -2] }] } });
+      out.push({ type: 'car', name: 'Taxi', model: 'taxi', color: '#e8b51a', face: 'travel', keys: { at: [{ t: 0, v: [-1.9, 0, 2] }, { t: d, v: [-1.9, 0, -45] }] } });
+      out.push({ type: 'crowd', name: 'People on the left', count: 12, move: 'walk', at: [-8, .14, -30], size: [2.4, 1, 50], seed: 3 });
+      out.push({ type: 'crowd', name: 'People on the right', count: 12, move: 'walk', at: [8, .14, -30], size: [2.4, 1, 50], seed: 11 });
       out.push({ type: 'fx', name: 'Steam', kind: 'steam', amount: 50, scale: 1.2, at: [-3.5, 0, -18] });
-      out.push({ type: 'camera', name: 'Low on the road', lens: 24, shake: 25, at: [-.8, .5, 8], lookAt: null, turn: [4, -6, 0] });
       return out;
     } };
   return { KINDS };

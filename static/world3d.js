@@ -831,7 +831,7 @@ const World = (() => {
         obj.traverse(x => { if (x.isMesh) { x.castShadow = x.receiveShadow = true; } }); B.scene.add(obj); B.members.push(obj); }
     }
     if (Rr) Rr.toneMappingExposure = Math.pow(2, +o.exposure || 0);
-    for (const h of World.stageHooks) h({ L, B, o, t, ground, cam, k });
+    for (const h of World.stageHooks) h({ L, B, o, t, ground, cam, k, Rr });
     return { B, cam, ground };
   }
   function draw(c, L, o, t) {

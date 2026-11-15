@@ -47,7 +47,8 @@ const Actors = (() => {
   }
   // what each part is made of, made to look real: clear-coated paint, deep glass, lenses that light up
   function carMaterial(m) {
-    const name = m.name, P = (o) => new T.MeshPhysicalMaterial({ name, ...o });
+    // every shiny part mirrors the world round the car (see the stage hook below), the way paint and glass do
+    const name = m.name, P = (o) => { const x = new T.MeshPhysicalMaterial({ name, ...o }); if (['paint', 'glass', 'trim_gloss', 'headlight', 'taillight', 'chrome', 'mirror', 'alloy'].includes(name)) x.userData.carEnv = true; return x; };
     if (name === 'paint') return P({ map: m.map, color: m.color, roughness: .38, metalness: .55, clearcoat: 1, clearcoatRoughness: .04 });
     if (name === 'glass') return P({ color: new T.Color('#06080a'), roughness: .02, metalness: .1, clearcoat: 1, clearcoatRoughness: 0, envMapIntensity: 1.6 });
     if (name === 'trim_gloss') return P({ color: new T.Color('#050506'), roughness: .1, clearcoat: 1, clearcoatRoughness: .05 });
@@ -97,6 +98,21 @@ const Actors = (() => {
     if (P.lights !== false) for (const x of [-.6, .6]) { const r = new T.PointLight(0xff1a0a, .5, 3 * M, 2); r.position.set(x, .8, -2.5); g.add(r); }
     g.scale.setScalar(M); return g;
   }
+  // what the cars mirror: the world round them, caught each frame from a little above the road where the camera is,
+  // so their paint and glass carry the neon, the shop windows and the lamps around them
+  World.stageHooks.push(({ B, cam, ground, Rr }) => {
+    if (!Rr || !B.props) return;
+    const mats = new Set(); B.props.traverse(n => { if (n.isMesh && n.material?.userData?.carEnv) mats.add(n.material); });
+    if (!mats.size) return;
+    if (!B.carCube) { B.carCube = new T.WebGLCubeRenderTarget(128, { type: T.HalfFloatType, generateMipmaps: true, minFilter: T.LinearMipmapLinearFilter });
+      B.carCam = new T.CubeCamera(.1 * M, 3000 * M, B.carCube); }
+    B.carCam.position.set(cam.position.x, ground + 1.1 * M, cam.position.z - 3 * M);
+    const hide = [B.wetFx, B.rainFx].filter(Boolean), was = hide.map(h => h.visible); hide.forEach(h => { h.visible = false; });
+    for (const m of mats) m.envMap = null;
+    B.carCam.update(Rr, B.scene);
+    hide.forEach((h, i) => { h.visible = was[i]; });
+    for (const m of mats) { m.envMap = B.carCube.texture; m.envMapIntensity = m.name === 'glass' ? 1.4 : 1; }
+  });
   World.custom.car = (P, t = 0) => {
     if (P.model !== 'classic') { const real = realCar(P, t); if (real) return real; }
     const g = new T.Group(), paint = mat(P.finish || 'paint', P.color || '#c0392b');

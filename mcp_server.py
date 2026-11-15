@@ -258,7 +258,7 @@ to the part both share, then type the rest of the new one (reveal 0-1 types, 1-2
 
 
 @mcp.tool()
-async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "mountain", "neon", ""] = "", name: str | None = None,
+async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "mountain", "neon", "oculus", ""] = "", name: str | None = None,
                     props: dict | None = None) -> dict:
     """Add a 3D world at the bottom of the layers: a whole place to film, with a sky, a sun that casts shadows,
     the ground, the air, props, and a lens. 3D shapes and models above it stand inside it, lit and shadowed by
@@ -266,7 +266,8 @@ async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "
     hour), "rig" (a worn film camera on a jib in a hazy wheat field, shallow focus), "studio" (a soft-lit floor
     for your shapes and models), "desert" (dunes and a monolith at dusk), "night" (moonlit sea), "mountain" (a red car up a winding
     road through pine forest under snowy peaks, filmed by a chase camera), "neon" (a wet city street at night in the rain:
-    shopfronts, hanging neon signs, lamp posts, parked cars, traffic and people); "" is an empty
+    shopfronts, hanging neon signs, lamp posts, parked cars, traffic and people), "oculus" (looking up into a coffered
+    dome, a disc of sun on it from the opening at the top); "" is an empty
     world. `props` then changes any of its settings (all the numbers and colours animate, with update_layer or
     set_keyframes like any layer's):
 
@@ -314,6 +315,9 @@ async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "
     "building" ("size" [w, h, d], "seed", "lit" %, "wall" "brick" | "darkbrick" | "concrete" | "tile" | "panel":
     storeys of lit rooms over shopfronts), a "sign" (a sign hanging out over a pavement: "text", "color", "kind" "neon"
     | "box", "glow", "flicker"), a "lamppost" ("reach", "power", "color") and "wires" ("count", "sag", "size" [length, 1, 1]).
+    A "coffers" is a coffered dome you stand in the middle of ("radius", "rows", "cols", "span" degrees round, "from"/"to"
+    degrees up, "steps", "depth", "rib" m, "color", "ambient" % light in the shade, "ambientColor"); a "sunbeam" is the
+    sun through one opening, shining along its own +z ("size" [disc width m, 1, 1], "reach", "soft", "power", "color").
     An "fx" is particles: "kind" "smoke" | "fire" | "explosion" | "sparks" | "dust" | "steam" | "tendril" (a tall
     twisting column of sparkles), "amount", "scale". See the result with see_frame."""
     return await acall("add_world", {"scene": scene, "name": name, "props": props or {}})

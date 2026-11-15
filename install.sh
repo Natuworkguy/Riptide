@@ -2,7 +2,8 @@
 # Riptide installer for macOS and Linux.
 #
 #   curl -fsSL https://raw.githubusercontent.com/Natuworkguy/Riptide/main/install.sh | bash
-#   ... | bash -s -- --dev         the dev branch, where changes land before a release
+#   curl -fsSL https://raw.githubusercontent.com/Natuworkguy/Riptide/dev/install.sh | bash -s -- --dev
+#                                  the dev branch, where changes land before a release
 #   ... | bash -s -- --uninstall   take it back out
 #
 # Installs Riptide into ~/.local/share/riptide with a Python environment of its own, puts a `riptide` command in

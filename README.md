@@ -82,9 +82,23 @@ Elsewhere Riptide is a desktop app too: each of these opens it in a window of it
 starts its server if it is not running. Nothing to set up: the window is Chrome, Edge, Brave or Chromium in app mode with a profile
 of its own, so it sits in the dock or taskbar as Riptide and remembers its size; on a computer with none of those it is
 a native window when pywebview is installed, else a browser tab. `riptide --tab` (or `RIPTIDE_OPEN=tab`) opens a tab
-instead, and from a tab, the browser's Install app button makes it an app too. `riptide --stop` stops the server. Run the installer again to update. `--dev` installs the dev branch,
-where changes land first (on Windows: `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/Natuworkguy/Riptide/main/install.ps1))) -Dev`),
-and `--uninstall` (`-Uninstall`) takes Riptide back out. ffmpeg is still yours to install, for video export.
+instead, and from a tab, the browser's Install app button makes it an app too. `riptide --stop` stops the server. Run the installer again to update, and `--uninstall` (`-Uninstall`) takes
+Riptide back out. ffmpeg is still yours to install, for video export.
+
+### The dev version
+
+The dev branch is where changes land first, before a release. To install it (or switch an install over to it):
+
+Linux and macOS:
+
+    curl -fsSL https://raw.githubusercontent.com/Natuworkguy/Riptide/dev/install.sh | bash -s -- --dev
+
+Windows (PowerShell):
+
+    & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Natuworkguy/Riptide/dev/install.ps1))) -Dev
+
+Run the same command again to update to the latest dev version. To go back to releases, run the normal install
+command above.
 
 ## Run
 

@@ -5,7 +5,7 @@
       irm https://raw.githubusercontent.com/Natuworkguy/Riptide/main/install.ps1 | iex
       .\install.ps1 -Dev          the dev branch, where changes land before a release
       .\install.ps1 -Uninstall    take it back out
-      & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Natuworkguy/Riptide/main/install.ps1))) -Dev
+      & ([scriptblock]::Create((irm https://raw.githubusercontent.com/Natuworkguy/Riptide/dev/install.ps1))) -Dev
 
     Installs Riptide into %LOCALAPPDATA%\Riptide with a Python environment of its own, adds a `riptide` command and a
     Start menu shortcut, and registers riptide://open links. Running it again updates.

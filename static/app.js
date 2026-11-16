@@ -4648,7 +4648,7 @@ const Sessions = (() => {
   const ago = t => { const m = Math.max(0, (Date.now() - t) / 6e4); return m < 1 ? 'just now' : m < 60 ? `${Math.round(m)} min ago`
     : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`; };
   async function list() {
-    const [kept, live] = await Promise.all([Keep.list(), fetch('/api/live/status').then(r => r.json()).catch(() => ({ windows: [] }))]);
+    const [kept, live] = await Promise.all([Keep.list(), fetch('/api/live/status', { signal: AbortSignal.timeout(1500) }).then(r => r.json()).catch(() => ({ windows: [] }))]);
     const by = new Map(kept.map(k => [k.id, { ...k }]));
     for (const w of live.windows || []) by.set(w.id, { ...(by.get(w.id) || { at: Date.now() }), id: w.id, name: w.name, layers: w.layers ?? by.get(w.id)?.layers, live: true });
     by.set(me, { ...(by.get(me) || {}), id: me, name: projectName, layers: S.layers.length, at: Date.now(), current: true });

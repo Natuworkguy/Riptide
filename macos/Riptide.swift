@@ -70,6 +70,10 @@ let barScript = """
     new MutationObserver(soon).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['hidden'] });
     addEventListener('resize', soon);
     document.fonts?.ready.then(soon);
+    // full screen moves the whole bar sideways (the room for the window's buttons goes), so where its buttons are
+    // must be sent again; and anything else that moves them is caught as the pointer comes over the bar, before a click
+    new MutationObserver(soon).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    addEventListener('pointermove', e => { if (e.clientY < (bar?.getBoundingClientRect().bottom || 0) + 4) soon(); }, { passive: true });
   });
 })();
 """

@@ -572,10 +572,13 @@ MODEL_TYPES = {".glb": "model/gltf-binary", ".gltf": "model/gltf+json", ".obj": 
 
 
 @mcp.tool()
-async def add_model(path: str, name: str | None = None, props: dict | None = None) -> dict:
+async def add_model(path: str, name: str | None = None, props: dict | None = None, rig: bool = False) -> dict:
     """Add a 3D model from this computer (.glb, .gltf with its data inside it, .fbx such as a Mixamo character and its animation, or .obj; up to 50 MB) as a layer. It
     fills its w × h box without being stretched, and turns and moves like any 3D layer (rotX, rotY, rotation, z),
-    lit from lightAngle. Returns the new layer id."""
+    lit from lightAngle. rig true gives a character with no skeleton one (it finds the head, arms and legs of a figure
+    standing upright), so it can be posed: placed in a world as {"type": "model", "asset": the asset id returned,
+    "pose": {...}} with bones named Hips, Spine, Spine1, Neck, Head, LeftArm, LeftForeArm, LeftHand, RightArm...,
+    LeftUpLeg, LeftLeg, LeftFoot, RightUpLeg... Returns the new layer id and the model's asset id."""
     p = os.path.abspath(os.path.expanduser(path))
     ext = os.path.splitext(p)[1].lower()
     if ext not in MODEL_TYPES:
@@ -586,7 +589,7 @@ async def add_model(path: str, name: str | None = None, props: dict | None = Non
         raise RiptideError("That file is over 50 MB")
     with open(p, "rb") as f:
         src = f"data:{MODEL_TYPES[ext]};base64," + base64.b64encode(f.read()).decode()
-    return await acall("add_model", {"src": src, "file": os.path.basename(p), "name": name, "props": props or {}}, timeout=120)
+    return await acall("add_model", {"src": src, "file": os.path.basename(p), "name": name, "props": props or {}, "rig": rig}, timeout=120)
 
 
 @mcp.tool()

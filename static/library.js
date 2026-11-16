@@ -112,6 +112,10 @@ const Library = (() => {
           const tall = new T.Box3().setFromObject(g).getSize(new T.Vector3()).y; if (tall > 20) g.scale.setScalar(.01);
         }
         else { const gl = await new T.GLTFLoader().parseAsync(buf, ''); g = gl.scene; c.clips = gl.animations || []; }
+        // a model with no skeleton, given one to be posed (static/autorig.js), if asked
+        let bones = false; g.traverse(n => { if (n.isBone) bones = true; });
+        if (!bones && a.rig === 'auto' && World.autoRig) { try { c.autoRigged = World.autoRig(g, { mirror: !!a.rigMirror }); } catch (e) { console.warn('Could not rig the model', e); } }
+        g.traverse(n => { if (n.isBone) c.bones = true; });
         const b = new T.Box3().setFromObject(g), ctr = b.getCenter(new T.Vector3());
         g.position.set(-ctr.x, -b.min.y, -ctr.z); const holder = new T.Group(); holder.add(g); c.group = holder; end();
       })().catch(() => { c.failed = true; end(false); status(`Could not read the model ${a.name}`); });
@@ -129,6 +133,28 @@ const Library = (() => {
     return g;
   };
   World.clipsOf = id => modelCache.get(id)?.clips?.map(x => x.name) || [];
+  // whether a model has loaded, and has a skeleton of its own or one given it
+  World.modelInfo = id => { const c = modelCache.get(id); return c ? { loaded: !!c.group, bones: !!c.bones, autoRigged: !!c.autoRigged } : null; };
+  // give a model a skeleton (or take it away, or turn it round): it is loaded again with it
+  function rigModel(id, how) {
+    const a = S.assets?.[id]; if (!a) return;
+    if (how === 'off') { delete a.rig; delete a.rigMirror; } else { a.rig = 'auto'; if (how === 'mirror') a.rigMirror = !a.rigMirror; }
+    modelCache.delete(id); World.version++;
+    if (typeof setDirty === 'function') setDirty(true);
+    setTimeout(() => { SceneEd.refreshUI?.(); SceneEd.redraw?.(); if (typeof refresh === 'function') refresh(); }, 50);
+  }
+  SceneEd.extras.push({
+    inspector(P) {
+      if (P.type !== 'model' || !P.asset) return '';
+      const info = World.modelInfo(P.asset), a = S.assets?.[P.asset]; if (!info?.loaded || !a) return '';
+      if (info.bones && !info.autoRigged) return '';
+      if (!info.bones) return `<div class="hd">Pose it</div><p class="note">This model has no skeleton, so it cannot be posed yet. Riptide can give it one: it finds the head, the arms and the legs of a figure standing upright and binds the model to bones for them, so it can wave, point, sit or be posed joint by joint.</p>
+        <div class="acts"><button class="tb small" data-rig="auto">Give it a skeleton</button></div>`;
+      return `<div class="hd">Its skeleton</div><p class="note">Given by Riptide. If its left and right are the wrong way round (it was made facing away), turn it round. Pose it below.</p>
+        <div class="acts"><button class="tb small" data-rig="mirror">Swap left and right</button><button class="tb small" data-rig="off">Take the skeleton away</button></div>`;
+    },
+    click(b) { const P = SceneEd.selected; if (!b.dataset.rig || P?.type !== 'model') return false; rigModel(P.asset, b.dataset.rig); return true; },
+  });
   World.PARTS.push('model');
 
   // ----- in the scene editor: an Import menu, and files dropped on the viewport -----

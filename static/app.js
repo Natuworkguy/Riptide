@@ -4339,9 +4339,11 @@ const LIVE = (() => {
       const props = a.props || {}; for (const p in props) if (!PROPS.model.includes(p)) throw new Error(`model layers have no "${p}"`);
       const blob = await (await fetch(a.src)).blob(), ids = await addAssets([new File([blob], a.file, { type: R3D.MODEL_TYPES[format] })]);
       if (!ids.length) throw new Error(`could not add ${a.file}`);
+      // a model with no skeleton, to be given one so it can be posed (static/autorig.js)
+      if (a.rig) S.assets[ids[0]].rig = 'auto';
       addModelLayer(ids[0]); const L = cur(); if (a.name) L.name = String(a.name);
       for (const [p, v] of Object.entries(props)) L.p[p] = keyValue(p, v);
-      return done(`added the model "${L.name}"`, { id: L.id });
+      return done(`added the model "${L.name}"`, { id: L.id, asset: ids[0] });
     },
     add_image: async a => {
       const blob = await (await fetch(a.src)).blob();

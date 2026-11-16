@@ -161,7 +161,7 @@ const Actors = (() => {
   function pose(move, ph, t) {
     const s = Math.sin(ph * Math.PI * 2), c = Math.cos(ph * Math.PI * 2), q = {};
     if (move === 'walk') Object.assign(q, { thighL: 26 * s, thighR: -26 * s, kneeL: Math.max(0, -s) * 45 + 5, kneeR: Math.max(0, s) * 45 + 5,
-      armL: -22 * s, armR: 22 * s, elbowL: 18, elbowR: 18, bob: Math.abs(c) * .03, lean: 3 });
+      armL: -16 * s, armR: 16 * s, elbowL: 8 + 14 * Math.max(0, -s), elbowR: 8 + 14 * Math.max(0, s), bob: Math.abs(c) * .025, lean: 2, twist: 4 * s, sway: 1.5 * c });
     else if (move === 'run') Object.assign(q, { thighL: 50 * s, thighR: -50 * s, kneeL: Math.max(0, -s) * 95 + 15, kneeR: Math.max(0, s) * 95 + 15,
       armL: -45 * s, armR: 45 * s, elbowL: 85, elbowR: 85, bob: Math.abs(c) * .07, lean: 12 });
     else if (move === 'wave') Object.assign(q, { armR: 0, armRside: 150, elbowR: 25 + 25 * Math.sin(t * 7), armL: 4, elbowL: 8, bob: 0, lean: 0, breathe: t });
@@ -232,7 +232,7 @@ const Actors = (() => {
     root.scale.setScalar(k);
     return root;
   }
-  // ----- a real-looking person: MakeHuman's free (CC0) body, rigged, built by tools/make_people.py -----
+  // ----- a real-looking person: a Microsoft Rocketbox avatar (MIT), photographed skin, clothes and hair, rebuilt by tools/make_people_rocketbox.js -----
   // The same moves as the mannequin drive its skeleton: each joint turned about the model's own axes (it faces +Z and
   // its bones stand unturned at rest), then any pose given by hand is laid over that (static/pose.js), so a person can
   // walk on its own and be posed joint by joint, or keyed pose to pose.
@@ -245,7 +245,7 @@ const Actors = (() => {
       new T.GLTFLoader().load(BODIES[kind], gl => {
         liven(gl.scene);
         c.group = gl.scene; c.tall = new T.Box3().setFromObject(gl.scene).getSize(new T.Vector3()).y || 1.75;
-        // how far down and out each arm hangs at rest (MakeHuman's A pose), to turn the moves' arm angles into turns from it
+        // how far down and out each arm hangs at rest, to turn the moves' arm angles into turns from it
         const at = n => { const b = gl.scene.getObjectByName(n); return b ? b.getWorldPosition(new T.Vector3()) : null; };
         const sh = at('mixamorigLeftArm'), el = at('mixamorigLeftForeArm');
         c.armRest = sh && el ? Math.atan2(el.x - sh.x, sh.y - el.y) * 180 / Math.PI : 45;
@@ -268,6 +268,14 @@ const Actors = (() => {
         n.material = s;
       } else if (['sclera', 'iris', 'limbus', 'pupil'].includes(name)) {
         n.material = new T.MeshPhysicalMaterial({ name, color: m.color, roughness: .2, clearcoat: 1, clearcoatRoughness: .03 });
+      } else if (name === 'head' || name === 'body') {
+        // a photographed skin and clothes: a little sheen at grazing angles, and light that seems to glow through the face
+        n.material = new T.MeshPhysicalMaterial({ name, map: m.map, normalMap: m.normalMap, normalScale: new T.Vector2(.8, .8), roughness: name === 'head' ? .5 : .8,
+          metalness: 0, sheen: name === 'head' ? .45 : .25, sheenRoughness: .6, sheenColor: new T.Color(name === 'head' ? '#ff9a80' : '#ffffff'),
+          emissive: new T.Color(name === 'head' ? '#3a1008' : '#000000'), emissiveIntensity: name === 'head' ? .1 : 0, clearcoat: name === 'head' ? .06 : 0, clearcoatRoughness: .5 });
+      } else if (name === 'hair' && m.map) {
+        // hair cards: cut out by their own alpha, a soft sheen along them
+        n.material = new T.MeshPhysicalMaterial({ name, map: m.map, alphaTest: .45, side: T.DoubleSide, roughness: .6, sheen: .8, sheenRoughness: .4, sheenColor: new T.Color('#8a7060') });
       } else if (name === 'hair') {
         n.material = new T.MeshPhysicalMaterial({ name, color: m.color, roughness: .62, sheen: 1, sheenRoughness: .35, sheenColor: new T.Color('#7a6050') });
       }
@@ -287,7 +295,8 @@ const Actors = (() => {
       if (!n.isMesh) return;
       if (set.all && !['sclera', 'iris', 'pupil'].includes(n.material.name)) { n.material = set.all; return; }
       const want = tint[n.material.name];
-      if (!want) return;
+      // a person photographed in their own clothes and hair keeps them
+      if (!want || n.material.map && n.material.name !== 'skin') return;
       const k = n.material.name + want;
       if (!set[k]) { set[k] = n.material.clone(); set[k].color = n.material.name === 'skin' ? skinTint(want) : new T.Color(want); }
       n.material = set[k];

@@ -304,10 +304,11 @@ async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "
     a label is a flat screen with "text" (lines split by \n), "color" and "background". A "sketch" is a flat
     outline made solid: "shape" "rect" (with "w", "d"), "circle" ("r") or "poly" ("loop": [[x, z], ...] round its
     middle), "depth" (m: extruded up its Y, negative down) or "revolve" (degrees round its left edge, for turned
-    parts like a vase or a wheel). A "person" is a simple built-in figure: "move" "walk" | "run" | "idle" | "wave" |
-    "dance" | "sit" | "skate" | "ollie" | "kickflip" (the last three on a skateboard), "height", and "outfit" (any finish,
-    e.g. "holo", over the whole body), "body" "man" | "woman" | "mannequin", colours "skin", "shirt", "pants",
-    "hairColor", "shoes", and "pose": {bone name: [x, y, z] degrees} to turn any joint (bones are named like
+    parts like a vase or a wheel). A "person" is a real-looking built-in person (photographed skin, clothes and hair):
+    "move" "walk" | "run" | "idle" | "wave" | "dance" | "sit" | "skate" | "ollie" | "kickflip" (the last three on a
+    skateboard), "height", and "outfit" (any finish, e.g. "holo", over the whole body), "body" "man" | "woman" (each
+    dressed as they come) | "mannequin" (a plain figure, coloured with "skin", "shirt", "pants", "hairColor", "shoes"),
+    and "pose": {bone name: [x, y, z] degrees} to turn any joint (bones are named like
     "mixamorigRightArm"); "pose": {"@look": [up, across, 0]} aims the eyes (degrees up, and across to the viewer's
     right), and "poseKeys": [{"t": seconds, "pose": {...}}] eases from pose to pose, eyes included. For any other person use a rigged model (add_model with a Mixamo .fbx or a
     .glb), placed as {"type": "model", "asset": its asset id, "clip": an animation it has, "outfit": a finish}.

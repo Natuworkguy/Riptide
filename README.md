@@ -204,7 +204,8 @@ Work happens on the `dev` branch; `main` holds releases. See [CONTRIBUTING.md](C
 - **Pixel smear** (any layer, or an adjustment layer): bright pixels dragged out into streaks, the datamosh look.
 - **Speed lines** (a layer of its own): streaks rushing out from the middle.
 - In 3D worlds a person is a real-looking man or woman, photographed skin, clothes and hair (two of the Microsoft
-  Rocketbox avatars, MIT, rebuilt for Riptide by `tools/make_people_rocketbox.js`), dressed as they come. They walk, run, dance, sit, or
+  Rocketbox avatars, MIT, rebuilt for Riptide by `tools/make_people_rocketbox.js`), dressed as they come; or the
+  classic man or woman (MakeHuman's free CC0 body: see `tools/make_people.py`), whose clothes, skin and hair take any colours. They walk, run, dance, sit, or
   **skate**, **ollie** and **kickflip** on a board, and in the scene editor every joint can be posed by hand, or keyed
   pose to pose. Any person or model can wear an **outfit** finish such as **holo** (rainbow foil shards). Particles have
   a **tendril** kind, a twisting column of sparkles. Imported characters work the same way: a Mixamo `.fbx` with its

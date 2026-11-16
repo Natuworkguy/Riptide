@@ -236,7 +236,9 @@ const Actors = (() => {
   // The same moves as the mannequin drive its skeleton: each joint turned about the model's own axes (it faces +Z and
   // its bones stand unturned at rest), then any pose given by hand is laid over that (static/pose.js), so a person can
   // walk on its own and be posed joint by joint, or keyed pose to pose.
-  const BODIES = { man: 'people/man.glb', woman: 'people/woman.glb' };
+  // the photographed people, and the classic ones (MakeHuman's CC0 body, built by tools/make_people.py), whose
+  // clothes, skin and hair take any colours
+  const BODIES = { man: 'people/man.glb', woman: 'people/woman.glb', classicMan: 'people/classic-man.glb', classicWoman: 'people/classic-woman.glb' };
   const bodyCache = new Map();
   function body(kind) {
     let c = bodyCache.get(kind);
@@ -249,6 +251,8 @@ const Actors = (() => {
         const at = n => { const b = gl.scene.getObjectByName(n); return b ? b.getWorldPosition(new T.Vector3()) : null; };
         const sh = at('mixamorigLeftArm'), el = at('mixamorigLeftForeArm');
         c.armRest = sh && el ? Math.atan2(el.x - sh.x, sh.y - el.y) * 180 / Math.PI : 45;
+        // the classic bodies stand with their elbows already bent: straighten them by that much
+        c.elbowRest = kind.startsWith('classic') ? 24 : 0;
         World.pending--; World.version++; SceneEd.redraw?.(); if (typeof render === 'function') render();
       }, undefined, () => { c.failed = true; World.pending--; });
     }
@@ -303,7 +307,7 @@ const Actors = (() => {
     });
   }
   function realPerson(o, t) {
-    const c = body(o.body === 'woman' ? 'woman' : 'man'); if (!c) return null;
+    const c = body(BODIES[o.body] ? o.body : 'man'); if (!c) return null;
     const move = o.move || 'idle', cadence = move === 'run' ? 2.9 : 1.85;
     const ph = o.dist != null ? o.dist / (move === 'run' ? 2.6 : 1.45) : t * cadence / 2 + (o.phase || 0);
     const q = pose(move, ph, t + (o.phase || 0));
@@ -315,7 +319,7 @@ const Actors = (() => {
       turn(n + 'Leg', q['knee' + s] || 0);
       // arms: from hanging at rest, forward and out, the elbow bending forward
       turn(n + 'Arm', -(q['arm' + s] || 0), 0, side * (6 + (q['arm' + s + 'side'] || 0) - c.armRest));
-      turn(n + 'ForeArm', -(q['elbow' + s] || 0) * .8, 0, 0);
+      turn(n + 'ForeArm', -((q['elbow' + s] || 0) - c.elbowRest) * .8, 0, 0);
     }
     turn('Spine', q.lean || 0, (q.twist || 0) / 2, 0); turn('Spine1', 0, (q.twist || 0) / 2, 0);
     turn('Hips', 0, 0, q.sway || 0);
@@ -378,11 +382,12 @@ const Actors = (() => {
       if (P.type === 'car') return `<div class="hd">Car</div><label class="f"><span>Kind</span>${opt('model', P.model || 'sedan', CAR_KINDS)}</label><label class="f"><span>Lights</span>${opt('lights', P.lights === false ? 'off' : '', [['', 'On'], ['off', 'Off']])}</label>
         <label class="f"><span>Beams</span>${opt('beams', P.beams ? '1' : '', [['', 'None'], ['1', 'Light the road (night)']])}</label>
         <p class="note">Key its place two or more times and it drives: its wheels turn and steer, and it faces the way it goes.</p>`;
-      if (P.type === 'person') return `<div class="hd">Person</div><label class="f"><span>Body</span>${opt('body', P.body || 'man', [['man', 'Man'], ['woman', 'Woman'], ['mannequin', 'Mannequin']])}</label>
+      if (P.type === 'person') return `<div class="hd">Person</div><label class="f"><span>Body</span>${opt('body', P.body || 'man', [['man', 'Man'], ['woman', 'Woman'], ['classicMan', 'Man (classic)'], ['classicWoman', 'Woman (classic)'], ['mannequin', 'Mannequin']])}</label>
         <label class="f"><span>Does</span>${opt('move', P.move || 'idle', MOVES)}</label>
         <label class="f"><span>Height m</span><input type="number" step=".01" data-k="height" value="${+P.height || 1.75}"></label>
         <label class="f"><span>Outfit</span>${opt('outfit', P.outfit || '', [['', 'Clothes'], ['holo', 'Holographic shards'], ['chrome', 'Chrome'], ['glow', 'Glowing'], ['gold', 'Gold']])}</label>
-        ${color('skin', P.skin || '#c8906e', 'Skin')}${color('shirt', P.shirt || '#2f5d8a', 'Top')}${color('pants', P.pants || '#2b2b33', 'Trousers')}${color('hairColor', P.hairColor || '#1c140e', 'Hair')}${color('shoes', P.shoes || '#1a1a1a', 'Shoes')}
+        ${/^(classic|mannequin)/.test(P.body || '') ? color('skin', P.skin || '#c8906e', 'Skin') + color('shirt', P.shirt || '#2f5d8a', 'Top') + color('pants', P.pants || '#2b2b33', 'Trousers') + color('hairColor', P.hairColor || '#1c140e', 'Hair') + color('shoes', P.shoes || '#1a1a1a', 'Shoes')
+          : '<p class="note">They wear their own clothes and hair. The classic man and woman take any colours.</p>'}
         <p class="note">Key their place to send them somewhere: walking or running, their steps keep pace with how far they go. Pose turns any joint by hand, over what they are doing.</p>`;
       if (P.type === 'crowd') { const models = Object.entries(S.assets || {}).filter(([, a]) => a.kind === 'model').map(([id, a]) => [id, a.name]);
         return `<div class="hd">Crowd</div><label class="f"><span>People</span><input type="number" step="1" min="1" max="200" data-k="count" value="${+P.count || 20}"></label>

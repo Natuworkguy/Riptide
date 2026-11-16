@@ -1,4 +1,4 @@
-"""Build Riptide's built-in 3D people from MakeHuman's free (CC0) body.
+"""Build Riptide's classic 3D people (classic-man.glb, classic-woman.glb) from MakeHuman's free (CC0) body.
 
     python tools/make_people.py PATH/TO/mpfb2/src/mpfb/data PATH/TO/brown_eye.png
 
@@ -9,7 +9,7 @@ young woman, places a Mixamo-named skeleton in it (so Riptide's posing tools kno
 every joint), weights the skin to it, paints a skin texture (lips, nails and eyelids
 coloured through MakeHuman's own masks), and gives each a hair cap, eyes, a top,
 trousers and shoes cut from MakeHuman's helper meshes. Each is written as one
-rigged .glb in static/people/.
+rigged .glb in static/people/ (classic-man.glb, classic-woman.glb).
 """
 from __future__ import annotations
 
@@ -425,8 +425,8 @@ def build(data: Path, eye_png: Path, name: str, look: dict):
     g.j["scenes"][0]["nodes"] = [holder]
     g.j["extras"] = {"license": "CC0 1.0: MakeHuman's assets, via MPFB2", "height_m": float(pos[:, 1].max())}
     OUT.mkdir(parents=True, exist_ok=True)
-    g.write(OUT / f"{name}.glb")
-    print(name, f"{(OUT / f'{name}.glb').stat().st_size / 1e6:.1f} MB", f"{pos[:, 1].max():.2f} m tall", len(src), "vertices")
+    g.write(OUT / f"classic-{name}.glb")
+    print(name, f"{(OUT / f'classic-{name}.glb').stat().st_size / 1e6:.1f} MB", f"{pos[:, 1].max():.2f} m tall", len(src), "vertices")
 
 
 if __name__ == "__main__":

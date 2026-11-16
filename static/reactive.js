@@ -167,6 +167,8 @@ const Reactive = (() => {
   // everything every link needs, listened to: for export, so no frame goes out before the music is heard
   async function ready() {
     const sources = new Set(S.layers.flatMap(L => (L.react || []).map(r => r.source && r.source !== 'mix' ? r.source : 'mix')));
+    // and the voices people in 3D worlds lip sync to
+    for (const L of S.layers) for (const o of (L.p?.objects || [])) if (o?.type === 'person' && o.voice) sources.add(o.voice === 'mix' || !tracks().some(T => T.id === o.voice) ? 'mix' : o.voice);
     for (const s of sources) { bandsOf(s); const job = cache.get(sourceSig(s)); if (job?.promise) await job.promise; }
   }
 

@@ -360,6 +360,69 @@ const Actors = (() => {
       top.position.addScaledVector(gap, .8 * a); bottom.position.addScaledVector(gap, -.2 * a);
     }
   }
+  // ----- talking -----
+  // A person talks from "say": what they say, as text ({"t": when it starts, "text", "rate": letters a second, 14
+  // by default}, or a list of them, or a plain string from "sayAt" seconds), its mouth shapes worked out from the
+  // letters: the jaw drops for open vowels, the corners spread for "ee" and draw in for "oo", the lips meet for m, b
+  // and p. With "voice" (the soundtrack, "mix", or one of the project's tracks) the mouth opens as that voice is
+  // loud, on the same frames every time: the text, if there is any, still shapes it.
+  const VISEMES = { a: [.85, .35, 0], e: [.55, .7, 0], i: [.4, .85, 0], y: [.4, .8, 0], o: [.65, 0, .85], u: [.35, 0, 1], w: [.25, 0, 1],
+    m: [0, .1, 0], b: [0, .1, 0], p: [0, .1, 0], f: [.15, .35, 0], v: [.15, .35, 0], ' ': [.12, .2, 0] };
+  const visemeOf = ch => VISEMES[ch] || (/[a-z0-9]/.test(ch) ? [.32, .35, 0] : null);   // other letters: half open
+  function linesOf(P) {
+    if (typeof P.say === 'string') return P.say.trim() ? [{ t: +P.sayAt || 0, text: P.say }] : [];
+    return Array.isArray(P.say) ? P.say.filter(l => l && l.text) : [];
+  }
+  // the mouth the text asks for at T: [open, wide, round], and whether a line is being said
+  function textMouth(P, t) {
+    for (const line of linesOf(P)) {
+      const rate = clamp(+line.rate || 14, 4, 30), text = String(line.text).toLowerCase();
+      let at = +line.t || 0;
+      if (t < at) continue;
+      const marks = [];
+      for (const ch of text) { const v = visemeOf(ch); if (v) { marks.push([at, v]); at += 1 / rate; } else { marks.push([at, [0, .1, 0]]); at += .25; } }
+      if (t > at + .15) continue;
+      marks.push([at, [0, .1, 0]]);
+      // from one shape to the next, eased, each shape a little ahead of its own sound
+      const i = marks.findIndex(([m], k) => k + 1 < marks.length && t < marks[k + 1][0]);
+      if (i < 0) return { m: [0, .1, 0], on: true };
+      const [a0, va] = marks[i], [a1, vb] = marks[i + 1], f = clamp((t - a0) / Math.max(.001, a1 - a0), 0, 1), e = f * f * (3 - 2 * f);
+      return { m: va.map((v, k) => v + (vb[k] - v) * e), on: true };
+    }
+    return { m: [0, 0, 0], on: false };
+  }
+  function voiceLevel(P, t) {
+    if (!P.voice || typeof Reactive === 'undefined') return null;
+    const tracks = S.audioTracks || [], source = P.voice !== 'mix' && tracks.some(T => T.id === P.voice) ? P.voice : 'mix';
+    const bands = Reactive.bandsOf(source); if (!bands) return null;
+    const series = bands[source === 'mix' ? 'vocals' : 'level'] || bands.level; if (!series) return null;
+    const x = Math.max(0, t * 60), i = Math.floor(x), f = x - i, at = k => series[Math.min(series.length - 1, k)] || 0;
+    return clamp((at(i) * (1 - f) + at(i + 1) * f) * 1.5, 0, 1);
+  }
+  function mouthAt(P, t) {
+    // a little smoothing either side, as a real mouth cannot jump
+    let o = 0, w = 0, r = 0, on = false;
+    for (const d of [-.035, 0, .035]) { const x = textMouth(P, t + d); o += x.m[0]; w += x.m[1]; r += x.m[2]; on = on || x.on; }
+    o /= 3; w /= 3; r /= 3;
+    const v = voiceLevel(P, t);
+    if (v != null) { o = on ? Math.min(1, o * .5 + v * .8) : v; if (!on) { w = .3; r = 0; } }
+    return { open: o, wide: w, round: r, talking: on || (v != null && v > .05) };
+  }
+  // the photographed people's jaw, lips and mouth corners moved to the shape; a small nod as they talk
+  function shapeMouth(g, m, t) {
+    if (!m.talking && m.open < .01) return;
+    const bone = {}; g.traverse(n => { if (n.isBone && /^face_|^mixamorigHead$/.test(n.name)) bone[n.name] = n; });
+    if (!bone.face_MJaw) return;
+    bone.face_MJaw.quaternion.multiply(new T.Quaternion().setFromEuler(new T.Euler(deg(15 * m.open), 0, 0)));
+    for (const [side, s] of [['L', 1], ['R', -1]]) {
+      const c = bone[`face_${side}MouthCorner`]; if (c) { c.position.x += s * (.006 * m.wide - .007 * m.round); c.position.z += .003 * m.round; c.position.y -= .002 * m.open; }
+      const u = bone[`face_${side}Upperlip`]; if (u) { u.position.z += .003 * m.round; u.position.y += .0015 * m.open; u.position.x -= s * .002 * m.round; }
+      const lo = bone[`face_${side}MouthBottom`]; if (lo) { lo.position.z += .003 * m.round; lo.position.x -= s * .002 * m.round; }
+    }
+    if (bone.face_MUpperLip) { bone.face_MUpperLip.position.z += .004 * m.round; bone.face_MUpperLip.position.y += .002 * m.open; }
+    if (bone.face_MBottomLip) bone.face_MBottomLip.position.z += .004 * m.round;
+    if (m.talking && bone.mixamorigHead) bone.mixamorigHead.quaternion.multiply(new T.Quaternion().setFromEuler(new T.Euler(deg(1.6 * Math.sin(t * 5.3) * (.4 + m.open)), deg(1.2 * Math.sin(t * 2.1)), 0)));
+  }
   World.custom.person = (P, t = 0) => {
     const moving = P.keys?.at?.length >= 2, g = new T.Group(), o = { ...P, dist: moving && (P.move === 'walk' || P.move === 'run') ? travelled(P, t) : null };
     // a real-looking person unless asked for the old mannequin; the mannequin while the body is still loading
@@ -367,6 +430,7 @@ const Actors = (() => {
     if (real) {
       World.poseHook?.(real, P, t);
       blinkLids(real, blinkAt(P, t));
+      shapeMouth(real, mouthAt(P, t), t);
       g.add(real);
       // on a board: side-on to it, both going up together in a trick
       if (SKATE.includes(P.move)) { const b = boardFor(P, t); real.position.y = b.position.y; g.add(b); }
@@ -417,6 +481,10 @@ const Actors = (() => {
       if (P.type === 'person') return `<div class="hd">Person</div><label class="f"><span>Body</span>${opt('body', P.body || 'man', [['man', 'Man'], ['woman', 'Woman'], ['classicMan', 'Man (classic)'], ['classicWoman', 'Woman (classic)'], ['mannequin', 'Mannequin']])}</label>
         <label class="f"><span>Does</span>${opt('move', P.move || 'idle', MOVES)}</label>
         <label class="f"><span>Height m</span><input type="number" step=".01" data-k="height" value="${+P.height || 1.75}"></label>
+        ${/^(man|woman)$/.test(P.body || 'man') ? `<label class="f"><span>Says</span><textarea data-k="say" rows="2" placeholder="Words to lip sync">${Array.isArray(P.say) ? '' : (P.say || '').replace(/</g, '&lt;')}</textarea></label>
+        ${Array.isArray(P.say) ? `<p class="note">${P.say.length} line${P.say.length > 1 ? 's' : ''} to say, set by an agent.</p>` : ''}
+        <label class="f"><span>From s</span><input type="number" step=".1" data-k="sayAt" value="${+P.sayAt || 0}"></label>
+        <label class="f"><span>Voice</span>${opt('voice', P.voice || '', [['', 'None (the words alone)'], ['mix', 'The soundtrack'], ...(S.audioTracks || []).map(T => [T.id, T.name || 'A track'])])}</label>` : ''}
         ${/^(man|woman)$/.test(P.body || 'man') ? `<label class="f"><span>Blinks</span>${opt('blink', P.blink === false || P.blink === 'off' ? 'off' : '', [['', 'Now and then'], ['off', 'Never']])}</label>` : ''}
         <label class="f"><span>Outfit</span>${opt('outfit', P.outfit || '', [['', 'Clothes'], ['holo', 'Holographic shards'], ['chrome', 'Chrome'], ['glow', 'Glowing'], ['gold', 'Gold']])}</label>
         ${/^(classic|mannequin)/.test(P.body || '') ? color('skin', P.skin || '#c8906e', 'Skin') + color('shirt', P.shirt || '#2f5d8a', 'Top') + color('pants', P.pants || '#2b2b33', 'Trousers') + color('hairColor', P.hairColor || '#1c140e', 'Hair') + color('shoes', P.shoes || '#1a1a1a', 'Shoes')

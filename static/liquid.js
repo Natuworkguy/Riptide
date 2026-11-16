@@ -60,7 +60,15 @@ const Liquid = (() => {
   }
 
   // ----- the liquid parts of a world, and where each puts its liquid -----
-  const partsOf = o => (Array.isArray(o.objects) ? o.objects : []).filter(P => P && P.type === 'liquid' && !P.hidden);
+  // the world's own rain, when it is set to gather (Rain pools): rain over the 50 m in front of the camera, as hard
+  // as the world's Rain (keyed with it), falling into the same simulation as any liquid part
+  function rainPart(L, o) {
+    if (!o.rainPools || !SURFACES[o.ground]) return null;
+    const keys = L?.keys?.rain?.length ? L.keys.rain.map(k => ({ ...k, v: +k.v || 0 })) : null;
+    if (!keys && !(+(L?.p?.rain ?? o.rain) > 0)) return null;
+    return { type: 'liquid', from: 'rain', kind: 'water', carve: 35, at: [0, 0, -14], flow: +(L?.p?.rain ?? o.rain) || 0, keys: keys ? { flow: keys } : undefined, rainOf: true };
+  }
+  const partsOf = (o, L) => { const own = (Array.isArray(o.objects) ? o.objects : []).filter(P => P && P.type === 'liquid' && !P.hidden), r = rainPart(L, o); return r ? [...own, r] : own; };
   function spoutOf(P) {
     const at = Array.isArray(P.at) ? P.at : [0, 0, 0], from = RATE[P.from] ? P.from : 'pour', flow = clamp(num(P.flow, 60), 0, 400) / 100;
     const yaw = deg(+(P.turn?.[1]) || 0), dir = [Math.sin(yaw), Math.cos(yaw)], h = clamp(num(P.height, 3), .2, 40);
@@ -96,7 +104,9 @@ const Liquid = (() => {
       const fall = -.07 * clamp(dz, -20, 8) + .09 * Math.abs(dx) / (1 + Math.abs(dx) * .08);
       const shape = 1.1 * Math.exp(-(dx * dx) / 160 - (dz + 4) ** 2 / 90) - .9 * Math.exp(-((dx + 3) ** 2 + (dz - 11) ** 2) / 26) + bumps(x, z) * .6;
       const sh = fall + shape;
-      base[k] = land(x, z) + (sh * clear + Math.max(0, sh) * (1 - clear)) * fade * surf.relief;
+      base[k] = land(x, z) + (sh * clear + Math.max(0, sh) * (1 - clear)) * fade * surf.relief
+        // a floor or a street is never quite flat: a few centimetres of dips for water to find
+        + (surf.relief === 0 && o.ground === 'floor' ? bumps(x * 1.7, z * 1.7) * .07 * fade : 0);
       edge[k] = fade;
       for (const F of feet) {
         const lx = (x - F.x) * F.c - (z - F.z) * F.s, lz = (x - F.x) * F.s + (z - F.z) * F.c;
@@ -146,7 +156,11 @@ const Liquid = (() => {
       const rate = rates[si]; if (!(rate > 0)) return;
       const add = (k, vol) => { if (wall[k]) return; const old = d[k]; d[k] += vol / AREA;
         if (lava) heat[k] = (heat[k] * old + vol / AREA) / d[k]; else if (K.sediment) sed[k] += K.sediment * vol / AREA; };
-      if (src.from === 'rain') { const h = RATE.rain * rate * DT * AREA; for (let k = 0; k < n; k++) if (edge[k] > .5) add(k, h); return; }
+      if (src.from === 'rain') {
+        // rain wets the ground as it falls, so sand darkens and, once it is wet through, stops drinking it all
+        const h = RATE.rain * rate * DT * AREA, dw = DT * rate * .6;
+        for (let k = 0; k < n; k++) if (edge[k] > .5) { add(k, h); if (!lava) wet[k] = Math.min(1, wet[k] + dw); }
+        return; }
       const q = RATE[src.from] * rate * DT;
       for (const [k, w] of src.cells) {
         add(k, q * w);
@@ -254,7 +268,7 @@ const Liquid = (() => {
   const runs = new Map();
   const flowAt = (P, t) => clamp(num(World.keyed(P, 'flow', t, P.flow), 60), 0, 400) / 100;
   function simulate(L, o, t) {
-    const parts = partsOf(o); if (!parts.length) return null;
+    const parts = partsOf(o, L); if (!parts.length) return null;
     const srcs = parts.map(spoutOf), first = srcs[0], P0 = first.P;
     const kind = KINDS[P0.kind] ? P0.kind : 'water', erosion = clamp(num(P0.carve, 60), 0, 300);
     const key = JSON.stringify([o.ground, o.ground === 'mountains' ? [o.peaks, o.road] : 0, kind, erosion,
@@ -417,7 +431,7 @@ const Liquid = (() => {
       };
     } else {
       // clear water is faintly green over a long way; water carrying sand is tan over a few centimetres
-      const silt = kind === 'mud' ? '#6b4a2a' : '#9c7a50', siltDist = kind === 'mud' ? 1.2 : 6, clear = kind === 'mud' ? '#7a5a3a' : '#7fa79a', clearDist = kind === 'mud' ? 2 : 260;
+      const silt = kind === 'mud' ? '#6b4a2a' : '#9c7a50', siltDist = kind === 'mud' ? .4 : 2, clear = kind === 'mud' ? '#7a5a3a' : '#7fa79a', clearDist = kind === 'mud' ? .7 : 90;
       mat = new T.MeshPhysicalMaterial({ color: 0xffffff, roughness: .035, metalness: 0, ior: 1.333, transmission: 1, thickness: 1, specularIntensity: 1,
         attenuationColor: World.lin(clear), attenuationDistance: clearDist, envMapIntensity: 1 });
       Object.assign(u, { uSilt: { value: World.lin(silt) }, uSiltDist: { value: siltDist }, uClear: { value: World.lin(clear) }, uClearDist: { value: clearDist },
@@ -428,7 +442,7 @@ const Liquid = (() => {
           + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vDepth = aDepth; vFlow = aFlow; vWP = (modelMatrix * vec4(position, 1.)).xyz / 100.;');
         const trans = T.ShaderChunk.transmission_fragment
           .replace('material.transmission = transmission;', 'material.transmission = transmission * (1. - foamK * .92);')
-          .replace('material.thickness = thickness;', 'material.thickness = max(vDepth, .0) * 100. * 1.6;')
+          .replace('material.thickness = thickness;', 'vec2 sUv = gl_FragCoord.xy / max(transmissionSamplerSize, vec2(1.)); material.thickness = max(vDepth, .0) * 100. * .55 * smoothstep(0., .12, sUv.y) * smoothstep(0., .06, min(sUv.x, 1. - sUv.x));')
           .replace('material.attenuationDistance = attenuationDistance;', 'material.attenuationDistance = mix(uClearDist, uSiltDist, turb);')
           .replace('material.attenuationColor = attenuationColor;', 'material.attenuationColor = mix(uClear, uSilt, turb);');
         sh.fragmentShader = `uniform vec3 uSilt, uClear, uFoamCol; uniform float uSiltDist, uClearDist; varying float vDepth; varying vec4 vFlow; varying vec3 vWP; float foamK, turb;\n${NOISE_GLSL}\n`
@@ -597,7 +611,7 @@ const Liquid = (() => {
   }
 
   World.stageHooks.push(({ L, B, o, t, ground }) => {
-    const on = !!SURFACES[o.ground] && partsOf(o).length > 0;
+    const on = !!SURFACES[o.ground] && partsOf(o, L).length > 0;
     const lands = [B.land, B.mountainLand].filter(Boolean);
     if (!on) {
       World.rebuild(B, 'liquidSand', null); World.rebuild(B, 'liquidTop', null); World.rebuild(B, 'liquidStream', null);

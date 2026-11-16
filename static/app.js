@@ -1530,7 +1530,7 @@ function renderProps() {
         else if (k === 'font') field = `<button class="selectbtn" data-menu="font"><span style="font-family:${esc(Fonts.stack(v))}">${esc(v || 'Inter')}</span>${ICON.chev}</button>`;
         else if (k === 'mask' || k === 'matte' || k === 'lut') field = `<button class="selectbtn" data-menu="${k}"><span>${esc(k === 'lut' ? v || 'None' : ((k === 'mask' ? MASK_KINDS : TRACK_MATTES).find(x => x[0] === (v || 'none')) || ['', 'None'])[1])}</span>${ICON.chev}</button>`;
         else if (k === 'minv' || k === 'chroma' || k === 'cutout') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="${k}"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
-        else if (k === 'reverse' || k === 'mute' || k === 'swayLoop') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="${k}"${k === 'swayLoop' ? ' title="Fit the sway to the video, so its last frame meets its first"' : ''}><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
+        else if (k === 'reverse' || k === 'mute' || k === 'swayLoop' || k === 'rainPools') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="${k}"${k === 'swayLoop' ? ' title="Fit the sway to the video, so its last frame meets its first"' : k === 'rainPools' ? ' title="The rain gathers in the low places into puddles that grow while it rains"' : ''}><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
         else if (k === 'italic') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="italic"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
         else if (k === 'align') field = `<button class="selectbtn" data-menu="align"><span>${(TEXT_ALIGNS.find(a => a[0] === v) || TEXT_ALIGNS[1])[1]}</span>${ICON.chev}</button>`;
         else if (k === 'thing') field = `<button class="selectbtn" data-menu="thing"><span>${(THINGS.find(a => a[0] === v) || THINGS[0])[1]}</span>${ICON.chev}</button>`;
@@ -1756,6 +1756,7 @@ Pn.addEventListener('click', e => {
       L.p.lut = v; refresh(); });
   else if (t.dataset.cmd === 'reverse' || t.dataset.cmd === 'mute') { L.p[t.dataset.cmd] = !L.p[t.dataset.cmd]; DUCKENV.clear(); refresh(); }
   else if (t.dataset.cmd === 'swayLoop') { L.p.swayLoop = !L.p.swayLoop; refresh(); }
+  else if (t.dataset.cmd === 'rainPools') { L.p.rainPools = !L.p.rainPools; refresh(); status(L.p.rainPools ? 'The rain now gathers into puddles in the low places, growing while it rains' : 'The rain no longer gathers'); }
   else if (t.dataset.cmd === 'three') { L.p.three = !L.p.three; refresh(); status(L.p.three ? `${L.name} is 3D: turn it with Rotate X and Y, push it back with Depth` : `${L.name} is flat again`); }
   else if (t.dataset.menu === 'shape')
     UI.menu(t, R3D.SHAPES.map(([value, label]) => ({ value, label })), L.p.shape, v => { L.p.shape = v; if (v === 'text') R3D.loadFont(); refresh(); });

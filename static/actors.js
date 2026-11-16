@@ -274,12 +274,12 @@ const Actors = (() => {
         n.material = new T.MeshPhysicalMaterial({ name, color: m.color, roughness: .2, clearcoat: 1, clearcoatRoughness: .03 });
       } else if (name === 'head' || name === 'body') {
         // a photographed skin and clothes: a little sheen at grazing angles, and light that seems to glow through the face
-        n.material = new T.MeshPhysicalMaterial({ name, map: m.map, normalMap: m.normalMap, normalScale: new T.Vector2(.8, .8), roughness: name === 'head' ? .5 : .8,
-          metalness: 0, sheen: name === 'head' ? .45 : .25, sheenRoughness: .6, sheenColor: new T.Color(name === 'head' ? '#ff9a80' : '#ffffff'),
-          emissive: new T.Color(name === 'head' ? '#3a1008' : '#000000'), emissiveIntensity: name === 'head' ? .1 : 0, clearcoat: name === 'head' ? .06 : 0, clearcoatRoughness: .5 });
+        // (the head's map carries the scalp's hair too, so nothing here may tint it)
+        n.material = new T.MeshPhysicalMaterial({ name, map: m.map, normalMap: m.normalMap, normalScale: new T.Vector2(.8, .8), roughnessMap: m.roughnessMap,
+          metalnessMap: m.metalnessMap, roughness: m.roughnessMap ? 1 : .7, metalness: m.metalnessMap ? 1 : 0, specularIntensity: .6 });
       } else if (name === 'hair' && m.map) {
         // hair cards: cut out by their own alpha, a soft sheen along them
-        n.material = new T.MeshPhysicalMaterial({ name, map: m.map, alphaTest: .45, side: T.DoubleSide, roughness: .6, sheen: .8, sheenRoughness: .4, sheenColor: new T.Color('#8a7060') });
+        n.material = new T.MeshPhysicalMaterial({ name, map: m.map, alphaTest: .5, side: T.DoubleSide, roughness: .85, sheen: .2, sheenRoughness: .6, sheenColor: new T.Color('#5a4434') });
       } else if (name === 'hair') {
         n.material = new T.MeshPhysicalMaterial({ name, color: m.color, roughness: .62, sheen: 1, sheenRoughness: .35, sheenColor: new T.Color('#7a6050') });
       }

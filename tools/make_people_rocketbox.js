@@ -5,8 +5,9 @@
 //
 // SRC holds, for each avatar, its .fbx (Assets/Avatars/Adults/<Name>/Export/<Name>.fbx) and its textures
 // (Assets/Avatars/Adults/<Name>/Textures/<code>_{body,head}_{color,normal}.tga and <code>_opacity_color.tga),
-// already turned into <code>_body_color.jpg, <code>_body_normal.jpg, <code>_head_color.jpg, <code>_head_normal.jpg
-// and <code>_opacity_color.png. Riptide must be running (python server.py): the conversion runs in its page, with
+// already turned into <code>_{body,head}_color.jpg and _normal.jpg, <code>_{body,head}_orm.jpg (roughness in green,
+// 0.95 - 1.6 x the specular map, kept between 0.35 and 0.95; red 1, blue 0) and <code>_opacity_color.png (the hair
+// strands, brightened to match the hair painted on the scalp). Riptide must be running (python server.py): the conversion runs in its page, with
 // its own three.js.
 //
 // Each avatar is turned to face +Z in metres, its arms let down from the T pose to hang at its sides, and its
@@ -35,7 +36,7 @@ const URL = process.env.RIPTIDE_URL || 'http://127.0.0.1:5173/';
   const b64 = f => fs.readFileSync(path.join(SRC, f)).toString('base64');
   for (const a of AVATARS) {
     const tex = {};
-    for (const k of ['body_color.jpg', 'body_normal.jpg', 'head_color.jpg', 'head_normal.jpg', 'opacity_color.png'])
+    for (const k of ['body_color.jpg', 'body_normal.jpg', 'body_orm.jpg', 'head_color.jpg', 'head_normal.jpg', 'head_orm.jpg', 'opacity_color.png'])
       tex[k] = `data:image/${k.endsWith('png') ? 'png' : 'jpeg'};base64,` + b64(`${a.code}_${k}`);
     const glb = await page.evaluate(convert, { fbx: b64(a.fbx), tex });
     fs.writeFileSync(path.join(OUT, a.out), Buffer.from(glb, 'base64'));
@@ -90,7 +91,10 @@ async function convert({ fbx, tex }) {
   g.setAttribute('skinIndex', g0.attributes.skinIndex.clone());
   g.setAttribute('skinWeight', g0.attributes.skinWeight.clone());
   if (g0.index) g.setIndex(g0.index.clone());
-  for (const gr of g0.groups) g.addGroup(gr.start, gr.count, gr.materialIndex);
+  // The hair is painted on the scalp, and painted well; the loose cards of hair over it only look right with the soft,
+  // sorted transparency of the engine it was made for, so they are left out.
+  const strands = [].concat(mesh.material).map(m => /opacity/i.test(m.name));
+  for (const gr of g0.groups) if (!strands[gr.materialIndex]) g.addGroup(gr.start, gr.count, gr.materialIndex);
 
   // the skeleton again, every bone unturned at rest, named as Mixamo names them
   const FINGER = ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky'];
@@ -117,10 +121,14 @@ async function convert({ fbx, tex }) {
   });
 
   const load = (url, srgb, mime) => new Promise(res => new T.TextureLoader().load(url, t => { if (srgb) t.colorSpace = T.SRGBColorSpace; t.userData.mimeType = mime; res(t); }));
+  // each part's roughness from its own specular map (made into an ORM map beforehand: see the header): shiny lips and
+  // eyes, a soft sheen of skin, and matte hair and cloth
+  const skinned = async part => { const orm = await load(tex[part + '_orm.jpg'], 0, 'image/jpeg');
+    return new T.MeshStandardMaterial({ name: part, map: await load(tex[part + '_color.jpg'], 1, 'image/jpeg'), normalMap: await load(tex[part + '_normal.jpg'], 0, 'image/jpeg'),
+      roughnessMap: orm, metalnessMap: orm, roughness: 1, metalness: 1 }); };
   const mats = {
-    body: new T.MeshStandardMaterial({ name: 'body', map: await load(tex['body_color.jpg'], 1, 'image/jpeg'), normalMap: await load(tex['body_normal.jpg'], 0, 'image/jpeg'), roughness: .78, metalness: 0 }),
-    head: new T.MeshStandardMaterial({ name: 'head', map: await load(tex['head_color.jpg'], 1, 'image/jpeg'), normalMap: await load(tex['head_normal.jpg'], 0, 'image/jpeg'), roughness: .55, metalness: 0 }),
-    hair: new T.MeshStandardMaterial({ name: 'hair', map: await load(tex['opacity_color.png'], 1, 'image/png'), roughness: .7, metalness: 0, alphaTest: .45, side: T.DoubleSide }),
+    body: await skinned('body'), head: await skinned('head'),
+    hair: new T.MeshStandardMaterial({ name: 'hair', map: await load(tex['opacity_color.png'], 1, 'image/png'), roughness: .85, metalness: 0, alphaTest: .5, side: T.DoubleSide }),
   };
   const slot = m => /opacity/i.test(m.name) ? mats.hair : /head/i.test(m.name) ? mats.head : mats.body;
   const materials = [].concat(mesh.material).map(slot);

@@ -4584,10 +4584,14 @@ const Keep = (() => {
   const on = !!id && here.get('renderhost') !== '1' && 'indexedDB' in window, fresh = here.has('name') || here.has('width');
   const DAYS = 14;
   let db = null, timer = 0, ready = false;
+  // WebKit (Safari, the Mac app) can leave an open hanging after the page navigates, as on a session swap: give up
+  // after a moment, and try afresh next time, so nothing waits on it forever
   const open = () => db || (db = new Promise((ok, no) => {
-    const r = indexedDB.open('riptide-keep', 1);
+    const r = indexedDB.open('riptide-keep', 1); let late = false;
+    const t = setTimeout(() => { late = true; db = null; no(new Error('IndexedDB did not open')); }, 1500);
     r.onupgradeneeded = () => r.result.createObjectStore('windows');
-    r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error);
+    r.onsuccess = () => { clearTimeout(t); if (late) r.result.close(); else ok(r.result); };
+    r.onerror = () => { clearTimeout(t); db = null; no(r.error); };
   }));
   const run = async (mode, fn) => { const d = await open(); return new Promise((ok, no) => {
     const t = d.transaction('windows', mode), r = fn(t.objectStore('windows'));
@@ -4631,10 +4635,14 @@ const Keep = (() => {
   }
   // a moment after a change, and when the page is going away
   function later() { if (!on || !ready) return; clearTimeout(timer); timer = setTimeout(save, 400); }
-  addEventListener('pagehide', () => { clearTimeout(timer); save(); });
+  // let go of the database as the page goes, so the next page (a session swap) can open it straight away
+  addEventListener('pagehide', () => { clearTimeout(timer); const d = db; save().finally(() => { d?.then(x => x.close()).catch(() => {}); if (db === d) db = null; }); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(timer); save(); } });
-  return { later, save, restore, list, forget, start() { ready = true; }, get on() { return on; } };
+  return { later, save, restore, list, forget, start() { ready = true; },
+    stop() { ready = false; clearTimeout(timer); }, get on() { return on; } };
 })();
+// a promise, or what to use instead if it takes longer than MS
+const within = (ms, p, instead) => Promise.race([Promise.resolve(p).catch(() => instead), new Promise(ok => setTimeout(() => ok(instead), ms))]);
 
 // ---------- sessions: every project worked on, swapped in this one window ----------
 // A session is a window's project, kept by its id (above), whoever made it: you, Flash for a chat, or an agent.
@@ -4648,7 +4656,8 @@ const Sessions = (() => {
   const ago = t => { const m = Math.max(0, (Date.now() - t) / 6e4); return m < 1 ? 'just now' : m < 60 ? `${Math.round(m)} min ago`
     : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`; };
   async function list() {
-    const [kept, live] = await Promise.all([Keep.list(), fetch('/api/live/status', { signal: AbortSignal.timeout(1500) }).then(r => r.json()).catch(() => ({ windows: [] }))]);
+    const [kept, live] = await Promise.all([within(1500, Keep.list(), []),
+      within(1500, fetch('/api/live/status').then(r => r.json()), { windows: [] })]);
     const by = new Map(kept.map(k => [k.id, { ...k }]));
     for (const w of live.windows || []) by.set(w.id, { ...(by.get(w.id) || { at: Date.now() }), id: w.id, name: w.name, layers: w.layers ?? by.get(w.id)?.layers, live: true });
     by.set(me, { ...(by.get(me) || {}), id: me, name: projectName, layers: S.layers.length, at: Date.now(), current: true });
@@ -4660,20 +4669,42 @@ const Sessions = (() => {
   async function go(id, live) {
     if (id === me) return;
     status('Swapping session…');
-    await Keep.save();
+    await within(2000, Keep.save());
     if (live) {   // open in another window: it lets go of it (keeping its work) before this one takes it
       await fetch('/api/live/op', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ window: id, op: 'hand_over', args: {}, timeout: 4 }) }).catch(() => {});
     }
     location.href = url(id);
   }
-  async function fresh() { await Keep.save(); location.href = url(crypto.randomUUID().slice(0, 8)); }
+  async function fresh() { await within(2000, Keep.save()); location.href = url(crypto.randomUUID().slice(0, 8)); }
+  let opening = false;
   async function open(anchor = $('#docname')) {
-    const all = await list();
+    if (opening) return; opening = true;
+    let all;
+    try { all = await list(); }
+    catch (e) { console.warn('Could not list the sessions', e); all = [{ id: me, name: projectName, layers: S.layers.length, current: true }]; }
+    finally { opening = false; }
     const items = [{ value: '@new', label: 'New session', hint: '⌥⌘N' }, ...all.map(x => ({ value: x.id, group: 'Sessions',
-      label: esc(x.name) + (x.id.startsWith('flash-') ? ' <b class="sess-tag">Flash</b>' : ''),
+      label: esc(x.name) + (String(x.id).startsWith('flash-') ? ' <b class="sess-tag">Flash</b>' : ''),
       hint: x.current ? 'this window' : `${x.layers == null ? '' : `${x.layers} layer${x.layers === 1 ? '' : 's'} · `}${x.live ? 'open in a window' : ago(x.at)}` }))];
-    UI.menu(anchor, items, me, v => v === '@new' ? fresh() : go(v, all.find(x => x.id === v)?.live));
+    const n = UI.menu(anchor, items, me, v => v === '@new' ? fresh() : go(v, all.find(x => x.id === v)?.live));
+    // each session can be deleted, after asking; one open in another window is that window's to close first
+    n?.querySelectorAll('.mitem[data-value]').forEach(b => {
+      const x = all.find(y => y.id === b.dataset.value); if (!x || (x.live && !x.current)) return;
+      const del = document.createElement('i'); del.className = 'sess-del'; del.title = 'Delete this session';
+      del.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      del.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); remove(x); });
+      b.appendChild(del);
+    });
+  }
+  async function remove(x) {
+    UI.close();
+    const ok = await UI.dialog({ title: `Delete “${x.name || 'Untitled'}”?`,
+      body: x.current ? 'Its work in this window is gone for good, and the window starts a new session. Files you saved to disk stay.'
+        : 'Its work is gone for good. Files you saved to disk stay.', ok: 'Delete' });
+    if (!ok) return;
+    if (x.current) { Keep.stop(); await Keep.forget(x.id); location.href = url(crypto.randomUUID().slice(0, 8)); return; }
+    await Keep.forget(x.id); UI.toast(`Deleted ${x.name || 'Untitled'}`); open();
   }
   async function step(d) {
     const all = (await list()).sort((a, b) => (b.at || 0) - (a.at || 0)), i = all.findIndex(x => x.id === me);

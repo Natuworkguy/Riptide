@@ -678,3 +678,6 @@ html.mac-app .sced header{padding-left:84px}html.mac-app.mac-full .sced header{p
 .swfrec .swfbar { height: 4px; border-radius: 2px; background: rgba(255,255,255,.12); overflow: hidden; }
 .swfrec .swfbar i { display: block; height: 100%; width: 0; background: var(--accent, #4aa3ff); }
 .swfrec .swfrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--muted, #aaa); }
+.sess-del{display:grid;place-items:center;width:20px;height:20px;margin:0 -4px 0 2px;border-radius:4px;color:inherit;opacity:0;cursor:pointer}
+.mitem:hover .sess-del{opacity:.75}
+.sess-del:hover{opacity:1 !important;background:rgba(0,0,0,.25);color:#ffb4b4}

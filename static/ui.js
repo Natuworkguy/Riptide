@@ -91,11 +91,13 @@ const UI = (() => {
     items.forEach((it, i) => {
       if (it.group && it.group !== g) { g = it.group; n.appendChild(el('div', 'mgroup', g)); }
       const b = el('button', 'mitem' + (it.value === current ? ' on' : ''), `${render ? render(it) : ''}<span>${it.label}</span>${it.hint ? `<em>${it.hint}</em>` : ''}`);
+      if (typeof it.value === 'string') b.dataset.value = it.value;
       b.style.animationDelay = Math.min(i, 14) * 12 + 'ms';
       b.onclick = () => { onPick(it.value); close(); }; n.appendChild(b);
     });
     popover(anchor, n);
     n.querySelector('.on')?.scrollIntoView({ block: 'center' });
+    return n;
   }
 
   // ---------- modal dialogs ----------

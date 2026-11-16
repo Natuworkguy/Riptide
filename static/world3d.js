@@ -13,6 +13,8 @@ const World = (() => {
   const RENDERS = [['preview', 'Preview: fast'], ['path', 'Path traced: real light'], ['native', 'Photoreal: rendered natively']];
   const SKIES = [['sunset', 'Golden hour'], ['day', 'Clear day'], ['dusk', 'Dusk'], ['haze', 'Hazy'], ['overcast', 'Overcast'],
     ['night', 'Night'], ['city', 'City night (no stars, cloud lit by the streets)'], ['studio', 'Studio']];
+  const LIQUIDS = [['water', 'Water'], ['mud', 'Muddy water'], ['lava', 'Lava']];
+  const LIQUID_FROM = [['pour', 'Pours from above'], ['spring', 'Wells up from a spring'], ['flood', 'Floods in from the far side'], ['rain', 'Falls as rain']];
   const GROUNDS = [['ocean', 'Ocean'], ['field', 'Wheat field'], ['desert', 'Desert'], ['mountains', 'Mountain road'], ['floor', 'Studio floor'], ['none', 'None']];
   // sky palettes: the zenith, the horizon, the sun, clouds where the sun reaches them and where it does not
   const PALETTE = {
@@ -28,22 +30,24 @@ const World = (() => {
   };
   const FIELDS = ['sky', 'hdri', 'hdriTurn', 'hdriPower', 'sunEl', 'sunAz', 'sunPower', 'clouds', 'wind',
     'ground', 'groundColor', 'floorFinish', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH', 'sway', 'swayLoop',
-    'peaks', 'snow', 'trees', 'road',
+    'peaks', 'snow', 'trees', 'road', 'liquid', 'liquidKind', 'liquidFrom', 'liquidX', 'liquidZ', 'erosion',
     'fog', 'haze', 'hazeFall', 'hazeGlow', 'dust', 'eye', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao', 'render', 'samples', 'pace', 'shutter', 'letterbox', 'godrays', 'flare', 'streaks', 'rain', 'wet', 'objects', 'shots'];
   const DEFAULTS = { hdri: '', hdriTurn: 0, hdriPower: 100, floorFinish: '', sky: 'sunset', sunEl: 8, sunAz: 10, sunPower: 100, clouds: 45, wind: 4, ground: 'ocean', groundColor: '#8a6a45',
     water: '#0b4a46', waves: .6, chop: 50, swell: 0, curl: .5, waveDist: 45, waveAngle: -20, plants: '#c09a48', grass: 60, grassH: .9, sway: 3, swayLoop: false,
-    peaks: 900, snow: 62, trees: 70, road: 7,
+    peaks: 900, snow: 62, trees: 70, road: 7, liquid: 0, liquidKind: 'water', liquidFrom: 'pour', liquidX: 6, liquidZ: -10, erosion: 60,
     fog: 8, haze: 0, hazeFall: 250, hazeGlow: 60, dust: 0, eye: 1.7, heading: 0, pitch: 0, travel: 0, lens: 35, focus: 0, dof: 0, exposure: 0, bloom: 30, grain: 15, fringe: 10, ao: 0, render: 'preview', samples: 128, pace: 100, shutter: 0, letterbox: 'none', godrays: 0, flare: 0, streaks: 0, rain: 0, wet: 0 };
   const LABELS = { hdri: 'Sky photo', hdriTurn: 'Photo turn°', hdriPower: 'Photo light %', floorFinish: 'Ground finish', sky: 'Sky', sunEl: 'Sun height°', sunAz: 'Sun around°', sunPower: 'Sun %', clouds: 'Clouds %', wind: 'Wind m/s',
     ground: 'Ground', groundColor: 'Ground colour', water: 'Water', waves: 'Waves m', chop: 'Chop %', swell: 'Breaker m', curl: 'Curl',
     waveDist: 'Breaker at m', waveAngle: 'Breaker turn°', plants: 'Plants', grass: 'Plants %', grassH: 'Plant height m', sway: 'Sway m/s', swayLoop: 'Loop sway',
     peaks: 'Peaks m', snow: 'Snow line %', trees: 'Pines %', road: 'Road width m',
+    liquid: 'Liquid flow %', liquidKind: 'Liquid', liquidFrom: 'Liquid comes', liquidX: 'Liquid at x m', liquidZ: 'Liquid at z m', erosion: 'Carves ground %',
     fog: 'Fog', haze: 'Height fog', hazeFall: 'Fog thins over m', hazeGlow: 'Sun in fog %', dust: 'Dust', eye: 'Eye height m', heading: 'Look around°', pitch: 'Look up°', travel: 'Travel m', lens: 'Lens mm',
     focus: 'Focus m', dof: 'Depth of field', exposure: 'Exposure', bloom: 'Bloom', grain: 'Grain', fringe: 'Fringe', ao: 'Contact shade', render: 'Render', samples: 'Samples', pace: 'World speed %', shutter: 'Motion blur°', letterbox: 'Letterbox', godrays: 'Light shafts', flare: 'Lens flare', streaks: 'Light streaks', rain: 'Rain', wet: 'Wet ground' };
   const COLORS = ['groundColor', 'water', 'plants'];
-  const NUMBERS = FIELDS.filter(k => !['sky', 'ground', 'objects', 'shots', 'swayLoop', 'hdri', 'floorFinish', 'render', 'letterbox', ...COLORS].includes(k));
+  const NUMBERS = FIELDS.filter(k => !['sky', 'ground', 'liquidKind', 'liquidFrom', 'objects', 'shots', 'swayLoop', 'hdri', 'floorFinish', 'render', 'letterbox', ...COLORS].includes(k));
   const GROUPS = [['World', ['hdri', 'hdriTurn', 'hdriPower', 'sky', 'sunEl', 'sunAz', 'sunPower', 'clouds', 'wind', 'fog', 'haze', 'hazeFall', 'hazeGlow', 'dust', 'rain', 'wet']],
-    ['Ground', ['ground', 'groundColor', 'floorFinish', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH', 'sway', 'swayLoop', 'peaks', 'snow', 'trees', 'road']],
+    ['Ground', ['ground', 'groundColor', 'floorFinish', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH', 'sway', 'swayLoop', 'peaks', 'snow', 'trees', 'road',
+      'liquid', 'liquidKind', 'liquidFrom', 'liquidX', 'liquidZ', 'erosion']],
     ['Lens', ['render', 'samples', 'pace', 'shutter', 'letterbox', 'godrays', 'flare', 'streaks', 'eye', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao']]];
   const STEP = { waves: .05, curl: .01, grassH: .05, eye: .05, exposure: .05 };
   const deg = v => (+v || 0) * Math.PI / 180;
@@ -55,6 +59,10 @@ const World = (() => {
     if (['curl', 'waveDist', 'waveAngle'].includes(k)) return o.ground === 'ocean' && (o.swell > 0 || keyed);
     if (['plants', 'grass', 'grassH', 'sway', 'swayLoop'].includes(k)) return o.ground === 'field';
     if (['peaks', 'snow', 'trees', 'road'].includes(k)) return o.ground === 'mountains';
+    // liquid runs on any land; how it comes, where, and what it does to the ground only once there is some
+    if (k === 'liquid') return o.ground !== 'ocean' && o.ground !== 'none';
+    if (['liquidKind', 'liquidFrom', 'liquidX', 'liquidZ', 'erosion'].includes(k)) return o.ground !== 'ocean' && o.ground !== 'none' && (+o.liquid > 0 || keyed)
+      && (k !== 'erosion' || (o.ground !== 'floor' && o.liquidKind !== 'lava')) && (!['liquidX', 'liquidZ'].includes(k) || o.liquidFrom !== 'rain');
     if (k === 'groundColor') return o.ground !== 'ocean' && o.ground !== 'none';
     if (k === 'clouds') return o.sky !== 'studio' && !o.hdri;
     if (k === 'hdriTurn' || k === 'hdriPower') return !!o.hdri;
@@ -964,7 +972,10 @@ const World = (() => {
     desert: { label: 'Desert at dusk', hint: 'Dunes, a monolith, the last light',
       p: { sky: 'dusk', sunEl: 4, sunAz: -30, sunPower: 120, clouds: 30, wind: 6, ground: 'desert', groundColor: '#c48a52', fog: 10, dust: 25,
         eye: 1.7, heading: 0, pitch: 3, travel: 0, lens: 32, focus: 0, dof: 0, exposure: .2, bloom: 40, grain: 20, fringe: 12, ao: 0,
-        objects: [{ type: 'box', at: [0, 3, -18], size: [1.4, 6, .4], finish: 'concrete', color: '#2a2622' }] },
+        liquid: 100, liquidKind: 'water', liquidFrom: 'pour', liquidX: 0, liquidZ: -16.7, erosion: 80,
+        objects: [{ type: 'box', at: [0, 3, -18], size: [1.4, 6, .4], finish: 'concrete', color: '#2a2622' },
+          // the slot the water pours from
+          { type: 'box', at: [0, 3, -17.79], size: [.42, .1, .02], finish: 'paint', color: '#050505' }] },
       keys: d => ({ travel: [[0, 0, 'sineInOut'], [d, 8]] }) },
     night: { label: 'Night sea', hint: 'Moonlight on dark water',
       p: { sky: 'night', sunEl: 14, sunAz: 5, sunPower: 100, clouds: 25, wind: 3, ground: 'ocean', water: '#041a24', waves: .8, chop: 40,
@@ -972,7 +983,8 @@ const World = (() => {
       keys: d => ({ heading: [[0, -4, 'sineInOut'], [d, 4]] }) },
   };
 
-  const World = { LETTERBOXES, RENDERS, SKIES, GROUNDS, FIELDS, DEFAULTS, LABELS, COLORS, NUMBERS, GROUPS, STEP, PRESETS, PARTS, FINISHES: Object.keys(FINISHES), FINISH_LOOKS: FINISHES,
+  const World = { LETTERBOXES, RENDERS, SKIES, GROUNDS, LIQUIDS, LIQUID_FROM, tex,
+    CHOICES: { sky: SKIES, ground: GROUNDS, render: RENDERS, letterbox: LETTERBOXES, liquidKind: LIQUIDS, liquidFrom: LIQUID_FROM }, FIELDS, DEFAULTS, LABELS, COLORS, NUMBERS, GROUPS, STEP, PRESETS, PARTS, FINISHES: Object.keys(FINISHES), FINISH_LOOKS: FINISHES,
     shows, draw, stage, shoot, worldOf, camera, gl, ensureIds, findPart, finish, custom, M, lin, deg, partGeometry, keyed, heading, placeOf, rng, rebuild,
     get renderer() { return renderer; }, get available() { return !!T; }, prepareFrame, bars, worldTime, propCamera, shotAt, partMatrix,
     // bumped when something props are built from finishes loading (a model, a texture), so they are built again

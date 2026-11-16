@@ -274,6 +274,9 @@
     return group;
   }
 
+  // the land's height and its close-up detail, for what else lies on it (liquid running over it: liquid.js)
+  World.heights = World.heights || {}; World.heights.mountains = height; World.grassTex = () => grassTex();
+
   // ----- each frame: the land, the road and the pines, built when what they are made from changes -----
   World.stageHooks.push(({ B, o, ground, t }) => {
     const on = o.ground === 'mountains', key = on ? [o.peaks, o.snow, o.groundColor].join('|') : null;

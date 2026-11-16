@@ -282,7 +282,13 @@ async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "
     0 for none), curl (0 standing up to 1 thrown over and landing; key it to make the wave break), waveDist (m
     ahead) and waveAngle (degrees turned). A field: plants (colour), grass (%), grassH (m), sway (how hard
     the wheat sways, as wind m/s; 3 in the rig scene) and swayLoop (true fits the sway to the duration so it loops
-    seamlessly). fog and dust (0 to
+    seamlessly). Liquid, on any ground but the ocean and none (simulated, so it runs downhill, pools in hollows,
+    goes round props, and on sand and soil carves channels, drops sand where it slows and soaks in, leaving the ground
+    dark and wet): liquid (flow, %; 0 for none; key it to start and stop), liquidKind "water" | "mud" | "lava" (lava
+    glows, crusts over and sets to rock), liquidFrom "pour" (a stream falling from 3 m up) | "spring" (wells up) |
+    "flood" (rushes in from the far side) | "rain" (falls all over the patch), liquidX and liquidZ (m: where it comes
+    from; it is simulated on a patch 64 m across round there), erosion (how hard it carves, %; 60 by default).
+    The "desert" scene pours water from a slot in its monolith. fog and dust (0 to
     100). haze is height fog, thick low down and thinning upwards, lit by the sun (0 to 100; about 6 for a
     clear mountain day), with hazeFall (metres over which it thins) and hazeGlow (how much the sun lights it, %).
     render: preview, path (path traced in the browser) or native (photoreal: path traced by Riptide's server with

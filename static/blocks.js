@@ -555,7 +555,8 @@ const Blocks = (() => {
   const easeIO = v => v * v * (3 - 2 * v);
   const kindOf = n => /_door$/.test(n) ? 'door' : /_trapdoor$/.test(n) ? 'trapdoor' : /_fence_gate$/.test(n) ? 'gate' : n === 'lever' ? 'lever'
     : /_button$/.test(n) ? 'button' : /_pressure_plate$/.test(n) ? 'plate' : /^(sticky_)?piston$/.test(n) ? 'piston' : n === 'redstone_lamp' ? 'lamp'
-    : /^(trapped_)?chest$|^ender_chest$/.test(n) ? 'chest' : n === 'redstone_wire' ? 'wire' : null;
+    : /^(trapped_)?chest$|^ender_chest$/.test(n) ? 'chest' : n === 'redstone_wire' ? 'wire' : n === 'repeater' ? 'repeater' : n === 'comparator' ? 'comparator' : n === 'observer' ? 'observer' : null;
+  const DIRECTED = new Set(['repeater', 'comparator', 'observer']);
   const RESPONDS = new Set(['door', 'trapdoor', 'gate', 'piston', 'lamp']);
   const SIX = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
   // what a lever or button is fixed to: the block behind it
@@ -571,6 +572,11 @@ const Blocks = (() => {
       if (kind) { const m = { kind, x, y, z, b, i };
         if (kind === 'piston') Object.assign(m, { f: FACE[p.facing] || FACE.up, sticky: /sticky/.test(n), out: p.extended === 'true' });
         if (kind === 'button') m.hold = /stone|polished_blackstone/.test(n) ? 1 : 1.5;
+        // repeaters and comparators take power in at the side they face and give it out the other; an observer
+        // watches the block its face looks at and gives a pulse out of its back
+        if (DIRECTED.has(kind)) { const f = FACE[p.facing] || FACE.north; m.back = [x + f[0], y + f[1], z + f[2]]; m.front = [x - f[0], y - f[1], z - f[2]];
+          m.sides = f[0] ? [[x, y, z + 1], [x, y, z - 1]] : [[x + 1, y, z], [x - 1, y, z]];
+          m.delay = kind === 'repeater' ? clamp(+p.delay || 1, 1, 4) * .1 : .1; m.subtract = p.mode === 'subtract'; }
         list.push(m); skip.add(i); }
       else if (/^piston_head$/.test(n)) skip.add(i);
       else if (/^redstone_(wall_)?torch$|^redstone_block$/.test(n)) sources.push([x, y, z]);
@@ -602,54 +608,87 @@ const Blocks = (() => {
   const woodOfName = n => (woodOf(n) || 'oak') + '_planks';
 
   // ----- what happens when: every action, every button letting go, and the power it all makes -----
+  // Played through in time order, as the game plays it. Power has a strength, 0 to 15: a source gives 15, dust loses
+  // one a block, a repeater gives out a full 15 a tenth of a second (or up to four tenths) after its input comes on or
+  // goes off, a comparator gives out its back input if no side input is stronger (or, set to subtract, the back less
+  // the strongest side) a tenth of a second later, and an observer gives a pulse a tenth of a second long, a tenth of a
+  // second after the block it watches changes. What has power answers at once.
   function timeline(st, actions) {
     const mv = moversOf(st), key = JSON.stringify(actions); if (mv._tl?.key === key) return mv._tl;
-    const comps = mv.list.filter(m => m.kind !== 'block'), on = new Map(), changes = new Map();
+    const comps = mv.list.filter(m => m.kind !== 'block'), on = new Map(), changes = new Map(), out = new Map();
     const doorBase = m => (m.kind === 'door' && m.b.props?.half === 'upper' ? mv.byCell.get(mv.idx(m.x, m.y - 1, m.z)) || m : m);
+    const cell = c => mv.idx(c[0], c[1], c[2]);
     for (const m of comps) { const p = m.b.props || {};
-      on.set(m, m.kind === 'piston' ? m.out : m.kind === 'lever' ? p.powered === 'true' : m.kind === 'lamp' ? p.lit === 'true' : p.open === 'true'); changes.set(m, []); }
-    // what an action at a place does, to which part
-    const evs = [];
-    for (const a of actions) { const m = mv.byCell.get(mv.idx(...a.at)); if (!m || m.kind === 'wire') continue; const tgt = doorBase(m);
-      evs.push({ t: a.t, m: tgt, do: a.do });
-      if (tgt.kind === 'button' || tgt.kind === 'plate') evs.push({ t: a.t + (tgt.hold || 1), m: tgt, do: 'release' }); }
-    evs.sort((a, b) => a.t - b.t);
-    // power: the cells sources power, the blocks they are fixed to (which pass it to all their sides), and the dust
-    const cellsOn = () => {
-      const hot = new Set(), strong = [];
-      for (const [x, y, z] of mv.sources) hot.add(mv.idx(x, y, z));
-      for (const m of comps) if ((m.kind === 'lever' || m.kind === 'button' || m.kind === 'plate') && on.get(m)) {
-        hot.add(m.i); const [bx, by, bz] = backOf(m); const k = mv.idx(m.x + bx, m.y + by, m.z + bz); if (k >= 0) strong.push([m.x + bx, m.y + by, m.z + bz]); }
-      for (const [x, y, z] of strong) hot.add(mv.idx(x, y, z));
-      // dust lights from anything hot beside it, and carries on along itself (up and down a step too)
-      const wires = comps.filter(m => m.kind === 'wire'), lit = new Set(), q = [];
-      const near = (m, set) => SIX.some(([dx, dy, dz]) => set.has(mv.idx(m.x + dx, m.y + dy, m.z + dz)));
-      for (const w of wires) if (near(w, hot)) { lit.add(w.i); q.push(w); }
-      while (q.length) { const w = q.pop();
-        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (const dy of [0, 1, -1]) { const n = mv.byCell.get(mv.idx(w.x + dx, w.y + dy, w.z + dz));
-          if (n && n.kind === 'wire' && !lit.has(n.i)) { lit.add(n.i); q.push(n); } } }
-      return { hot, lit };
-    };
-    const apply = (t, first) => {
-      const { hot, lit } = cellsOn(), powered = c => [c, ...SIX.map(([dx, dy, dz]) => [c[0] + dx, c[1] + dy, c[2] + dz])].some(([x, y, z]) => { const k = mv.idx(x, y, z); return hot.has(k) || lit.has(k); });
+      on.set(m, m.kind === 'piston' ? m.out : m.kind === 'lever' ? p.powered === 'true' : m.kind === 'lamp' ? p.lit === 'true' : DIRECTED.has(m.kind) ? p.powered === 'true' : p.open === 'true');
+      if (DIRECTED.has(m.kind)) out.set(m, on.get(m) ? 15 : 0); changes.set(m, []); }
+    const queue = [];
+    for (const a of actions) { const m = mv.byCell.get(mv.idx(...a.at)); if (!m || m.kind === 'wire' || DIRECTED.has(m.kind)) continue; const tgt = doorBase(m);
+      queue.push({ t: a.t, m: tgt, do: a.do });
+      if (tgt.kind === 'button' || tgt.kind === 'plate') queue.push({ t: a.t + (tgt.hold || 1), m: tgt, do: 'release' }); }
+    const pending = new Map();
+    // the power everywhere, from what is on now
+    const solve = () => {
+      const all = new Map(), strong = new Map(), into = new Map();   // cell -> strength: from sources all round, strong blocks, aimed outputs
+      const raise = (map, k, v) => { if (k >= 0 && v > (map.get(k) || 0)) map.set(k, v); };
+      for (const c of mv.sources) raise(all, cell(c), 15);
       for (const m of comps) {
-        if (m.kind === 'wire') { const v = lit.has(m.i); if (v !== on.get(m)) { on.set(m, v); changes.get(m).push({ t, on: v }); } else if (first) on.set(m, v); continue; }
-        if (!RESPONDS.has(m.kind) || (m.kind === 'door' && m.b.props?.half === 'upper')) continue;
-        const cells = [[m.x, m.y, m.z]]; if (m.kind === 'door') cells.push([m.x, m.y + 1, m.z]);
-        const p = cells.some(powered), was = m._power ?? (first ? null : false);
-        if (p !== was) { m._power = p; if (first && !p) continue; if (p !== on.get(m)) { on.set(m, p); if (!first) changes.get(m).push({ t, on: p }); } }
+        if ((m.kind === 'lever' || m.kind === 'button' || m.kind === 'plate') && on.get(m)) { raise(all, m.i, 15); const [bx, by, bz] = backOf(m); raise(strong, mv.idx(m.x + bx, m.y + by, m.z + bz), 15); }
+        if (DIRECTED.has(m.kind) && out.get(m) > 0) { const f = cell(m.front); raise(into, f, out.get(m)); if (!mv.byCell.has(f)) raise(strong, f, out.get(m)); }
+      }
+      // dust: lit from beside, from a strong block beside, or from an output aimed into it; one weaker a block
+      const level = new Map(), q = [];
+      for (const w of comps) if (w.kind === 'wire') {
+        let v = into.get(w.i) || 0;
+        for (const [dx, dy, dz] of SIX) { const k = mv.idx(w.x + dx, w.y + dy, w.z + dz); v = Math.max(v, all.get(k) || 0, strong.get(k) || 0); }
+        if (v > 0) { level.set(w.i, v); q.push(w); } }
+      while (q.length) { const w = q.shift(), v = level.get(w.i) - 1; if (v <= 0) continue;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (const dy of [0, 1, -1]) { const n = mv.byCell.get(mv.idx(w.x + dx, w.y + dy, w.z + dz));
+          if (n && n.kind === 'wire' && (level.get(n.i) || 0) < v) { level.set(n.i, v); q.push(n); } } }
+      // how strong the power reaching cell C from the cell N beside it is
+      const from = (n, c) => { const k = cell(n), ci = cell(c); const e = mv.byCell.get(k);
+        if (e && DIRECTED.has(e.kind)) return cell(e.front) === ci ? out.get(e) || 0 : 0;
+        return Math.max(all.get(k) || 0, strong.get(k) || 0, level.get(k) || 0); };
+      const powered = c => SIX.some(([dx, dy, dz]) => from([c[0] + dx, c[1] + dy, c[2] + dz], c) > 0) || (strong.get(cell(c)) || 0) > 0 || (into.get(cell(c)) || 0) > 0;
+      return { level, from, powered };
+    };
+    let steps = 0;
+    const record = (m, v, t) => { if (v !== on.get(m)) { on.set(m, v); changes.get(m).push({ t, on: v }); return true; } return false; };
+    const settle = (t, first) => {
+      for (let pass = 0; pass < 4; pass++) {
+        const { level, from, powered } = solve(); let moved = false;
+        for (const m of comps) {
+          if (m.kind === 'wire') { const v = (level.get(m.i) || 0) > 0; if (first) { if (v !== on.get(m)) moved = true; on.set(m, v); } else moved = record(m, v, t) || moved; continue; }
+          if (DIRECTED.has(m.kind)) {
+            if (m.kind === 'observer') continue;
+            const here = [m.x, m.y, m.z], back = from(m.back, here), side = Math.max(...m.sides.map(c => from(c, here)));
+            const want = m.kind === 'repeater' ? (back > 0 ? 15 : 0) : m.subtract ? Math.max(0, back - side) : back >= side ? back : 0;
+            const was = pending.has(m) ? pending.get(m) : out.get(m);
+            if (want !== was) { if (first) { out.set(m, want); on.set(m, want > 0); moved = true; } else { pending.set(m, want); queue.push({ t: Math.round((t + m.delay) * 1000) / 1000, m, set: want }); } }
+            continue;
+          }
+          if (!RESPONDS.has(m.kind) || (m.kind === 'door' && m.b.props?.half === 'upper')) continue;
+          const cells = [[m.x, m.y, m.z]]; if (m.kind === 'door') cells.push([m.x, m.y + 1, m.z]);
+          const p = cells.some(powered), was = m._power ?? (first ? null : false);
+          if (p !== was) { m._power = p; if (first && !p) continue; if (first) { on.set(m, p); moved = true; } else moved = record(m, p, t) || moved; }
+        }
+        if (!moved) break;
       }
     };
+    // an observer sees a change in the block its face looks at
+    const watch = (m, t) => { for (const o of comps) if (o.kind === 'observer' && cell(o.back) === m.i) {
+      queue.push({ t: Math.round((t + .1) * 1000) / 1000, m: o, set: 15 }); queue.push({ t: Math.round((t + .2) * 1000) / 1000, m: o, set: 0 }); } };
     for (const m of comps) delete m._power;
-    apply(0, true);
-    // start states as they are now (after power at the start)
+    settle(0, true);
     const start = new Map([...on]);
-    for (let i = 0; i < evs.length;) {
-      const t = evs[i].t;
-      for (; i < evs.length && evs[i].t === t; i++) { const e = evs[i], m = e.m, cur = on.get(m);
-        const want = e.do === 'release' ? false : e.do === 'press' ? true : ['open', 'on', 'extend'].includes(e.do) ? true : ['close', 'off', 'retract'].includes(e.do) ? false : !cur;
-        if (want !== cur) { on.set(m, want); changes.get(m).push({ t, on: want }); } }
-      apply(t, false);
+    while (queue.length && steps++ < 4000) {
+      queue.sort((a, b) => a.t - b.t); const t = queue[0].t; if (t > 3600) break;
+      const before = new Map(comps.map(m => [m, changes.get(m).length]));
+      while (queue.length && queue[0].t === t) { const e = queue.shift(), m = e.m;
+        if (e.set != null) { if (pending.get(m) === e.set) pending.delete(m); if (out.get(m) !== e.set) { out.set(m, e.set); record(m, e.set > 0, t); } continue; }
+        const cur = on.get(m), want = e.do === 'release' ? false : e.do === 'press' ? true : ['open', 'on', 'extend'].includes(e.do) ? true : ['close', 'off', 'retract'].includes(e.do) ? false : !cur;
+        record(m, want, t); }
+      settle(t, false);
+      for (const m of comps) if (changes.get(m).length > before.get(m)) watch(m, t);
     }
     for (const m of comps) delete m._power;
     return mv._tl = { key, start, changes, doorBase };
@@ -766,6 +805,31 @@ const Blocks = (() => {
     const wrap = new T.Group(); g.position.set(-.5, -.5, -.5); wrap.add(g); aim(wrap, up); wrap.position.set(.5, .5, .5);
     const h = new T.Group(); h.add(wrap); return h;
   }
+  // a repeater or comparator: a stone slab with little torches that light while it gives out power, a strip of dust
+  // along it; an observer: a block with a face, its back lit red while it pulses
+  function diodeMesh(m, v) {
+    const X = 1 / 16, p = m.b.props || {}, f = FACE[p.facing] || FACE.north, g = new T.Group();
+    g.add(piece('smooth_stone', [0, 0, 0], [1, 2 * X, 1]));
+    const torch = (x, z, lit) => { g.add(piece('stripped_oak_log', [x - X, 2 * X, z - X], [x + X, 5 * X, z + X]));
+      const t = new T.Mesh(new T.BoxGeometry(2.4 * X, 2 * X, 2.4 * X), lit ? dustMats.on : dustMats.off); t.position.set(x, 5.6 * X, z); g.add(t); };
+    // made with its input at -z and its output at +z, then turned so the input is on the side it faces
+    if (m.kind === 'repeater') { torch(.5, 4 * X, v > .5); torch(.5, (6 + 2 * clamp(+p.delay || 1, 1, 4)) * X, v > .5); }
+    else { torch(4 * X, 4 * X, v > .5); torch(12 * X, 4 * X, v > .5); torch(.5, 13 * X, m.subtract); }
+    const strip = new T.Mesh(new T.BoxGeometry(2 * X, .01, 10 * X), v > .5 ? dustMats.on : dustMats.off); strip.position.set(.5, 2 * X + .005, .5); g.add(strip);
+    const holder = new T.Group(); g.position.set(-.5, 0, -.5); holder.add(g); holder.position.set(.5, 0, .5);
+    // input (-z) towards its facing
+    holder.rotation.y = f[0] ? -f[0] * Math.PI / 2 : f[2] > 0 ? Math.PI : 0; return holder;
+  }
+  function observerMesh(m, v) {
+    const X = 1 / 16, p = m.b.props || {}, f = FACE[p.facing] || FACE.north, g = new T.Group();
+    const body = piece('cobblestone', [0, 0, 0], [1, 1, 1]); body.position.set(-.5, -.5, -.5); g.add(body);
+    // made looking along +z: two dark eyes on the face, a lamp on the back, red while it pulses
+    const eye = new T.MeshStandardMaterial({ color: '#1a1a1c', roughness: .8 });
+    for (const x of [-3.5 * X, 3.5 * X]) { const e = new T.Mesh(new T.BoxGeometry(3 * X, 3 * X, .02), eye); e.position.set(x, .1, .505); g.add(e); }
+    const dot = new T.Mesh(new T.BoxGeometry(4 * X, 4 * X, .02), v > .5 ? dustMats.on : dustMats.off); dot.position.set(0, 0, -.505); g.add(dot);
+    if (f[1]) g.rotation.x = -f[1] * Math.PI / 2; else g.rotation.y = f[0] ? f[0] * Math.PI / 2 : f[2] < 0 ? Math.PI : 0;
+    const h = new T.Group(); g.position.set(.5, .5, .5); h.add(g); return h;
+  }
   function lampMesh(m, v) { return blockMesh({ name: v > .5 ? 'redstone_lamp' : 'redstone_lamp_off', props: {} }); }
   // a chest: its body, and a lid that lifts on its back edge
   function chestMesh(m, v) {
@@ -811,8 +875,8 @@ const Blocks = (() => {
         for (const mo of pl.moves.get(m) || []) { if (mo.t > t) break; const f = easeIO(clamp((t - mo.t) / STROKE, 0, 1)); p = mo.from.map((v, i) => v + (mo.to[i] - v) * f); }
         mesh.position.set(...p); g.add(mesh); continue;
       }
-      const v = amt(m, m.kind === 'button' || m.kind === 'plate' ? .08 : m.kind === 'lever' ? .12 : m.kind === 'chest' ? .35 : .05);
-      part = m.kind === 'gate' ? (() => { const h = gateMesh(m, v); h.position.set(.5, 0, .5); return h; })() : m.kind === 'lever' ? leverMesh(m, v) : m.kind === 'button' ? buttonMesh(m, v)
+      const v = amt(m, m.kind === 'button' || m.kind === 'plate' ? .08 : m.kind === 'lever' ? .12 : m.kind === 'chest' ? .35 : DIRECTED.has(m.kind) ? .01 : .05);
+      part = m.kind === 'repeater' || m.kind === 'comparator' ? diodeMesh(m, v) : m.kind === 'observer' ? observerMesh(m, v) : m.kind === 'gate' ? (() => { const h = gateMesh(m, v); h.position.set(.5, 0, .5); return h; })() : m.kind === 'lever' ? leverMesh(m, v) : m.kind === 'button' ? buttonMesh(m, v)
         : m.kind === 'plate' ? plateMesh(m, v) : m.kind === 'lamp' ? lampMesh(m, v) : m.kind === 'chest' ? (() => { const h = chestMesh(m, v); h.position.set(.5, 0, .5); return h; })() : m.kind === 'wire' ? wireMesh(mv, m, v) : null;
       if (!part) continue;
       const holder = new T.Group(); holder.add(part); holder.position.set(m.x, m.y, m.z); g.add(holder);
@@ -959,8 +1023,8 @@ const Blocks = (() => {
   const NAMES = { door: 'Door', trapdoor: 'Trapdoor', piston: 'Piston', gate: 'Fence gate', lever: 'Lever', button: 'Button', plate: 'Pressure plate', lamp: 'Lamp', chest: 'Chest' };
   function moversPanel(P, Q) {
     const st = structureOf(Q); if (!st) return '';
-    const mv = moversOf(st), list = mv.list.filter(m => m.kind !== 'block' && !(m.kind === 'door' && m.b.props?.half === 'upper'));
-    if (!list.length) return '<p class="note">No doors, trapdoors or pistons in this build to move.</p>';
+    const mv = moversOf(st), list = mv.list.filter(m => m.kind !== 'block' && m.kind !== 'wire' && !DIRECTED.has(m.kind) && !(m.kind === 'door' && m.b.props?.half === 'upper'));
+    if (!list.length) return '<p class="note">Nothing here to work by hand: no doors, gates, trapdoors, levers, buttons, plates, pistons, lamps or chests.</p>';
     const acts = Array.isArray(P.actions) ? P.actions : [], esc = v => String(v).replace(/[<>&"]/g, '');
     const label = m => `${m.kind === 'piston' && m.sticky ? 'Sticky piston' : NAMES[m.kind]} ${m.x}, ${m.y}, ${m.z}`;
     const rows = list.slice(0, 60).map(m => {

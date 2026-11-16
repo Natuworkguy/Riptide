@@ -332,8 +332,11 @@ async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "
     second or so) | "extend" | "retract" (pistons) | "toggle"}]. Redstone works: a lever that is on, a pressed button or
     plate, a redstone torch or block powers what touches it and the block it is fixed to, redstone dust carries power
     along itself (lit while it does), and doors, gates and trapdoors with power open, pistons push (the line ahead, up to
-    12; sticky ones pull one back), and lamps light. In the scene editor the build's panel lists everything that moves
-    with buttons to do it at the playhead.
+    12; sticky ones pull one back), and lamps light. Power has a strength (0 to 15; dust loses one a block). Repeaters pass
+    full power on after their delay (1 to 4 tenths of a second), comparators pass the back input on if no side input is
+    stronger (or, in subtract mode, the back less the strongest side), and observers give a one-tenth-second pulse out of
+    their back when the block their face looks at changes. In the scene editor the build's panel lists everything that
+    moves with buttons to do it at the playhead.
     A "coffers" is a coffered dome you stand in the middle of ("radius", "rows", "cols", "span" degrees round, "from"/"to"
     degrees up, "steps", "depth", "rib" m, "color", "ambient" % light in the shade, "ambientColor"); a "sunbeam" is the
     sun through one opening, shining along its own +z ("size" [disc width m, 1, 1], "reach", "soft", "power", "color").

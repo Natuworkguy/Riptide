@@ -74,7 +74,7 @@ function curveSVG(name, w = 34, h = 22, fn = null) {
 // ---------- model ----------
 const ANIM = ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'radius', 'fill', 'fill2', 'mid1', 'mid2', 'mid3', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth',
   'blur', 'shadow', 'rgb', 'size', 'reveal', 'erase', 'sweep', 'spacing', 'bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert',
-  'boil', 'vapor', 'echo', 'echoGap', 'echoFade', 'echoScale', 'zblur', 'smear', 'smearAt', 'cutEdge', 'cutGrow', 'count', 'lineLen', 'thick', 'hole', 'rush', 'cover', 'holeX', 'holeY', 'soft', 'drift', 'glints', 'morph', 'wobble', 'rotX', 'rotY', 'z', 'd', 'lightAngle', 'orbit', 'tilt', 'dolly', 'zoom', ...Figure.JOINTS, 'side', 'limb', 'caps', 'lineh', 'speed', 'vol',
+  'boil', 'vapor', 'echo', 'echoGap', 'echoFade', 'echoScale', 'zblur', 'smear', 'smearAt', 'flute', 'fluteBend', 'fluteStreak', 'fluteLines', 'fluteShine', 'fluteChroma', 'fluteShift', 'cutEdge', 'cutGrow', 'count', 'lineLen', 'thick', 'hole', 'rush', 'cover', 'holeX', 'holeY', 'soft', 'drift', 'glints', 'morph', 'wobble', 'rotX', 'rotY', 'z', 'd', 'lightAngle', 'orbit', 'tilt', 'dolly', 'zoom', ...Figure.JOINTS, 'side', 'limb', 'caps', 'lineh', 'speed', 'vol',
   'mx', 'my', 'mw', 'mh', 'mround', 'feather', 'keyTol', 'keySoft', 'spill', ...Grade.GRADE, 'vig', 'vigSize', 'lutMix'];
 const ADJUST = ['bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert'];
 // a video clip's own time and sound: its speed (keyframed, a ramp), playing backwards, and its volume and fades
@@ -91,7 +91,10 @@ const KEYP = ['chroma', 'keyColor', 'keyTol', 'keySoft', 'spill'];
 const ECHO = ['echo', 'echoGap', 'echoFade', 'echoScale'];
 // Pixel smear: bright pixels dragged out into streaks, the datamosh look of a frame melting
 const SMEAR = ['smear', 'smearDir', 'smearAt'];
-const COMMON = ['x', 'y', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'blur', 'shadow', 'rgb', 'boil', 'vapor', ...ECHO, 'zblur', ...SMEAR, ...ADJUST, ...FINISH];
+// Fluted glass: the layer seen through a sheet of reeded glass, ribs side by side, each a little lens that squeezes and
+// mirrors what is behind it, streaks it along its length, shines down its middle and splits colour at its edges
+const FLUTE = ['flute', 'fluteDir', 'fluteBend', 'fluteStreak', 'fluteLines', 'fluteShine', 'fluteChroma', 'fluteShift'];
+const COMMON = ['x', 'y', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'blur', 'shadow', 'rgb', 'boil', 'vapor', ...ECHO, 'zblur', ...SMEAR, ...FLUTE, ...ADJUST, ...FINISH];
 // cutting a person out of a picture or video with no green screen (cutout.js)
 const CUTP = ['cutout', 'cutEdge', 'cutGrow'];
 // turned on X and Y and pushed back in depth: any layer with 3D on, and the 3D layers themselves
@@ -119,7 +122,7 @@ const PROPS = {
   // see the subject through, and glints of light blurred into soft discs
   through: [...FLAT, 'w', 'h', 'thing', 'fill', 'fill2', 'cover', 'hole', 'holeX', 'holeY', 'soft', 'drift', 'glints', 'seed'],
   // an adjustment layer: draws nothing itself, and grades, blurs and adjusts everything under it, within its box
-  adjust:  ['x', 'y', 'w', 'h', 'rotation', 'opacity', 'blur', 'zblur', 'rgb', ...SMEAR, ...ADJUST, ...FINISH.filter(k => k !== 'matte')],
+  adjust:  ['x', 'y', 'w', 'h', 'rotation', 'opacity', 'blur', 'zblur', 'rgb', ...SMEAR, ...FLUTE, ...ADJUST, ...FINISH.filter(k => k !== 'matte')],
   shape3d: [...COMMON, ...DEPTH, 'w', 'h', 'd', 'shape', 'text', 'radius', 'fill', 'material', 'lightAngle'],
   model:   [...COMMON, ...DEPTH, 'w', 'h', 'lightAngle'],
   figure:  [...COMMON, 'w', 'h', 'fill', 'stroke', 'strokeWidth', 'side', 'limb', 'caps', ...Figure.JOINTS, ...PHYS],
@@ -134,7 +137,7 @@ const GROUPS = [['Transform', ['x', 'y', 'w', 'h', 'd', 'rotation', 'scale', 'sx
   ['3D', ['three', 'shape', 'rotX', 'rotY', 'z', 'material', 'lightAngle']], ['Camera', ['orbit', 'tilt', 'dolly', 'zoom']],
   ['Drawing', ['pathd', 'vb', 'pfill']], ['Style', ['fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', 'radius', 'points', 'wobble', 'morph', 'seed', 'sweep', 'opacity']],
   ['Text', ['text', 'font', 'weight', 'size', 'lineh', 'italic', 'align', 'tcase', 'spacing', 'reveal', 'retype']], ['Pose', ['side', 'limb', 'caps', ...Figure.JOINTS]], ['Physics', PHYS],
-  ['Clip', CLIP], ['Speed lines', ['count', 'lineLen', 'thick', 'hole', 'rush']], ['Shoot through', ['thing', 'cover', 'holeX', 'holeY', 'soft', 'drift', 'glints']], ['Effects', ['blur', 'zblur', 'shadow', 'rgb', 'boil', 'vapor']], ['Echo', ECHO], ['Pixel smear', SMEAR], ['Cut out', CUTP], ['Adjust', ADJUST], ['Green screen', KEYP], ['Mask', MASK],
+  ['Clip', CLIP], ['Speed lines', ['count', 'lineLen', 'thick', 'hole', 'rush']], ['Shoot through', ['thing', 'cover', 'holeX', 'holeY', 'soft', 'drift', 'glints']], ['Effects', ['blur', 'zblur', 'shadow', 'rgb', 'boil', 'vapor']], ['Echo', ECHO], ['Pixel smear', SMEAR], ['Fluted glass', FLUTE], ['Cut out', CUTP], ['Adjust', ADJUST], ['Green screen', KEYP], ['Mask', MASK],
   ['Grade', Grade.GRADE], ['Curves', ['curves']], ['Vignette and LUT', LOOKP]];
 GROUPS.splice(1, 0, ...World.GROUPS);
 const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', scale: 'Scale', sx: 'Stretch X', sy: 'Stretch Y',
@@ -143,6 +146,7 @@ const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', sca
   font: 'Font', italic: 'Italic', align: 'Align', tcase: 'Case', lineh: 'Leading',
   mask: 'Mask', matte: 'Track matte', mx: 'Mask X', my: 'Mask Y', mw: 'Mask W', mh: 'Mask H', mround: 'Corners', feather: 'Feather',
   smear: 'Smear px', smearDir: 'Smear to°', smearAt: 'Brighter than %',
+  flute: 'Rib width px', fluteDir: 'Ribs run', fluteBend: 'Bend %', fluteStreak: 'Streak px', fluteLines: 'Fine lines %', fluteShine: 'Shine %', fluteChroma: 'Colour split px', fluteShift: 'Slide px',
   echo: 'Echoes', echoGap: 'Echo gap s', echoFade: 'Echo fade %', echoScale: 'Echo grow %', zblur: 'Zoom blur',
   cutout: 'Cut out person', cutEdge: 'Edge soft', cutGrow: 'Grow', count: 'Lines', lineLen: 'Length %', thick: 'Thickness', hole: 'Clear middle %', rush: 'Rush %', thing: 'In front', cover: 'Covers %', holeX: 'Clear spot x %', holeY: 'Clear spot y %', soft: 'Out of focus %', drift: 'Drift', glints: 'Glints',
   minv: 'Invert', chroma: 'Key out', keyColor: 'Key colour', keyTol: 'Tolerance', keySoft: 'Softness', spill: 'Spill %',
@@ -159,7 +163,7 @@ const CAMERA_LABEL = { x: 'Look at X', y: 'Look at Y', rotation: 'Roll°' };
 Object.assign(LABEL, World.LABELS);
 const STEP = { echoGap: .01, gradMorph: 1, opacity: .05, scale: .05, sx: .05, sy: .05, reveal: .05, erase: .05, zoom: .05, expo: .05, gamma: .05, ...World.STEP };
 const PALETTE = ['#7c5cff', '#ff5c8a', '#20c997', '#ffb020', '#3fa9ff', '#ff7a45'];
-const DEFAULTS = { smear: 0, smearDir: 0, smearAt: 55, echo: 0, echoGap: .05, echoFade: 80, echoScale: 0, zblur: 0, cutout: false, cutEdge: 2, cutGrow: 0,
+const DEFAULTS = { smear: 0, smearDir: 0, smearAt: 55, flute: 0, fluteDir: 'down', fluteBend: 40, fluteStreak: 30, fluteLines: 55, fluteShine: 40, fluteChroma: 3, fluteShift: 0, echo: 0, echoGap: .05, echoFade: 80, echoScale: 0, zblur: 0, cutout: false, cutEdge: 2, cutGrow: 0,
   count: 90, lineLen: 30, thick: 3, hole: 35, rush: 100, thing: 'ribbon', cover: 60, holeX: 56, holeY: 55, soft: 60, drift: 25, glints: 5, pathd: '', vb: '0 0 100 100', pfill: false, boil: 0, vapor: 0, morph: 0, wobble: 40, seed: 1, rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0, rgb: 0,
   size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, erase: 0, retype: '', font: 'Inter', italic: false, align: 'center', tcase: 'none', lineh: 110,
   speed: 100, reverse: false, vol: 100, mute: false, afadeIn: 0, afadeOut: 0,
@@ -627,6 +631,7 @@ function drawSpeedLines(c, o, t) {
 // spot (Clear middle size, at Clear spot x and y) is where it parts to show the subject; Glints are lights behind or
 // on it, so far out of focus they are discs. Drift moves it slowly, as if held by hand. All from the time alone.
 const THINGS = [['ribbon', 'Fabric or plastic'], ['leaves', 'Leaves'], ['leak', 'A light leak']];
+const FLUTE_DIRS = [['down', 'Up and down'], ['across', 'Side to side']];
 const throughCv = {};
 function drawThrough(c, o, t) {
   const w = Math.abs(o.w), h = Math.abs(o.h); if (w < 2 || h < 2) return;
@@ -713,6 +718,50 @@ function zoomBlur(A, W, H, cx, cy, amount) {
 // Pixel smear: in the region RG of image data D (W wide), every pixel brighter than AT starts a streak that drags its
 // colour on for up to LEN pixels (each row's streaks a different length, the same every time that frame plays), in
 // direction DIR: 0° to the right, 90° down, 180° left, 270° up.
+// Fluted glass over the region RG of image data IMG (K canvas pixels a layer pixel). The ribs are O.flute layer pixels
+// wide, running down the frame (or across, with fluteDir 'across'), slid along by fluteShift. Each rib is a little
+// cylinder lens: what it shows at a point across it comes from further out, BEND % of a rib either way, mirrored past
+// its middle as a real reed is; it is streaked along its length over STREAK px (a running average down the column, so
+// it costs the same at any length), brightened down its middle and shaded at its edges (SHINE %), and its red and
+// blue taken a little apart (CHROMA px) the way glass splits light.
+function flutedGlass(img, o, k, rg) {
+  const { width: w, height: h, data: d } = img, across = o.fluteDir === 'across';
+  const W = Math.max(2, o.flute * k), bend = (+o.fluteBend || 0) / 100, streak = Math.max(0, Math.round((+o.fluteStreak || 0) * k / 2));
+  const shine = (+o.fluteShine || 0) / 100, chroma = (+o.fluteChroma || 0) * k, shift = (+o.fluteShift || 0) * k;
+  // fine lines along the glass, as in a real pressed or brushed sheet: each line of pixels a little lighter or darker,
+  // the same line every frame (it travels with the glass when it slides)
+  const fine = (+o.fluteLines || 0) / 100, grain = q => { let x = Math.imul(q | 0, 2654435761) >>> 0; x ^= x >>> 13; x = Math.imul(x, 1274126177) >>> 0; return ((x ^ (x >>> 16)) >>> 0) / 4294967296; };
+  // lines run along the ribs; positions go across them
+  const lines = across ? h : w, along = across ? w : h, idx = (pos, line) => (across ? line * w + pos : pos * w + line) * 4;
+  // running sums along each line, for a streak of any length in one subtraction
+  const sum = new Float32Array((along + 1) * lines * 4);
+  for (let l = 0; l < lines; l++) for (let p = 0; p < along; p++) {
+    const i = idx(p, l), j = ((l * (along + 1)) + p + 1) * 4, jp = j - 4;
+    for (let c = 0; c < 4; c++) sum[j + c] = sum[jp + c] + d[i + c];
+  }
+  const src = new Uint8ClampedArray(d);
+  const origin = (across ? rg.y : rg.x) + shift;
+  const avg = (line, p, c) => {
+    line = Math.max(0, Math.min(lines - 1, Math.round(line)));
+    const a = Math.max(0, p - streak), b = Math.min(along - 1, p + streak), base = line * (along + 1) * 4;
+    return (sum[(base + (b + 1) * 4) + c] - sum[(base + a * 4) + c]) / (b - a + 1);
+  };
+  for (let l = 0; l < lines; l++) {
+    const abs = l + (across ? rg.y : rg.x) - origin, u = ((abs % W) + W) % W / W, m = u - .5;   // -0.5..0.5 across the rib
+    // a cylinder: the view bends out more towards the rib's edges, and flips past its middle
+    const off = Math.sin(m * Math.PI) * W * bend * -1.2, from = l + off;
+    const q = Math.floor(abs / Math.max(1, k * 1.5)), streaky = grain(q) * .6 + grain(Math.floor(q / 3) + 7777) * .4;
+    const lit = (1 + shine * (.55 * Math.pow(Math.cos(m * Math.PI), 8) - .45 * Math.pow(Math.abs(m) * 2, 6))) * (1 + fine * (streaky - .5) * 1.4);
+    for (let p = 0; p < along; p++) {
+      const i = idx(p, l);
+      const r = streak ? avg(from + chroma, p, 0) : src[idx(p, Math.max(0, Math.min(lines - 1, Math.round(from + chroma))))];
+      const g = streak ? avg(from, p, 1) : src[idx(p, Math.max(0, Math.min(lines - 1, Math.round(from))))  + 1];
+      const b = streak ? avg(from - chroma, p, 2) : src[idx(p, Math.max(0, Math.min(lines - 1, Math.round(from - chroma)))) + 2];
+      const a = streak ? avg(from, p, 3) : src[idx(p, Math.max(0, Math.min(lines - 1, Math.round(from)))) + 3];
+      d[i] = r * lit; d[i + 1] = g * lit; d[i + 2] = b * lit; d[i + 3] = a;
+    }
+  }
+}
 function pixelSmear(img, len, dir, at, seed) {
   const { width: w, height: h, data: d } = img, q = ((Math.round(dir / 90) % 4) + 4) % 4, horiz = q % 2 === 0, back = q >= 2;
   const lines = horiz ? h : w, along = horiz ? w : h, lim = at / 100 * 255;
@@ -775,7 +824,7 @@ const keyedAny = (L, ks) => ks.some(k => L.keys[k]?.length);
 const maskOn = L => L.p.mask === 'rect' || L.p.mask === 'ellipse' || (L.p.mask === 'pen' && (L.p.mpts?.length || 0) >= 3);
 function finishes(L) {
   const p = L.p;
-  return L.type === 'adjust' || maskOn(L) || (p.matte || 'none') !== 'none' || p.chroma || +p.zblur > 0 || !!L.keys.zblur?.length || +p.smear > 0 || !!L.keys.smear?.length || !!(p.lut && S.luts?.[p.lut])
+  return L.type === 'adjust' || maskOn(L) || (p.matte || 'none') !== 'none' || p.chroma || +p.zblur > 0 || !!L.keys.zblur?.length || +p.smear > 0 || !!L.keys.smear?.length || +p.flute > 0 || !!L.keys.flute?.length || !!(p.lut && S.luts?.[p.lut])
     || Grade.graded(p, p.curves) || +p.vig > 0 || keyedAny(L, [...Grade.GRADE, 'vig']);
 }
 // scratch sheets the size of the canvas being drawn, reused frame to frame
@@ -800,7 +849,7 @@ function maskPath(c, L, o) {
 // the whole canvas while a transition might have pushed it further
 function pixelRegion(L, t, o, M, W, H) {
   if (transitionAt(L, t) || o.zblur > 0 || o.echo >= 1) return { x: 0, y: 0, w: W, h: H };
-  const b = box(L, t), k = Math.hypot(M.a, M.b), pad = (o.blur * 3 + o.shadow * 2 + o.rgb + 4 + (+o.smear || 0)) * k;
+  const b = box(L, t), k = Math.hypot(M.a, M.b), pad = (o.blur * 3 + o.shadow * 2 + o.rgb + 4 + (+o.smear || 0) + (o.flute > 0 ? +o.flute + (+o.fluteStreak || 0) : 0)) * k;
   const x0 = Math.max(0, Math.floor((b.x - b.ex) * k + M.e - pad)), y0 = Math.max(0, Math.floor((b.y - b.ey) * k + M.f - pad));
   const x1 = Math.min(W, Math.ceil((b.x + b.ex) * k + M.e + pad)), y1 = Math.min(H, Math.ceil((b.y + b.ey) * k + M.f + pad));
   return x1 > x0 && y1 > y0 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
@@ -826,6 +875,11 @@ function finishLayer(c, L, t, i, depth = 0) {
   if (o.chroma && PROPS[L.type].includes('chroma') || Grade.graded(o, L.p.curves) || lut) {
     const img = a.getImageData(rg.x, rg.y, rg.w, rg.h);
     Grade.apply(img.data, PROPS[L.type].includes('chroma') ? o : { ...o, chroma: false }, L.p.curves, lut);
+    a.putImageData(img, rg.x, rg.y);
+  }
+  if (o.flute > 0) {
+    const img = a.getImageData(rg.x, rg.y, rg.w, rg.h);
+    flutedGlass(img, o, k, rg);
     a.putImageData(img, rg.x, rg.y);
   }
   if (o.smear > 0) {
@@ -1533,6 +1587,7 @@ function renderProps() {
         else if (k === 'reverse' || k === 'mute' || k === 'swayLoop' || k === 'rainPools') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="${k}"${k === 'swayLoop' ? ' title="Fit the sway to the video, so its last frame meets its first"' : k === 'rainPools' ? ' title="The rain gathers in the low places into puddles that grow while it rains"' : ''}><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
         else if (k === 'italic') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="italic"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
         else if (k === 'align') field = `<button class="selectbtn" data-menu="align"><span>${(TEXT_ALIGNS.find(a => a[0] === v) || TEXT_ALIGNS[1])[1]}</span>${ICON.chev}</button>`;
+        else if (k === 'fluteDir') field = `<button class="selectbtn" data-menu="fluteDir"><span>${(FLUTE_DIRS.find(a => a[0] === v) || FLUTE_DIRS[0])[1]}</span>${ICON.chev}</button>`;
         else if (k === 'thing') field = `<button class="selectbtn" data-menu="thing"><span>${(THINGS.find(a => a[0] === v) || THINGS[0])[1]}</span>${ICON.chev}</button>`;
         else if (k === 'tcase') field = `<button class="selectbtn" data-menu="tcase"><span>${(TEXT_CASES.find(a => a[0] === v) || TEXT_CASES[0])[1]}</span>${ICON.chev}</button>`;
         else if (k === 'three') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="three" title="${v ? 'Make it flat again' : 'Turn it in 3D, push it back, and let a camera move around it'}"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
@@ -1819,6 +1874,8 @@ Pn.addEventListener('click', e => {
   }
   else if (t.dataset.menu === 'align')
     UI.menu(t, TEXT_ALIGNS.map(([v, l]) => ({ value: v, label: l })), L.p.align || 'center', v => { L.p.align = v; refresh(); });
+  else if (t.dataset.menu === 'fluteDir')
+    UI.menu(t, FLUTE_DIRS.map(([v, l]) => ({ value: v, label: l })), L.p.fluteDir || 'down', v => { L.p.fluteDir = v; refresh(); });
   else if (t.dataset.menu === 'thing')
     UI.menu(t, THINGS.map(([v, l]) => ({ value: v, label: l })), L.p.thing || 'ribbon', v => { L.p.thing = v; refresh(); });
   else if (t.dataset.menu === 'tcase')

@@ -221,7 +221,12 @@ to the part both share, then type the rest of the new one (reveal 0-1 types, 1-2
     Put it above a photo or video of the subject and size it a little bigger than the canvas. Any layer takes "echo" (copies of it from a moment before, fading:
     a trail on a move, or with "echoScale" growing each copy %, rings pulsing off a logo), "echoGap" (seconds between
     copies), "echoFade" (% the oldest has faded), and "zblur" (zoom blur from its centre, 0 to 200: a rush forward;
-    on a full-canvas "adjust" layer it smears the whole frame). Pictures and videos added by the user take "cutout"
+    on a full-canvas "adjust" layer it smears the whole frame). Fluted glass, on any layer or an "adjust" layer above
+    others: "flute" (rib width px; 0 off: a few wide ribs, 150 to 300 on 1080, for big panels, 20 to 60 for reeded
+    glass), "fluteDir" ("down" or "across"), "fluteBend" (how much each rib bends and mirrors what is behind it, %),
+    "fluteStreak" (px drawn out along the ribs), "fluteLines" (fine lines in the glass, %), "fluteShine" (light down
+    each rib's middle, shade at its edges, %), "fluteChroma" (colour split at edges, px) and "fluteShift" (px; key it
+    to slide the glass across what is behind it). Pictures and videos added by the user take "cutout"
     true (the person in them cut out of their background, no green screen needed), "cutEdge" (edge softness) and
     "cutGrow" (-10 to 10, pushes the edge out or in); set them with update_layer.
 

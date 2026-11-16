@@ -681,3 +681,5 @@ html.mac-app .sced header{padding-left:84px}html.mac-app.mac-full .sced header{p
 .sess-del{display:grid;place-items:center;width:20px;height:20px;margin:0 -4px 0 2px;border-radius:4px;color:inherit;opacity:0;cursor:pointer}
 .mitem:hover .sess-del{opacity:.75}
 .sess-del:hover{opacity:1 !important;background:rgba(0,0,0,.25);color:#ffb4b4}
+.mv-row{display:flex;align-items:center;gap:6px;padding:2px 0;font-size:12px}
+.mv-row span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dim,#aaa)}

@@ -176,6 +176,11 @@ const Blocks = (() => {
     else if (/carpet$|pressure_plate$|^moss_carpet$|^snow$|lily_pad/.test(n)) shape = n === 'snow' ? 'layer' : 'carpet';
     else if (/torch$/.test(n)) { shape = /wall_torch/.test(n) ? 'wallTorch' : 'torch'; pass = 'cut'; tiles = t(['torch', '#6a5132', /soul/.test(n) ? '#7fe3f0' : /redstone/.test(n) ? '#ff3b2b' : '#ffd36b']); }
     else if (/lantern$/.test(n)) { shape = 'lantern'; pass = 'cut'; tiles = t(['lamp', /soul/.test(n) ? '#7fe3f0' : '#f6c35a']); }
+    else if (/(^|_)rail$/.test(n)) { shape = 'rail'; pass = 'cut';
+      const ew = /east_west|ascending_east|ascending_west/.test(p.shape || ''), lit = /powered|golden/.test(n) ? '#e2b93b' : /detector|activator/.test(n) ? '#a3170f' : '';
+      tiles = t([ew ? 'railx' : 'rail', '#8a8a8e', lit || '#6a5132']); }
+    else if (/^(sticky_)?piston$/.test(n)) { shape = 'piston'; tiles = { top: ['planks', WOODS.oak], side: ['noise', '#7d7d7f'], bottom: ['noise', '#6a6a6c'] }; }
+    else if (/^piston_head$|^moving_piston$/.test(n)) shape = 'none';
     else if (/_door$/.test(n)) { shape = 'door'; pass = 'cut'; tiles = t(['door', wood ? WOODS[wood] : '#d8d8d8']); }
     else if (/_trapdoor$/.test(n)) { shape = 'trapdoor'; pass = 'cut'; tiles = t(['door', wood ? WOODS[wood] : '#d8d8d8']); }
     else if (/_sign$|_banner$|button$|lever$|ladder$|rail$|_head$|_skull$|flower_pot|candle|tripwire|redstone_wire|frame|painting/.test(n)) shape = 'none';
@@ -231,6 +236,11 @@ const Blocks = (() => {
         case 'straw': k = (x % 3 === 0 ? .78 : .95) + r(x, y >> 1) * .15; break;
         case 'band': if (y > 4 && y < 11) { col = B; k = 1; if (y > 5 && y < 10 && x > 2 && x < 13 && (x + y) % 2) col = new T.Color('#1c1c1c'); } break;
         case 'glazed': { const d = Math.abs(x - y), e = Math.abs(x + y - 15); if (d < 2 || e < 2) { col = B; k = .95; } else k = .95 + r(x, y) * .06; break; }
+        case 'rail': case 'railx': {
+          // sleepers across, two steel rails along, drawn for a track running north-south (railx: east-west)
+          const u = style === 'railx' ? y : x, v = style === 'railx' ? x : y;
+          const rail = u === 3 || u === 12, tie = (v % 4 === 1 || v % 4 === 2) && u > 0 && u < 15;
+          a = rail || tie ? 1 : 0; if (rail) { col = A; k = 1.05 + (u === 3 ? .1 : -.05) + r(u, v) * .05; } else { col = B; k = .75 + r(u >> 1, v >> 2) * .25; } break; }
         case 'bars': { a = (x % 4 === 1 || y === 1 || y === 14) ? 1 : 0; k = .9 + r(x, y) * .15; break; }
         case 'door': { const frame = x === 0 || x === 15 || y === 0 || y === 15 || y === 7, win = x > 2 && x < 13 && y > 1 && y < 6 && !(x === 7 || x === 8); if (win) a = 0; k = frame ? .75 : .9 + r(x >> 1, y) * .14; break; }
         case 'torch': { a = 0; if (x === 7 || x === 8) { if (y >= 9) { a = 1; col = A; k = .9 + r(x, y) * .1; } else if (y >= 6) { a = 1; col = B; k = 1.2; } } break; }
@@ -263,7 +273,7 @@ const Blocks = (() => {
     { n: [0, 0, -1], u: [-1, 0, 0], v: [0, 1, 0], o: (a, b) => [b[0], a[1], a[2]], tile: 'side' },
   ];
   const AOK = [.5, .68, .84, 1];
-  function build(st) {
+  function build(st, skip = null) {
     const [X, Y, Z] = st.size, grid = st.grid, lk = st.palette.map(p => (AIR.test(p.name) ? null : lookOf(p)));
     const at = (x, y, z) => (x < 0 || y < 0 || z < 0 || x >= X || y >= Y || z >= Z ? 0 : grid[(y * Z + z) * X + x]);
     const look = (x, y, z) => { const v = at(x, y, z); return v ? lk[v - 1] : null; };
@@ -305,7 +315,7 @@ const Blocks = (() => {
     const facing = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0] };
     const joins = (x, y, z, l) => { const o = look(x, y, z); return !!o && (solid(x, y, z) || o.shape === l.shape || (l.shape === 'fence' && o.shape === 'gate') || (/pane|wall/.test(l.shape) && /pane|wall/.test(o.shape))); };
     for (let y = 0; y < Y; y++) for (let z = 0; z < Z; z++) for (let x = 0; x < X; x++) {
-      const v = grid[(y * Z + z) * X + x]; if (!v) continue; const l = lk[v - 1]; if (!l || l.shape === 'none') continue;
+      const gi = (y * Z + z) * X + x, v = grid[gi]; if (!v || (skip && skip.has(gi))) continue; const l = lk[v - 1]; if (!l || l.shape === 'none') continue;
       const Bk = bucket(passOf(l)), p = l.props;
       if (l.shape === 'cube') {
         for (const f of FACES) {
@@ -361,6 +371,8 @@ const Blocks = (() => {
           const a = [ax > 0 ? 0 : ax < 0 ? 1 - t : 0, 0, az > 0 ? 0 : az < 0 ? 1 - t : 0], b = [ax > 0 ? t : 1, 1, az > 0 ? t : 1];
           box(Bk, l, x, y, z, a, b); break; }
         case 'chest': box(Bk, l, x, y, z, [1 / 16, 0, 1 / 16], [15 / 16, 14 / 16, 15 / 16]); break;
+        case 'rail': box(Bk, l, x, y, z, [0, 0, 0], [1, 1 / 16, 1], f => f.n[1] !== 1); break;
+        case 'piston': box(Bk, l, x, y, z, [0, 0, 0], [1, 1, 1]); break;
         case 'bed': box(Bk, l, x, y, z, [0, 0, 0], [1, 9 / 16, 1]); break;
         case 'cross': cross(Bk, l, x, y, z, 1); break;
       }
@@ -396,6 +408,7 @@ const Blocks = (() => {
   const demos = new Map();
   function demo(kind) {
     if (demos.has(kind)) return demos.get(kind);
+    if (kind === 'jungle') { const st = jungle(); demos.set(kind, st); return st; }
     const X = 26, Y = 26, Z = 26, grid = new Uint16Array(X * Y * Z), palette = [], ids = new Map();
     const id = (name, props = {}) => { const k = name + JSON.stringify(props); if (!ids.has(k)) { ids.set(k, palette.length); palette.push({ name, props }); } return ids.get(k) + 1; };
     const set = (x, y, z, name, props) => { if (x >= 0 && y >= 0 && z >= 0 && x < X && y < Y && z < Z) grid[(y * Z + z) * X + x] = id(name, props); };
@@ -452,14 +465,236 @@ const Blocks = (() => {
     demos.set(kind, st); return st;
   }
 
+  // ----- a jungle island with a beach, the sea and a wooden dock running out to the camera, made in code -----
+  // The dock's deck is at y 9 (its top at 10), the sea at 8; it runs along z towards +z from the beach.
+  function jungle() {
+    const X = 96, Y = 44, Z = 84, grid = new Uint16Array(X * Y * Z), palette = [], ids = new Map();
+    const id = (name, props = {}) => { const k = name + JSON.stringify(props); if (!ids.has(k)) { ids.set(k, palette.length); palette.push({ name, props }); } return ids.get(k) + 1; };
+    const inb = (x, y, z) => x >= 0 && y >= 0 && z >= 0 && x < X && y < Y && z < Z;
+    const set = (x, y, z, name, props) => { if (inb(x, y, z)) grid[(y * Z + z) * X + x] = id(name, props); };
+    const get = (x, y, z) => (inb(x, y, z) ? grid[(y * Z + z) * X + x] : 0);
+    let s = 7; const rnd = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+    const SEA = 8, hx = 52, hz = 26;
+    // the land: a hill rising from a beach, the sea floor shelving away from it
+    const n2 = (x, z) => Math.sin(x * .21 + Math.sin(z * .13) * 1.7) * 1.3 + Math.sin(z * .17 + x * .05) * 1.1 + Math.sin((x - z) * .31) * .5;
+    const heights = new Float32Array(X * Z);
+    for (let z = 0; z < Z; z++) for (let x = 0; x < X; x++) {
+      const d = Math.hypot((x - hx) * .9, (z - hz) * 1.15), hill = 24 * Math.exp(-(d * d) / (2 * 19 * 19)) + 9 * Math.exp(-((x - hx - 18) ** 2 + (z - hz + 2) ** 2) / 120);
+      const shore = SEA + 3 - d * .085;
+      heights[x + z * X] = Math.max(2, Math.max(hill + SEA - 2 + n2(x, z) * Math.min(1, hill / 6), shore + n2(x, z) * .4));
+    }
+    for (let z = 0; z < Z; z++) for (let x = 0; x < X; x++) {
+      const h = Math.round(heights[x + z * X]);
+      for (let y = 0; y <= h; y++) {
+        const depth = h - y, beach = h <= SEA + 2;
+        // sand terraces at the shore: sandstone steps under the sand
+        let b = beach ? (depth < 2 ? 'sand' : 'sandstone') : depth === 0 ? (rnd() < .18 && h > SEA + 5 ? 'coarse_dirt' : 'grass_block') : depth < 4 ? 'dirt' : 'stone';
+        if (!beach && depth === 0 && h < SEA + 4) b = rnd() < .5 ? 'sand' : 'grass_block';
+        set(x, y, z, b);
+      }
+      for (let y = h + 1; y <= SEA; y++) set(x, y, z, 'water');
+    }
+    const ground = (x, z) => { for (let y = Y - 1; y >= 0; y--) { const v = get(x, y, z); if (v && palette[v - 1].name !== 'water' && !/leaves|log|vine|grass$|fern/.test(palette[v - 1].name)) return y; } return -1; };
+    const dry = (x, z) => { const y = ground(x, z); return y >= SEA + 1 && palette[get(x, y, z) - 1]?.name === 'grass_block' ? y : -1; };
+    // leaves in a round, flat pad, with vines hanging under its rim
+    const pad = (cx, cy, cz, r, vines = .25) => {
+      for (let z = cz - r; z <= cz + r; z++) for (let x = cx - r; x <= cx + r; x++) {
+        const d = Math.hypot(x - cx, z - cz); if (d > r + .3 || (d > r - .7 && rnd() < .35)) continue;
+        if (!get(x, cy, z)) set(x, cy, z, 'jungle_leaves', { persistent: 'true' });
+        if (d < r - 1.2 && !get(x, cy + 1, z) && rnd() < .7) set(x, cy + 1, z, 'jungle_leaves', { persistent: 'true' });
+        if (d > r - 1.3 && rnd() < vines) { const len = 1 + Math.floor(rnd() * 6); for (let k = 1; k <= len; k++) if (!get(x, cy - k, z)) set(x, cy - k, z, 'vine'); else break; }
+      }
+    };
+    // the great jungle trees: a two-by-two trunk, pads of leaves stacked up it
+    const bigTree = (x, z) => { const y0 = dry(x, z); if (y0 < 0) return; const h = 20 + Math.floor(rnd() * 8);
+      for (let y = y0 + 1; y <= y0 + h; y++) for (const [dx, dz] of [[0, 0], [1, 0], [0, 1], [1, 1]]) set(x + dx, y, z + dz, 'jungle_log', { axis: 'y' });
+      pad(x, y0 + h, z, 5, .35); for (let k = 0; k < 3; k++) { const yy = y0 + h - 5 - k * 4 - Math.floor(rnd() * 2), a = rnd() * 6.28, rr = 2 + Math.floor(rnd() * 2);
+        const ox = Math.round(Math.cos(a) * 3), oz = Math.round(Math.sin(a) * 3); for (let j = 1; j <= 2; j++) set(x + Math.round(ox * j / 2), yy, z + Math.round(oz * j / 2), 'jungle_log', { axis: 'x' });
+        pad(x + ox, yy + 1, z + oz, rr, .3); } };
+    const smallTree = (x, z) => { const y0 = dry(x, z); if (y0 < 0 || get(x, y0 + 1, z)) return; const h = 4 + Math.floor(rnd() * 5);
+      for (let y = y0 + 1; y <= y0 + h; y++) set(x, y, z, 'jungle_log', { axis: 'y' }); pad(x, y0 + h, z, 2 + Math.floor(rnd() * 2), .3); };
+    // palms at the edge of the beach: a ringed trunk leaning out, fronds drooping from the top
+    const palm = (x, z) => { const y0 = ground(x, z); if (y0 < SEA) return; const h = 6 + Math.floor(rnd() * 4), lean = rnd() < .5 ? -1 : 1;
+      let tx = x; for (let y = y0 + 1; y <= y0 + h; y++) { if (y - y0 > h * .55 && rnd() < .5) tx += lean; set(tx, y, z, (y - y0) % 2 ? 'stripped_jungle_log' : 'jungle_log', { axis: 'y' }); }
+      const top = y0 + h + 1; set(tx, top, z, 'jungle_leaves', { persistent: 'true' });
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) for (let k = 1; k <= 3; k++) set(tx + dx * k, top - (k > 2 ? 1 : 0), z + dz * k, 'jungle_leaves', { persistent: 'true' }); };
+    for (let i = 0; i < 60; i++) { const x = 18 + Math.floor(rnd() * 70), z = 4 + Math.floor(rnd() * 40); if (Math.hypot(x - hx, z - hz) < 30) (rnd() < .3 ? bigTree : smallTree)(x, z); }
+    bigTree(hx + 6, hz - 2); bigTree(hx - 10, hz + 4); bigTree(hx + 20, hz - 6);
+    for (let i = 0; i < 40; i++) { const x = 4 + Math.floor(rnd() * 88), z = 10 + Math.floor(rnd() * 50), y = ground(x, z), n = palette[get(x, y, z) - 1]?.name;
+      if (n === 'sand' && y >= SEA + 1 && y <= SEA + 3 && rnd() < .5) palm(x, z); }
+    // ferns and bushes on the grass
+    for (let i = 0; i < 400; i++) { const x = Math.floor(rnd() * X), z = Math.floor(rnd() * Z), y = dry(x, z); if (y > 0 && !get(x, y + 1, z)) set(x, y + 1, z, rnd() < .5 ? 'fern' : rnd() < .5 ? 'short_grass' : 'jungle_leaves', { persistent: 'true' }); }
+    // the dock: a plank deck on log posts from the beach out over the sea, a rail track along it, posts at its edges
+    const dx0 = 24, dx1 = 30, dz0 = 46, dz1 = 83, deck = SEA + 1;
+    for (let z = dz0; z <= dz1; z++) for (let x = dx0; x <= dx1; x++) {
+      set(x, deck, z, 'oak_planks');
+      for (let y = deck + 1; y < deck + 4; y++) if (get(x, y, z) && /leaves|vine|fern|grass/.test(palette[get(x, y, z) - 1].name)) grid[(y * Z + z) * X + x] = 0;
+      if ((x === dx0 || x === dx1) && z % 5 === 0) { for (let y = deck - 1; y >= 0; y--) { const v = get(x, y, z); if (v && palette[v - 1].name !== 'water') break; set(x, y, z, 'oak_log', { axis: 'y' }); }
+        set(x, deck + 1, z, 'oak_fence'); }
+    }
+    for (let z = dz0; z <= dz1; z++) set(27, deck + 1, z, 'rail', { shape: 'north_south' });
+    // a few crates and a barrel at the end of the dock
+    set(dx1, deck + 1, 76, 'barrel'); set(dx1, deck + 1, 77, 'oak_planks'); set(dx1, deck + 2, 77, 'barrel');
+    return { size: [X, Y, Z], palette, grid };
+  }
+
   // ----- the parts -----
   const built = new Map();
+
+  // ----- blocks that move: doors and trapdoors that swing, pistons that push and pull -----
+  // A structure's "actions" are what happens to them over time: [{t, at: [x, y, z], do}] with the block's place in
+  // the build and do "open" | "close" | "toggle" (doors, trapdoors, gates) or "extend" | "retract" | "toggle"
+  // (pistons). A door swings on its hinge in a quarter of a second; a piston pushes the line of blocks in front of
+  // it (up to twelve) one block on, and a sticky one pulls the block at its face back as it retracts.
+  const SWING = .25, STROKE = .15;
+  const FACE = { north: [0, 0, -1], south: [0, 0, 1], east: [1, 0, 0], west: [-1, 0, 0], up: [0, 1, 0], down: [0, -1, 0] };
+  const FIXED = /obsidian|bedrock|barrier|end_portal|command_block|structure_block|jigsaw|reinforced_deepslate|_door$|piston/;
+  const easeIO = v => v * v * (3 - 2 * v);
+  function moversOf(st, key) {
+    if (st._movers) return st._movers;
+    const [X, Y, Z] = st.size, g = st.grid, pal = st.palette, list = [], skip = new Set(), pushable = new Map();
+    const idx = (x, y, z) => (x < 0 || y < 0 || z < 0 || x >= X || y >= Y || z >= Z ? -1 : (y * Z + z) * X + x);
+    const blk = i => (i >= 0 && g[i] ? pal[g[i] - 1] : null), air = b => !b || AIR.test(b.name);
+    for (let y = 0; y < Y; y++) for (let z = 0; z < Z; z++) for (let x = 0; x < X; x++) {
+      const i = idx(x, y, z), b = blk(i); if (air(b)) continue; const n = b.name, p = b.props || {};
+      if (/_door$/.test(n)) { list.push({ kind: 'door', x, y, z, b, i }); skip.add(i); }
+      else if (/_trapdoor$/.test(n)) { list.push({ kind: 'trapdoor', x, y, z, b, i }); skip.add(i); }
+      else if (/^(sticky_)?piston$/.test(n)) { list.push({ kind: 'piston', x, y, z, b, i, f: FACE[p.facing] || FACE.up, sticky: /sticky/.test(n), out: p.extended === 'true' }); skip.add(i); }
+      else if (/^piston_head$/.test(n)) skip.add(i);
+    }
+    // what a piston can move: anything in line ahead of it, but the few things that never move
+    for (const m of list) if (m.kind === 'piston') for (let k = 1; k <= 14; k++) {
+      const x = m.x + m.f[0] * k, y = m.y + m.f[1] * k, z = m.z + m.f[2] * k, i = idx(x, y, z), b = blk(i);
+      if (i < 0) break; if (air(b) || /piston_head/.test(b.name) || skip.has(i) && !pushable.has(i)) continue;
+      if (FIXED.test(b.name)) continue;
+      if (!pushable.has(i)) { const e = { kind: 'block', x, y, z, b, i }; pushable.set(i, e); list.push(e); skip.add(i); }
+    }
+    return st._movers = { list, skip, idx, X, Y, Z, blk, air };
+  }
+  // the parts of the build that are not moving, built once
+  function staticMesh(st, key) {
+    const k = key + '|still'; let m = built.get(k); if (!m) { m = build(st, moversOf(st).skip); built.set(k, m); } return m;
+  }
+  // one block on its own, as it looks shut (a door, a trapdoor) or as it is (a pushed block)
+  function blockMesh(b, shut = true) {
+    const props = { ...(b.props || {}) }; if (shut && 'open' in props) props.open = 'false';
+    const k = 'one|' + b.name + JSON.stringify(props); let m = built.get(k);
+    if (!m) { m = build({ size: [1, 1, 1], palette: [{ name: b.name, props }], grid: new Uint16Array([1]) }); built.set(k, m); }
+    return m.clone();
+  }
+  // a piston, made for one facing up and then turned: its body, the head (a plank face, slime-green if sticky) and the
+  // arm that shows as the head goes out
+  function pistonMesh(m) {
+    const k = 'piston|' + m.sticky; let parts = built.get(k);
+    if (!parts) {
+      const one = name => build({ size: [1, 1, 1], palette: [{ name }], grid: new Uint16Array([1]) });
+      parts = { body: one('cobblestone'), head: one(m.sticky ? 'slime_block' : 'oak_planks'), arm: one('stripped_oak_log') }; built.set(k, parts);
+    }
+    const g = new T.Group(), body = parts.body.clone(), head = parts.head.clone(), arm = parts.arm.clone();
+    body.scale.set(1, .75, 1); body.position.set(-.5, -.5, -.5);
+    head.scale.set(1, .25, 1); head.userData.base = -.5 + .75; head.position.set(-.5, head.userData.base, -.5);
+    arm.scale.set(.25, 1, .25); arm.position.set(-.125, .25, -.125); arm.visible = false;
+    g.add(body, head, arm); g.userData = { head, arm };
+    const f = m.f; if (f[1] === -1) g.rotation.x = Math.PI; else if (f[2]) g.rotation.x = f[2] * Math.PI / 2; else if (f[0]) g.rotation.z = -f[0] * Math.PI / 2;
+    return g;
+  }
+  // how open (0 shut, 1 open) a thing is at T, from where it started and what was done to it
+  function amountAt(events, t, start, dur) {
+    let from = start ? 1 : 0, to = from, t0 = -1e9;
+    const at = tt => from + (to - from) * easeIO(clamp((tt - t0) / dur, 0, 1));
+    for (const e of events) { if (e.t > t) break; const now = at(e.t), want = e.do === 'open' || e.do === 'extend' ? 1 : e.do === 'close' || e.do === 'retract' ? 0 : 1 - to;
+      from = now; to = want; t0 = e.t; }
+    return at(t);
+  }
+  // where every pushed block goes: the pistons' strokes played through in order
+  function plan(st, actions) {
+    const mv = moversOf(st), key = JSON.stringify(actions); if (mv._plan?.key === key) return mv._plan;
+    const where = new Map(), moves = new Map();   // block cell index -> its mover, and each mover's moves
+    for (const m of mv.list) if (m.kind === 'block') { where.set(m.i, m); moves.set(m, []); }
+    const cellOf = (x, y, z) => mv.idx(x, y, z), state = new Map();
+    for (const m of mv.list) if (m.kind === 'piston') state.set(m, m.out);
+    const strokes = new Map(); for (const m of mv.list) if (m.kind === 'piston') strokes.set(m, []);
+    const sorted = [...actions].sort((a, b) => a.t - b.t);
+    for (const a of sorted) {
+      const m = mv.list.find(q => q.kind === 'piston' && q.x === a.at[0] && q.y === a.at[1] && q.z === a.at[2]); if (!m) continue;
+      const out = state.get(m), want = a.do === 'extend' ? true : a.do === 'retract' ? false : !out; if (want === out) continue;
+      const f = m.f;
+      if (want) {
+        // the line ahead, as it stands now: it all moves on one, or (blocked, or more than twelve) nothing does
+        const line = []; let ok = true;
+        for (let k = 1; ; k++) { const i = cellOf(m.x + f[0] * k, m.y + f[1] * k, m.z + f[2] * k); if (i < 0) { ok = false; break; }
+          const b = where.get(i); if (b) { line.push(b); if (line.length > 12) { ok = false; break; } continue; }
+          const s = mv.blk(i); if (!mv.air(s) && !mv.skip.has(i)) { ok = false; break; } break; }
+        if (!ok) continue;
+        for (const b of line.reverse()) { const at0 = [...(b.now || [b.x, b.y, b.z])], at1 = [at0[0] + f[0], at0[1] + f[1], at0[2] + f[2]];
+          where.delete(cellOf(...at0)); where.set(cellOf(...at1), b); b.now = at1; moves.get(b).push({ t: a.t, from: at0, to: at1 }); }
+      } else if (m.sticky) {
+        const i = cellOf(m.x + f[0] * 2, m.y + f[1] * 2, m.z + f[2] * 2), b = where.get(i);
+        if (b) { const at0 = [...b.now], at1 = [at0[0] - f[0], at0[1] - f[1], at0[2] - f[2]]; where.delete(i); where.set(cellOf(...at1), b); b.now = at1; moves.get(b).push({ t: a.t, from: at0, to: at1 }); }
+      }
+      state.set(m, want); strokes.get(m).push({ t: a.t, do: want ? 'extend' : 'retract' });
+    }
+    for (const m of mv.list) if (m.kind === 'block') delete m.now;
+    return mv._plan = { key, moves, strokes };
+  }
+  // a door's two halves move as one, whichever half was clicked
+  const doorKey = m => `${m.x},${m.y - (m.b.props?.half === 'upper' ? 1 : 0)},${m.z}`;
+  const pivots = new Map();
+  function doorPivot(m) {
+    const k = m.kind + JSON.stringify(m.b.props || {}); if (pivots.has(k)) return pivots.get(k);
+    const p = m.b.props || {}, f = (FACE[p.facing] || FACE.south), th = 3 / 16, obj = new T.Object3D();
+    let out;
+    if (m.kind === 'door') {
+      // shut, it stands against the side away from where it faces; open, against its hinge side: it turns on the
+      // corner the two share
+      const h = p.hinge === 'left' ? 1 : -1, ax = -f[2] * h, az = f[0] * h;
+      const cx = .5 * (1 - f[0] - ax), cz = .5 * (1 - f[2] - az);
+      const shutC = new T.Vector3(.5 - f[0] * (.5 - th / 2), .5, .5 - f[2] * (.5 - th / 2)), openC = new T.Vector3(.5 - ax * (.5 - th / 2), .5, .5 - az * (.5 - th / 2));
+      let best = 1, bd = 1e9; for (const sgn of [1, -1]) { obj.rotation.set(0, sgn * Math.PI / 2, 0); obj.updateMatrix();
+        const v = shutC.clone().sub(new T.Vector3(cx, 0, cz)).applyMatrix4(new T.Matrix4().makeRotationY(sgn * Math.PI / 2)).add(new T.Vector3(cx, 0, cz));
+        const d = v.distanceTo(openC); if (d < bd) { bd = d; best = sgn; } }
+      out = { axis: 'y', sign: best, at: [cx, 0, cz] };
+    } else {
+      // a trapdoor lies flat (on the floor of its block, or the ceiling) and swings up on the edge away from where it faces
+      const top = p.half === 'top', ey = top ? 1 : 0, ex = .5 - f[0] * .5, ez = .5 - f[2] * .5, axis = f[0] ? 'z' : 'x';
+      const c = new T.Vector3(.5, top ? 1 - th / 2 : th / 2, .5), pivot = new T.Vector3(f[0] ? ex : 0, ey, f[2] ? ez : 0);
+      let best = 1, bd = 1e9;
+      for (const sgn of [1, -1]) { const R = axis === 'x' ? new T.Matrix4().makeRotationX(sgn * Math.PI / 2) : new T.Matrix4().makeRotationZ(sgn * Math.PI / 2);
+        const v = c.clone().sub(pivot).applyMatrix4(R).add(pivot); const inside = Math.abs(v.x - .5) + Math.abs(v.y - .5) + Math.abs(v.z - .5); if (inside < bd) { bd = inside; best = sgn; } }
+      out = { axis, sign: best, at: [pivot.x, pivot.y, pivot.z] };
+    }
+    pivots.set(k, out); return out;
+  }
+  function movingParts(st, P, t) {
+    const mv = moversOf(st), acts = (Array.isArray(P.actions) ? P.actions : []).filter(a => a && Array.isArray(a.at) && isFinite(+a.t))
+      .map(a => ({ t: +a.t, at: a.at.map(Number), do: a.do || 'toggle' })).sort((a, b) => a.t - b.t);
+    const g = new T.Group(), pl = plan(st, acts.filter(a => mv.list.some(m => m.kind === 'piston' && m.x === a.at[0] && m.y === a.at[1] && m.z === a.at[2])));
+    for (const m of mv.list) {
+      if (m.kind === 'door' || m.kind === 'trapdoor') {
+        const key = m.kind === 'door' ? doorKey(m) : `${m.x},${m.y},${m.z}`;
+        const evs = acts.filter(a => (m.kind === 'door' ? doorKey({ ...m, x: a.at[0], y: a.at[1], z: a.at[2], b: { props: { half: mv.blk(mv.idx(...a.at))?.props?.half } } }) : `${a.at[0]},${a.at[1]},${a.at[2]}`) === key);
+        const open = amountAt(evs, t, m.b.props?.open === 'true', SWING), pv = doorPivot(m);
+        const holder = new T.Group(), mesh = blockMesh(m.b); mesh.position.set(-pv.at[0], -pv.at[1], -pv.at[2]); holder.add(mesh);
+        holder.position.set(m.x + pv.at[0], m.y + pv.at[1], m.z + pv.at[2]); holder.rotation[pv.axis] = pv.sign * open * Math.PI / 2; g.add(holder);
+      } else if (m.kind === 'piston') {
+        const pm = pistonMesh(m), e = amountAt(pl.strokes.get(m) || [], t, m.out, STROKE), { head, arm } = pm.userData;
+        head.position.y = head.userData.base + e; arm.visible = e > .01; arm.scale.y = Math.max(.001, e); arm.position.y = .25;
+        pm.position.set(m.x + .5, m.y + .5, m.z + .5); g.add(pm);
+      } else {
+        const mesh = blockMesh(m.b, false); let p = [m.x, m.y, m.z];
+        for (const mo of pl.moves.get(m) || []) { if (mo.t > t) break; const f = easeIO(clamp((t - mo.t) / STROKE, 0, 1)); p = mo.from.map((v, i) => v + (mo.to[i] - v) * f); }
+        mesh.position.set(...p); g.add(mesh);
+      }
+    }
+    return g;
+  }
+
   World.custom.structure = (P, t) => {
     const st = structureOf(P); const g = new T.Group(); g.scale.setScalar(M * clamp(num(P.block, 1), .01, 100));
     if (!st) return g;
     const key = P.demo || P.asset || 'cottage';
-    let mesh = built.get(key); if (!mesh) { mesh = build(st); built.set(key, mesh); }
-    const inst = mesh.clone(); inst.children.forEach(c => { if (c.isPointLight) c.visible = P.lamps !== false; });
+    const inst = staticMesh(st, key).clone(); inst.children.forEach(c => { if (c.isPointLight) c.visible = P.lamps !== false; });
+    inst.add(movingParts(st, P, t));
     // stood on its middle, its lowest blocks on the ground (or lifted by Lift)
     const [X, , Z] = st.size; inst.position.set(-X / 2, -num(P.sink, 0), -Z / 2);
     g.add(inst); return g;
@@ -560,12 +795,13 @@ const Blocks = (() => {
       const n = (k, label, v, step = 1) => `<label class="f"><span>${label}</span><input type="number" step="${step}" data-k="${k}" value="${v}"></label>`;
       if (P.type === 'structure') {
         const builds = Object.entries((typeof S !== 'undefined' && S.assets) || {}).filter(([, a]) => a.kind === 'structure');
-        const cur = P.asset && !P.demo ? P.asset : '';
-        const a = cur ? S.assets[cur] : null;
+        const Q = resolve(P), cur = Q.asset ? Q.asset : 'demo:' + Q.demo;
+        const a = Q.asset ? S.assets[Q.asset] : null;
         return `<div class="hd">Block build</div>
-          <label class="f wide"><span>Build</span><select data-k="asset">${[['', 'The cottage (built in)'], ...builds.map(([id, b]) => [id, b.name])].map(([v, l]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+          <label class="f wide"><span>Build</span><select data-k="build">${[['demo:cottage', 'The cottage (built in)'], ['demo:jungle', 'Jungle island and dock (built in)'], ...builds.map(([id, b]) => [id, b.name])].map(([v, l]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
           ${n('block', 'Block size m', num(P.block, 1), .1)}${n('sink', 'Sink blocks', num(P.sink, 0), 1)}
-          <p class="note">${a ? `${a.size.join(' × ')} blocks, ${a.blocks.toLocaleString()} placed, ${a.kinds} kinds. ` : ''}Import a structure block's .nbt file (or a .schem) under Import, or drop it on the viewport, and pick it here. Blocks are drawn with Riptide's own pixel pictures, by what each is made of.</p>`;
+          <p class="note">${a ? `${a.size.join(' × ')} blocks, ${a.blocks.toLocaleString()} placed, ${a.kinds} kinds. ` : ''}Import a structure block's .nbt file (or a .schem) under Import, or drop it on the viewport, and pick it here. Blocks are drawn with Riptide's own pixel pictures, by what each is made of.</p>
+          ${moversPanel(P, Q)}`;
       }
       if (P.type === 'blockclouds') return `<div class="hd">Square clouds</div>${n('height', 'Height m', num(P.height, 110))}${n('cover', 'Cover %', num(P.cover, 40))}${n('cell', 'Square m', num(P.cell, 12))}
         ${n('thick', 'Thickness m', num(P.thick, 4), .5)}${n('speed', 'Drift m/s', num(P.speed, 2), .5)}${n('opacity', 'Opacity %', num(P.opacity, 85))}${n('seed', 'Pattern', num(P.seed, 1))}
@@ -578,9 +814,43 @@ const Blocks = (() => {
       return '';
     },
   });
-  // the inspector's Build select: an imported build, or back to the cottage
+  // the inspector's Build select: a built-in build (demo:...), or an imported one (its asset id)
+  function resolve(P) {
+    const b = P.build;
+    if (b) return String(b).startsWith('demo:') ? { ...P, demo: String(b).slice(5), asset: '' } : { ...P, asset: b, demo: '' };
+    return P.asset ? { ...P, demo: '' } : { ...P, demo: P.demo || 'cottage' };
+  }
   const was = World.custom.structure;
-  World.custom.structure = (P, t) => was(P.asset ? { ...P, demo: '' } : { ...P, demo: P.demo || 'cottage' }, t);
+  World.custom.structure = (P, t) => was(resolve(P), t);
+
+  // the moving blocks of the selected build, each with a button that makes it move at the playhead, and what is
+  // already set to happen, each with a button to take it out
+  const NAMES = { door: 'Door', trapdoor: 'Trapdoor', piston: 'Piston' };
+  function moversPanel(P, Q) {
+    const st = structureOf(Q); if (!st) return '';
+    const mv = moversOf(st), list = mv.list.filter(m => m.kind !== 'block' && !(m.kind === 'door' && m.b.props?.half === 'upper'));
+    if (!list.length) return '<p class="note">No doors, trapdoors or pistons in this build to move.</p>';
+    const acts = Array.isArray(P.actions) ? P.actions : [], esc = v => String(v).replace(/[<>&"]/g, '');
+    const label = m => `${m.kind === 'piston' && m.sticky ? 'Sticky piston' : NAMES[m.kind]} ${m.x}, ${m.y}, ${m.z}`;
+    const rows = list.slice(0, 60).map(m => {
+      const verbs = m.kind === 'piston' ? [['extend', 'Push'], ['retract', 'Pull']] : [['open', 'Open'], ['close', 'Shut']];
+      return `<div class="mv-row"><span>${esc(label(m))}</span>${verbs.map(([d, l]) => `<button class="tb small" data-bact="${m.x},${m.y},${m.z},${d}" title="${l} it at the playhead">${l}</button>`).join('')}</div>`;
+    }).join('');
+    const done = acts.map((a, i) => ({ a, i })).sort((p, q) => p.a.t - q.a.t).map(({ a, i }) =>
+      `<div class="mv-row"><span>${(+a.t).toFixed(2)} s · ${esc(a.do || 'toggle')} ${esc((a.at || []).join(', '))}</span><button class="tb small" data-bdel="${i}" title="Take this out">×</button></div>`).join('');
+    return `<div class="hd">Moving blocks</div><p class="note">Put the playhead where it should happen, then press: a door swings in a quarter second; a piston pushes the blocks ahead of it (up to twelve), and a sticky one pulls the one at its face back.</p>
+      ${rows}${list.length > 60 ? `<p class="note">And ${list.length - 60} more.</p>` : ''}${done ? '<div class="hd">Happens</div>' + done : ''}`;
+  }
+  SceneEd.extras.push({
+    click(b) {
+      const P = SceneEd.selected; if (!P || P.type !== 'structure') return false;
+      if (b.dataset.bact) { const [x, y, z, d] = b.dataset.bact.split(','); P.actions ||= [];
+        P.actions.push({ t: Math.round(SceneEd.time * 100) / 100, at: [+x, +y, +z], do: d }); P.actions.sort((p, q) => p.t - q.t);
+        SceneEd.record(); return true; }
+      if (b.dataset.bdel != null) { (P.actions || []).splice(+b.dataset.bdel, 1); if (!P.actions?.length) delete P.actions; SceneEd.record(); return true; }
+      return false;
+    },
+  });
 
   // ----- the scene: a cottage on a floating island, square clouds, the sun and moon, a figure waving -----
   World.PRESETS.blocks = { label: 'Block world', hint: 'A block build on a floating island under square clouds, a square sun and moon, and a block figure to pose',
@@ -593,6 +863,23 @@ const Blocks = (() => {
       { type: 'skybodies', name: 'Sun and moon', at: [0, 0, 0], sunSize: 8, moonSize: 6, phase: 2, glow: 320, moonEl: 9, moonAz: -24 },
       { type: 'blocky', name: 'Figure', at: [5.2, 0, 6.2], turn: [0, 30, 0], move: 'wave', height: 1.8, pose: { Head: [-8, 10, 0] } },
       { type: 'camera', id: 'cam', name: 'Camera', at: [15, 5, 22], turn: [-9, 34, 0], lens: 28 },
+    ],
+    shots: [{ t: 0, cam: 'cam' }] };
+
+  // ----- the scene: a jungle island, two figures in uniform on a dock, filmed from the end of it -----
+  // The build stands so its sea (block water, hidden under the world's calm sea) meets the world's water line, and
+  // the dock's deck is 1.1 m above it, where the figures stand.
+  const DECK = 1.1;
+  World.PRESETS.blockisle = { label: 'Block island', hint: 'A jungle island, a beach and a wooden dock in a calm sea, two block figures in uniform talking on the dock',
+    p: { sky: 'day', sunEl: 48, sunAz: -35, sunPower: 115, clouds: 18, wind: 2, ground: 'ocean', water: '#1f7fae', waves: .05, chop: 12, swell: 0, fog: 3, dust: 0,
+      eye: 0, heading: 0, pitch: 0, travel: 0, lens: 30, focus: 0, dof: 0, exposure: .4, bloom: 14, grain: 4, fringe: 2, ao: 30, streaks: 0, flare: 0, godrays: 0, letterbox: 'none', render: 'preview' },
+    objects: () => [
+      { type: 'structure', name: 'Jungle island', at: [20.5, DECK - 10, -30.5], build: 'demo:jungle', block: 1 },
+      { type: 'blocky', name: 'Officer', at: [-.95, DECK, -.2], turn: [0, 70, 0], move: 'talk', height: 1.8, skinTone: '#d9a882', hair: '#2a1d12',
+        shirt: '#4e6b30', pants: '#425c28', shoes: '#1f1a14', belt: '#3a2a18', hat: 'cap', hatColor: '#3f5a26' },
+      { type: 'blocky', name: 'Soldier', at: [1.15, DECK, -1.6], turn: [0, -60, 0], move: 'idle', height: 1.8, skinTone: '#e6b98f', hair: '#5a3b1e',
+        shirt: '#5a7536', pants: '#4a6330', shoes: '#1f1a14', belt: '#3a2a18', hat: 'cap', hatColor: '#4a6530', hold: 'sword', holdMat: 'iron', pose: { Head: [-4, -12, 0] } },
+      { type: 'camera', id: 'cam', name: 'Camera', at: [.2, DECK + 1.5, 4.2], turn: [-6, -8, 0], lens: 32 },
     ],
     shots: [{ t: 0, cam: 'cam' }] };
 

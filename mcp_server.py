@@ -259,7 +259,7 @@ to the part both share, then type the rest of the new one (reveal 0-1 types, 1-2
 
 
 @mcp.tool()
-async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "mountain", "neon", "oculus", "blocks", ""] = "", name: str | None = None,
+async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "mountain", "neon", "oculus", "blocks", "blockisle", ""] = "", name: str | None = None,
                     props: dict | None = None) -> dict:
     """Add a 3D world at the bottom of the layers: a whole place to film, with a sky, a sun that casts shadows,
     the ground, the air, props, and a lens. 3D shapes and models above it stand inside it, lit and shadowed by
@@ -269,7 +269,9 @@ async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "
     road through pine forest under snowy peaks, filmed by a chase camera), "neon" (a wet city street at night in the rain:
     shopfronts, hanging neon signs, lamp posts, parked cars, traffic and people), "oculus" (looking up into a coffered
     dome, a disc of sun on it from the opening at the top), "blocks" (a block cottage on a floating island under square
-    clouds, a square sun and a moon by day, a block figure waving; add_structure builds your own .nbt there); "" is an empty
+    clouds, a square sun and a moon by day, a block figure waving; add_structure builds your own .nbt there), "blockisle" (a
+    jungle island with a beach and a wooden dock with a rail track in a calm sea, two block figures in uniform and caps on
+    the dock, one talking, one holding a sword); "" is an empty
     world. `props` then changes any of its settings (all the numbers and colours animate, with update_layer or
     set_keyframes like any layer's):
 
@@ -320,7 +322,15 @@ async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "
     A "blocky" is a block figure (six boxes on a skeleton, posed with "pose" like a person: bones "Hips", "Spine",
     "Head", "RightArm", "LeftArm", "RightUpLeg", "LeftUpLeg"): "move" "idle" | "walk" | "wave", "height" m, "skin" an image
     asset id of a 64 x 64 skin in the usual block-figure layout (else painted from "skinTone", "hair", "eyes", "shirt",
-    "pants", "shoes"), "outer" false to hide the skin's outer layer.
+    "pants", "shoes", "belt"), "outer" false to hide the skin's outer layer. Its "move" is also "run" | "talk" (hands
+    going with the words, the head nodding) | "salute" | "attack" (swinging what it holds). "hold" (right hand) and
+    "holdLeft": "sword" | "pickaxe" | "axe" | "shovel" | "torch", made of "holdMat"/"holdLeftMat" "wood" | "stone" | "iron" |
+    "gold" | "diamond" | "netherite". "hat" "cap" | "beanie" | "helmet" | "tophat" with "hatColor".
+    A "structure" (a block build) takes "build" "demo:cottage" | "demo:jungle" or an imported build's asset id, and
+    "actions": [{"t": seconds, "at": [x, y, z] (the block in the build), "do": "open" | "close" | "toggle" | "extend" |
+    "retract"}]: doors and trapdoors swing open and shut, pistons push the line of blocks ahead (up to 12) and sticky
+    pistons pull one back. In the scene editor its panel lists every door, trapdoor and piston with buttons to do it at
+    the playhead.
     A "coffers" is a coffered dome you stand in the middle of ("radius", "rows", "cols", "span" degrees round, "from"/"to"
     degrees up, "steps", "depth", "rib" m, "color", "ambient" % light in the shade, "ambientColor"); a "sunbeam" is the
     sun through one opening, shining along its own +z ("size" [disc width m, 1, 1], "reach", "soft", "power", "color").

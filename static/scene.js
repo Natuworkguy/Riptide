@@ -426,7 +426,7 @@ const SceneEd = (() => {
     if (['at', 'turn', 'scale'].includes(k)) setVal(P, k, k === 'scale' && v.every(x => x === v[0]) ? v[0] : v);
     else if (k === 'name') { if (v) P.name = v; else delete P.name; renderTree(); }
     else P[k] = v;
-    if (k === 'light' || (P.type === 'liquid' && (k === 'from' || k === 'kind'))) renderInsp();
+    if (k === 'light' || (P.type === 'liquid' && (k === 'from' || k === 'kind')) || (P.type === 'structure' && k === 'build') || (P.type === 'blocky' && ['hold', 'holdLeft', 'hat', 'skin'].includes(k))) renderInsp();
     dirty = true; if (record) refresh();
   }
 

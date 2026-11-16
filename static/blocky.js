@@ -43,7 +43,7 @@ const Blocky = (() => {
   // ----- the skin: a picture brought in, or one painted from colours -----
   const skins = new Map();
   function painted(o) {
-    const key = ['paint', o.skinTone, o.hair, o.shirt, o.pants, o.shoes, o.eyes].join('|');
+    const key = ['paint', o.skinTone, o.hair, o.shirt, o.pants, o.shoes, o.eyes, o.belt].join('|');
     if (skins.has(key)) return skins.get(key);
     const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g = cv.getContext('2d');
     const fill = (c, x, y, w, h) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
@@ -57,6 +57,8 @@ const Blocky = (() => {
     fill('#ffffff', 9, 12, 2, 1); fill('#ffffff', 13, 12, 2, 1); fill(o.eyes || '#5a3d2b', 10, 12, 1, 1); fill(o.eyes || '#5a3d2b', 13, 12, 1, 1);
     fill('rgba(0,0,0,.12)', 11, 13, 2, 1); fill('#8a5a4a', 11, 14, 2, 1);
     box(shirt, PARTS.body.uv, PARTS.body.size);
+    // a belt round the waist, and buttons down the front with it, for a uniform
+    if (o.belt) { fill(o.belt, 16, 30, 24, 1); fill('rgba(255,220,120,.85)', 23, 30, 2, 1); for (const y of [22, 25, 28]) fill('rgba(0,0,0,.35)', 23, y, 1, 1); }
     for (const part of ['armR', 'armL']) { const p = PARTS[part], [u, v] = p.uv; box(skin, p.uv, p.size); fill(shirt, u + 4, v, 4, 4); fill(shirt, u, v + 4, 16, 5); }
     for (const part of ['legR', 'legL']) { const p = PARTS[part], [u, v] = p.uv; box(pants, p.uv, p.size); fill(shoes, u, v + 4 + 10, 16, 2); fill(shoes, u + 8, v, 4, 4); }
     // a little shading so faces read: darker under the arms' sleeves and down the body's sides
@@ -84,6 +86,88 @@ const Blocky = (() => {
     return m;
   }
 
+  // ----- what a figure holds: a pixel picture, given its one pixel of thickness -----
+  // Drawn here, in Riptide's own pixel style: a sword, a pickaxe, an axe, a shovel, a torch, each in wood, stone,
+  // iron, gold, diamond or netherite. On a 16 x 16 grid, held at the bottom-left, pointing up to the right.
+  const MATS = { wood: '#a0784a', stone: '#8b8b8d', iron: '#dcdcdc', gold: '#f2cf45', diamond: '#5ee3d8', netherite: '#4d4649' };
+  const HANDLE = '#7a5a34';
+  function itemPixels(kind, mat) {
+    const px = Array.from({ length: 16 }, () => Array(16).fill(null)), C = new T.Color(MATS[mat] || MATS.iron), H = new T.Color(HANDLE);
+    const light = C.clone().multiplyScalar(1.22), dark = C.clone().multiplyScalar(.62), hdark = H.clone().multiplyScalar(.7);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      // along the diagonal from the bottom-left (u) and across it (v)
+      const u = (x + 15 - y) / 2, v = x - 15 + y; let c = null;
+      if (kind === 'sword') {
+        if (u >= 5 && u <= 14.6 && Math.abs(v) <= (u > 13.6 ? 0 : 1)) c = v < 0 ? dark : v > 0 ? C : light;
+        else if (u >= 4 && u < 5 && Math.abs(v) <= 3) c = dark;
+        else if (u >= 1 && u < 4 && v === 0) c = (u | 0) % 2 ? H : hdark;
+        else if (u >= 0 && u < 1 && Math.abs(v) <= 1) c = dark;
+      } else if (kind === 'pickaxe' || kind === 'axe' || kind === 'shovel') {
+        const top = kind === 'shovel' ? 9.5 : 13.6;
+        if (u >= .5 && u <= top && v === 0) c = (u | 0) % 2 ? H : hdark;
+        if (kind === 'pickaxe') { const uc = 12.6 - v * v / 14; if (Math.abs(u - uc) <= .9 && Math.abs(v) <= 7) c = u > uc ? light : C; if (Math.abs(u - uc) <= .9 && Math.abs(v) === 7) c = dark; }
+        if (kind === 'axe' && u >= 9 && u <= 14 && v <= -1 && v >= -1 - (u - 9) * 1.15 && v >= -6) c = v <= -5 || u >= 13.5 ? light : (u + v) % 3 === 0 ? dark : C;
+        if (kind === 'shovel' && u >= 9.5 && u <= 14.5 && Math.abs(v) <= (u > 13.5 ? 1 : 2)) c = v < 0 ? dark : v > 0 ? C : light;
+      } else if (kind === 'torch') {
+        if ((x === 7 || x === 8) && y >= 6 && y <= 15) c = x === 7 ? H : hdark;
+        if ((x === 7 || x === 8) && (y === 4 || y === 5)) c = new T.Color('#ffd23a');
+        if ((x === 7 || x === 8) && y === 3) c = new T.Color('#fff2b0');
+        if ((x === 6 || x === 9) && y === 5) c = new T.Color('#ff8a1e');
+      }
+      px[y][x] = c;
+    }
+    // a dark rim round it, so it reads against anything
+    const rim = new T.Color('#1d1a18'), out = px.map(r => r.slice());
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) if (!px[y][x] && kind !== 'torch') {
+      if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => px[y + dy]?.[x + dx])) out[y][x] = rim; }
+    return out;
+  }
+  const items = new Map(), IPX = 1 / 26;
+  function itemGeometry(kind, mat) {
+    const k = kind + '|' + mat; if (items.has(k)) return items.get(k);
+    const px = itemPixels(kind, mat), pos = [], nor = [], col = [];
+    const quad = (a, b, c, d, n, cc) => { for (const p of [a, b, c, a, c, d]) { pos.push(...p); nor.push(...n); col.push(cc.r, cc.g, cc.b); } };
+    const on = (x, y) => x >= 0 && y >= 0 && x < 16 && y < 16 && !!px[y][x];
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      const c = px[y][x]; if (!c) continue;
+      // the picture's x right and y up, one pixel thick in z, its middle at 0
+      const x0 = x - 8, x1 = x - 7, y0 = 8 - y - 1, y1 = 8 - y, z0 = -.5, z1 = .5;
+      quad([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], [0, 0, 1], c);
+      quad([x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], [0, 0, -1], c);
+      const e = c.clone().multiplyScalar(.8);
+      if (!on(x + 1, y)) quad([x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [1, 0, 0], e);
+      if (!on(x - 1, y)) quad([x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0], [-1, 0, 0], e);
+      if (!on(x, y - 1)) quad([x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0], [0, 1, 0], e);
+      if (!on(x, y + 1)) quad([x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], [0, -1, 0], e);
+    }
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new T.Float32BufferAttribute(nor, 3));
+    g.setAttribute('color', new T.Float32BufferAttribute(col, 3)); g.scale(IPX, IPX, IPX); items.set(k, g); return g;
+  }
+  const itemMat = new T.MeshStandardMaterial({ vertexColors: true, roughness: .55, metalness: .1 });
+  // in the hand: the grip in the fist, the picture standing upright along the way the figure faces, tip forward
+  function held(kind, mat) {
+    const mesh = new T.Mesh(itemGeometry(kind, mat), kind === 'torch' ? new T.MeshStandardMaterial({ vertexColors: true, emissive: new T.Color('#ffb347'), emissiveIntensity: .25 }) : itemMat);
+    mesh.castShadow = true;
+    const grip = kind === 'torch' ? [0, -4.5] : [-5.5, -5.5];
+    mesh.position.set(-grip[0] * IPX, -grip[1] * IPX, 0);
+    const a = new T.Group(); a.add(mesh);
+    if (kind !== 'torch') a.rotation.z = -Math.PI / 4;
+    const b = new T.Group(); b.add(a); b.rotation.y = -Math.PI / 2;
+    const c = new T.Group(); c.add(b); c.rotation.x = kind === 'torch' ? -Math.PI / 2 + .25 : -.35;
+    return c;
+  }
+  // a hat, made of boxes over the head (sizes in skin pixels, the head 8 across)
+  const hatMats = new Map(), hatMat = c => { if (!hatMats.has(c)) hatMats.set(c, new T.MeshStandardMaterial({ color: new T.Color(c), roughness: .85 })); return hatMats.get(c); };
+  function hat(kind, color, band) {
+    const g = new T.Group(), c = color || '#3f5a2a', d = band || '#' + new T.Color(c).multiplyScalar(.55).getHexString(T.SRGBColorSpace);
+    const box = (w, h, dd, x, y, z, col) => { const m = new T.Mesh(new T.BoxGeometry(w * PX, h * PX, dd * PX), hatMat(col)); m.position.set(x * PX, y * PX, z * PX); m.castShadow = true; g.add(m); return m; };
+    if (kind === 'cap') { box(9.4, 1.2, 9.4, 0, 8.4, 0, d); box(9, 2.2, 9, 0, 9.9, -.2, c); const brim = box(8.6, .6, 3.6, 0, 8.1, 5.9, d); brim.rotation.x = .18; box(2, 1.2, .4, 0, 9.3, 4.75, '#e2b93b'); }
+    else if (kind === 'beanie') { box(9, 3.2, 9, 0, 8.3, 0, c); box(9.3, 1, 9.3, 0, 7.4, 0, d); }
+    else if (kind === 'helmet') { box(9.6, 3.8, 9.6, 0, 7.8, 0, c || '#c8c8c8'); box(9.8, .8, 9.8, 0, 6.2, 0, d); }
+    else if (kind === 'tophat') { box(11.5, .6, 11.5, 0, 8.4, 0, c); box(7.4, 6, 7.4, 0, 11.7, 0, c); box(7.6, 1, 7.6, 0, 9.3, 0, d); }
+    return g;
+  }
+
   // ----- the figure: bones with the usual names, a box on each -----
   function figure(P, t) {
     const skinTex = (P.skin && fromAsset(P.skin)) || painted(P), m = matsFor(skinTex);
@@ -101,12 +185,29 @@ const Blocky = (() => {
     put(spine, 'body', 6); put(head, 'head', 4); put(armR, 'armR', -4); put(armL, 'armL', -4); put(legR, 'legR', -6); put(legL, 'legL', -6);
     // the arms hang a little out from the body so they don't sink into it
     armR.position.x -= .001; armL.position.x += .001;
-    // what it is doing before any pose by hand: standing, walking, waving
-    const move = P.move || 'idle', s = Math.sin(t * Math.PI * 2 * (move === 'walk' ? .9 : .3));
-    const turn = (b, x, z = 0) => b.quaternion.setFromEuler(new T.Euler(x, 0, z));
-    if (move === 'walk') { turn(armR, s * .7); turn(armL, -s * .7); turn(legR, -s * .6); turn(legL, s * .6); }
+    // what it holds, in each hand, and a hat
+    if (P.hold && P.hold !== 'none') { const it = held(P.hold, P.holdMat || 'iron'); it.position.set(0, -9.5 * PX, .3 * PX); armR.add(it); }
+    if (P.holdLeft && P.holdLeft !== 'none') { const it = held(P.holdLeft, P.holdLeftMat || 'iron'); it.position.set(0, -9.5 * PX, .3 * PX); armL.add(it); }
+    if (P.hat && P.hat !== 'none') head.add(hat(P.hat, P.hatColor, P.hatBand));
+    // what it is doing before any pose by hand: standing, walking, running, talking, saluting, swinging, waving
+    const move = P.move || 'idle', rate = move === 'run' ? 1.6 : move === 'walk' ? .9 : move === 'talk' ? .7 : .3, s = Math.sin(t * Math.PI * 2 * rate);
+    const turn = (b, x, z = 0, y = 0) => b.quaternion.setFromEuler(new T.Euler(x, y, z));
+    const holding = !!(P.hold && P.hold !== 'none');
+    if (move === 'walk') { turn(armR, s * .7 - (holding ? .25 : 0)); turn(armL, -s * .7); turn(legR, -s * .6); turn(legL, s * .6); }
+    else if (move === 'run') { turn(armR, s * 1.1 - (holding ? .3 : 0)); turn(armL, -s * 1.1); turn(legR, -s * 1); turn(legL, s * 1); turn(spine, .12); hips.position.y += Math.abs(s) * PX * 1.2; }
     else if (move === 'wave') { turn(armL, 0, .05); turn(armR, Math.PI + .2, -.35 + s * .35); }
-    else { turn(armR, 0, -.05 - s * .02); turn(armL, 0, .05 + s * .02); }
+    else if (move === 'talk') {
+      // the hands go with the words, the head nods
+      const s2 = Math.sin(t * 5.3) * .5 + Math.sin(t * 3.1 + 1) * .5;
+      turn(armR, -.45 - Math.max(0, s2) * .55 - (holding ? .2 : 0), -.12); turn(armL, -.2 - Math.max(0, -s2) * .4, .1); turn(head, Math.sin(t * 4.2) * .07, 0, Math.sin(t * 1.7) * .08);
+    }
+    else if (move === 'salute') { turn(armR, -2.35, .55, -.15); turn(armL, 0, .04); turn(head, -.04); }
+    else if (move === 'attack') {
+      // a swing down and across, again and again
+      const ph = (t * 1.6) % 1, k = ph < .3 ? ph / .3 : 1 - (ph - .3) / .7, e = k * k * (3 - 2 * k);
+      turn(armR, -2.4 + e * 2.1 * (ph < .3 ? 1 : 1), -.2 + e * .3); turn(armL, 0, .05); turn(spine, 0, 0, (ph < .3 ? e : e) * -.15);
+    }
+    else { turn(armR, (holding ? -.28 : 0), -.05 - s * .02); turn(armL, 0, .05 + s * .02); }
     const root = new T.Group(); root.add(hips);
     World.poseHook?.(root, P, t);
     root.scale.setScalar(clamp(+P.height || 1.8, .2, 10) / 1.8);
@@ -118,16 +219,22 @@ const Blocky = (() => {
   SceneEd.add('blocky', { type: 'blocky', move: 'idle', height: 1.8 }, 'Block figure');
   const opt = (k, v, list) => `<select data-k="${k}">${list.map(([a, b]) => `<option value="${a}"${String(v ?? '') === a ? ' selected' : ''}>${b}</option>`).join('')}</select>`;
   const col = (k, v, label) => `<label class="f"><span>${label}</span><input type="color" data-k="${k}" value="${v}"></label>`;
+  const ITEMS = [['none', 'Nothing'], ['sword', 'Sword'], ['pickaxe', 'Pickaxe'], ['axe', 'Axe'], ['shovel', 'Shovel'], ['torch', 'Torch']];
+  const MAT_LIST = Object.keys(MATS).map(k => [k, k[0].toUpperCase() + k.slice(1)]);
   SceneEd.extras.push({
     inspector(P) {
       if (P.type !== 'blocky') return '';
       const pics = Object.entries((typeof S !== 'undefined' && S.assets) || {}).filter(([, a]) => !a.kind && a.w === 64 && (a.h === 64 || a.h === 32)).map(([id, a]) => [id, a.name]);
       return `<div class="hd">Block figure</div>
         <label class="f wide"><span>Skin</span>${opt('skin', P.skin || '', [['', 'Painted from the colours below'], ...pics, ...(P.skin && !pics.some(x => x[0] === P.skin) ? [[P.skin, 'A picture no longer in Media']] : [])])}</label>
-        <label class="f"><span>Does</span>${opt('move', P.move || 'idle', [['idle', 'Stand'], ['walk', 'Walk'], ['wave', 'Wave']])}</label>
+        <label class="f"><span>Does</span>${opt('move', P.move || 'idle', [['idle', 'Stand'], ['walk', 'Walk'], ['run', 'Run'], ['talk', 'Talk'], ['salute', 'Salute'], ['attack', 'Swing'], ['wave', 'Wave']])}</label>
+        <label class="f"><span>Holds</span>${opt('hold', P.hold || 'none', ITEMS)}</label>${P.hold && P.hold !== 'none' && P.hold !== 'torch' ? `<label class="f"><span>Made of</span>${opt('holdMat', P.holdMat || 'iron', MAT_LIST)}</label>` : ''}
+        <label class="f"><span>Left hand</span>${opt('holdLeft', P.holdLeft || 'none', ITEMS)}</label>${P.holdLeft && P.holdLeft !== 'none' && P.holdLeft !== 'torch' ? `<label class="f"><span>Made of</span>${opt('holdLeftMat', P.holdLeftMat || 'iron', MAT_LIST)}</label>` : ''}
+        <label class="f"><span>Hat</span>${opt('hat', P.hat || 'none', [['none', 'None'], ['cap', 'Peaked cap'], ['beanie', 'Beanie'], ['helmet', 'Helmet'], ['tophat', 'Top hat']])}</label>
+        ${P.hat && P.hat !== 'none' ? col('hatColor', P.hatColor || '#3f5a2a', 'Hat colour') : ''}
         <label class="f"><span>Height m</span><input type="number" step=".05" data-k="height" value="${+P.height || 1.8}"></label>
         <label class="f"><span>Outer layer</span>${opt('outer', P.outer === false || P.outer === 'off' ? 'off' : '', [['', 'Shown'], ['off', 'Hidden']])}</label>
-        ${P.skin && pics.some(x => x[0] === P.skin) ? '' : col('skinTone', P.skinTone || '#d6a685', 'Skin') + col('hair', P.hair || '#141210', 'Hair') + col('eyes', P.eyes || '#5a3d2b', 'Eyes') + col('shirt', P.shirt || '#d97757', 'Top') + col('pants', P.pants || '#3b4a3f', 'Trousers') + col('shoes', P.shoes || '#e3dacc', 'Shoes')}
+        ${P.skin && pics.some(x => x[0] === P.skin) ? '' : col('skinTone', P.skinTone || '#d6a685', 'Skin') + col('hair', P.hair || '#141210', 'Hair') + col('eyes', P.eyes || '#5a3d2b', 'Eyes') + col('shirt', P.shirt || '#d97757', 'Top') + col('pants', P.pants || '#3b4a3f', 'Trousers') + col('shoes', P.shoes || '#e3dacc', 'Shoes') + col('belt', P.belt || '#2b2118', 'Belt')}
         <p class="note">A skin is a 64 × 64 picture of each box's faces unfolded, in the usual block-figure layout. Import one under Media and pick it here. Pose it below: presets, or any joint by hand.</p>`;
     },
   });

@@ -329,12 +329,44 @@ const Actors = (() => {
     root.scale.setScalar(clamp(+o.height || c.tall, .5, 3) / c.tall);
     return root;
   }
+  // ----- blinking -----
+  // How shut the eyes are at T, 0 to 1: a natural blink every 2 to 6 seconds (unless "blink" is false; the same times
+  // for the same person every time, now and then two together), and the pose's "@blink" (0 to 100, keyed like any
+  // pose) on top, to shut them on purpose. A blink shuts in 0.07 s, stays shut for 0.03 s and opens in 0.12 s.
+  const blinkShape = u => u < 0 ? 0 : u < .07 ? u / .07 : u < .1 ? 1 : u < .22 ? 1 - (u - .1) / .12 : 0;
+  function blinkAt(P, t) {
+    let a = 0;
+    if (P.blink !== false && P.blink !== 'off') {
+      let h = 2166136261; for (const ch of String(P.id || P.name || 'person')) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+      const rand = k => { let x = (h ^ Math.imul(k + 1, 2654435761)) >>> 0; x ^= x >>> 15; x = Math.imul(x, 2246822519) >>> 0; x ^= x >>> 13; return (x >>> 0) / 4294967296; };
+      for (let k = 0, at = .4 + rand(999) * 2; at <= t + .01 && k < 2000; k++) {
+        a = Math.max(a, blinkShape(t - at));
+        at += rand(k) < .12 ? .32 : 2 + rand(k + 500) * 4;
+      }
+    }
+    const held = typeof Pose !== 'undefined' ? Pose.poseAt(P, t)?.['@blink'] : null;
+    if (held) a = Math.max(a, clamp((+held[0] || 0) / 100, 0, 1));
+    return a;
+  }
+  // the lids drawn together: the upper one most of the way down, the lower a little up (the photographed people
+  // have bones for each lid; the classic ones have none, and keep their eyes open)
+  function blinkLids(g, a) {
+    if (a <= 0) return;
+    for (const side of ['L', 'R']) {
+      let top = null, bottom = null;
+      g.traverse(n => { if (n.isBone && n.name === `face_${side}EyeBlinkTop`) top = n; if (n.isBone && n.name === `face_${side}EyeBlinkBottom`) bottom = n; });
+      if (!top || !bottom || top.parent !== bottom.parent) continue;
+      const gap = bottom.position.clone().sub(top.position);
+      top.position.addScaledVector(gap, .8 * a); bottom.position.addScaledVector(gap, -.2 * a);
+    }
+  }
   World.custom.person = (P, t = 0) => {
     const moving = P.keys?.at?.length >= 2, g = new T.Group(), o = { ...P, dist: moving && (P.move === 'walk' || P.move === 'run') ? travelled(P, t) : null };
     // a real-looking person unless asked for the old mannequin; the mannequin while the body is still loading
     const real = P.body !== 'mannequin' ? realPerson(o, t) : null;
     if (real) {
       World.poseHook?.(real, P, t);
+      blinkLids(real, blinkAt(P, t));
       g.add(real);
       // on a board: side-on to it, both going up together in a trick
       if (SKATE.includes(P.move)) { const b = boardFor(P, t); real.position.y = b.position.y; g.add(b); }
@@ -385,6 +417,7 @@ const Actors = (() => {
       if (P.type === 'person') return `<div class="hd">Person</div><label class="f"><span>Body</span>${opt('body', P.body || 'man', [['man', 'Man'], ['woman', 'Woman'], ['classicMan', 'Man (classic)'], ['classicWoman', 'Woman (classic)'], ['mannequin', 'Mannequin']])}</label>
         <label class="f"><span>Does</span>${opt('move', P.move || 'idle', MOVES)}</label>
         <label class="f"><span>Height m</span><input type="number" step=".01" data-k="height" value="${+P.height || 1.75}"></label>
+        ${/^(man|woman)$/.test(P.body || 'man') ? `<label class="f"><span>Blinks</span>${opt('blink', P.blink === false || P.blink === 'off' ? 'off' : '', [['', 'Now and then'], ['off', 'Never']])}</label>` : ''}
         <label class="f"><span>Outfit</span>${opt('outfit', P.outfit || '', [['', 'Clothes'], ['holo', 'Holographic shards'], ['chrome', 'Chrome'], ['glow', 'Glowing'], ['gold', 'Gold']])}</label>
         ${/^(classic|mannequin)/.test(P.body || '') ? color('skin', P.skin || '#c8906e', 'Skin') + color('shirt', P.shirt || '#2f5d8a', 'Top') + color('pants', P.pants || '#2b2b33', 'Trousers') + color('hairColor', P.hairColor || '#1c140e', 'Hair') + color('shoes', P.shoes || '#1a1a1a', 'Shoes')
           : '<p class="note">They wear their own clothes and hair. The classic man and woman take any colours.</p>'}

@@ -193,6 +193,7 @@ const Pose = (() => {
           <label class="f"><span>Look up°</span><input type="number" step="1" min="-30" max="30" data-look="0" value="${r1(lk[0])}" title="Up is positive, down negative"></label>
           <label class="f"><span>Look across°</span><input type="number" step="1" min="-40" max="40" data-look="1" value="${r1(lk[1])}" title="Positive is to your right as you face them"></label>
           <div class="acts">${b('look:0,-28', '← Left')}${b('look:18,0', '↑ Up')}${b('look:-15,0', '↓ Down')}${b('look:0,28', 'Right →')}${b('lookcentre', 'Ahead')}</div>
+          ${P.type === 'person' ? `<div class="acts">${b('blink:100', 'Shut the eyes')}${b('blink:0', 'Open them')}</div>` : ''}
           <p class="note">Where the eyes look, over the rest of the pose. Key the pose to move them over time; each eye can also be turned as a joint.</p>`;
       }
       if (keyed(P)) h += `<p class="note">${P.poseKeys.length} pose key${P.poseKeys.length > 1 ? 's' : ''}: ${P.poseKeys.map(k => k.t.toFixed(2) + 's').join(', ')}</p>`;
@@ -202,6 +203,7 @@ const Pose = (() => {
       const a = btn.dataset.pose, P = P_(); if (!a || !P) return false;
       if (a.startsWith('preset:')) { const keep = current(P)[LOOK], pose = presetPose(nodeOf(P), P, a.slice(7)); if (keep) pose[LOOK] = keep; write(P, pose); status(`Posed: ${PRESETS[a.slice(7)].label}`); }
       else if (a === 'lookcentre') { const pose = current(P); delete pose[LOOK]; write(P, pose); }
+      else if (a.startsWith('blink:')) { const pose = current(P), v = +a.slice(6); if (v) pose['@blink'] = [v, 0, 0]; else if (keyed(P)) pose['@blink'] = [0, 0, 0]; else delete pose['@blink']; write(P, pose); }
       else if (a.startsWith('look:')) { const [up, across] = a.slice(5).split(',').map(Number), pose = current(P); pose[LOOK] = [up, across, 0]; write(P, pose); }
       else if (a === 'reset') write(P, {});
       else if (a === 'bones') { st.on = !st.on; if (!st.on) { st.bone = ''; ed().gizmo.detach(); } }

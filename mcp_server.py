@@ -311,7 +311,8 @@ async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "
     the classic people and the mannequin are coloured with "skin", "shirt", "pants", "hairColor", "shoes",
     and "pose": {bone name: [x, y, z] degrees} to turn any joint (bones are named like
     "mixamorigRightArm"); "pose": {"@look": [up, across, 0]} aims the eyes (degrees up, and across to the viewer's
-    right), and "poseKeys": [{"t": seconds, "pose": {...}}] eases from pose to pose, eyes included. For any other person use a rigged model (add_model with a Mixamo .fbx or a
+    right), "pose": {"@blink": [0 to 100, 0, 0]} shuts the eyes (100 shut; key it to close them slowly), and the
+    man and the woman blink on their own now and then unless "blink" is false, and "poseKeys": [{"t": seconds, "pose": {...}}] eases from pose to pose, eyes included. For any other person use a rigged model (add_model with a Mixamo .fbx or a
     .glb), placed as {"type": "model", "asset": its asset id, "clip": an animation it has, "outfit": a finish}.
     A "car" is a real-looking car: "model" "sedan" | "hatch" | "suv" | "taxi" | "classic" (the old block car), "color",
     "lights" false to switch its lights off (parked), "beams" true to light the road ahead; key its "at" and it drives,

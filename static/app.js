@@ -1544,7 +1544,7 @@ function renderProps() {
         else if (k === 'phys') field = `<button class="selectbtn" data-menu="phys"><span>${(Physics.KINDS.find(x => x[0] === (v || 'none')) || Physics.KINDS[0])[1]}</span>${ICON.chev}</button>`;
         else if (k === 'walls') field = `<button class="selectbtn" data-menu="walls"><span>${(Physics.WALLS.find(x => x[0] === v) || Physics.WALLS[0])[1]}</span>${ICON.chev}</button>`;
         else field = `<input data-p="${k}" value="${fmt(v)}" inputmode="decimal" spellcheck="false"${isFixed ? ' disabled' : ''}>`;
-        const wide = ['fill', 'fill2', 'thing', ...MIDS, 'grad', 'stroke', 'text', 'weight', 'font', 'italic', 'three', 'shape', 'material', 'phys', 'walls', 'sky', 'ground', 'render', 'letterbox', 'liquidKind', 'liquidFrom', 'hdri', 'floorFinish', ...World.COLORS, 'mask', 'matte', 'lut', 'keyColor', 'chroma', 'minv'].includes(k) ? ' wide' : '';
+        const wide = ['fill', 'fill2', 'thing', ...MIDS, 'grad', 'stroke', 'text', 'weight', 'font', 'italic', 'three', 'shape', 'material', 'phys', 'walls', 'sky', 'ground', 'render', 'letterbox', 'hdri', 'floorFinish', ...World.COLORS, 'mask', 'matte', 'lut', 'keyColor', 'chroma', 'minv'].includes(k) ? ' wide' : '';
         // Keeping the proportions means nothing once either side is locked.
         const lock = k === 'w' && list.includes('h') && !L.fix?.w && !L.fix?.h ? `<button class="ib aspect ${aspectLocked(L) ? 'on' : ''}" data-cmd="aspect" title="${aspectLocked(L) ? 'Aspect ratio locked: click to unlock' : 'Lock aspect ratio'}">${aspectLocked(L) ? ICON.link : ICON.unlink}</button>` : '';
         const drop = MIDS.includes(k) ? `<button class="ib" data-cmd="delstop" data-k="${k}" title="Take this colour out of the gradient">${ICON.trash}</button>` : '';

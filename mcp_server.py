@@ -282,13 +282,7 @@ async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "
     0 for none), curl (0 standing up to 1 thrown over and landing; key it to make the wave break), waveDist (m
     ahead) and waveAngle (degrees turned). A field: plants (colour), grass (%), grassH (m), sway (how hard
     the wheat sways, as wind m/s; 3 in the rig scene) and swayLoop (true fits the sway to the duration so it loops
-    seamlessly). Liquid, on any ground but the ocean and none (simulated, so it runs downhill, pools in hollows,
-    goes round props, and on sand and soil carves channels, drops sand where it slows and soaks in, leaving the ground
-    dark and wet): liquid (flow, %; 0 for none; key it to start and stop), liquidKind "water" | "mud" | "lava" (lava
-    glows, crusts over and sets to rock), liquidFrom "pour" (a stream falling from 3 m up) | "spring" (wells up) |
-    "flood" (rushes in from the far side) | "rain" (falls all over the patch), liquidX and liquidZ (m: where it comes
-    from; it is simulated on a patch 64 m across round there), erosion (how hard it carves, %; 60 by default).
-    The "desert" scene pours water from a slot in its monolith. fog and dust (0 to
+    seamlessly). fog and dust (0 to
     100). haze is height fog, thick low down and thinning upwards, lit by the sun (0 to 100; about 6 for a
     clear mountain day), with hazeFall (metres over which it thins) and hazeGlow (how much the sun lights it, %).
     render: preview, path (path traced in the browser) or native (photoreal: path traced by Riptide's server with
@@ -331,7 +325,14 @@ async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "
     degrees up, "steps", "depth", "rib" m, "color", "ambient" % light in the shade, "ambientColor"); a "sunbeam" is the
     sun through one opening, shining along its own +z ("size" [disc width m, 1, 1], "reach", "soft", "power", "color").
     An "fx" is particles: "kind" "smoke" | "fire" | "explosion" | "sparks" | "dust" | "steam" | "tendril" (a tall
-    twisting column of sparkles), "amount", "scale". See the result with see_frame."""
+    twisting column of sparkles), "amount", "scale".
+    A "liquid" is water, mud or lava, simulated over the 50 m of ground round it (any ground but the ocean): it runs
+    downhill, pools, goes round props, soaks in leaving the ground dark and wet, and on sand and soil carves channels
+    and leaves ripple marks. "kind" "water" | "mud" | "lava" (glows, crusts, sets to rock), "from" "pour" (a stream
+    from a spout "height" m up, out the way the part faces: aim it with "turn") | "spring" | "flood" (in from the far
+    side) | "rain" (over the patch; turn the world's rain up to see it fall), "flow" (%, keyable to start and stop it),
+    "carve" (%). Delete the part to take it away. The "desert" scene has one pouring from its monolith.
+    See the result with see_frame."""
     return await acall("add_world", {"scene": scene, "name": name, "props": props or {}})
 
 

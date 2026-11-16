@@ -395,7 +395,7 @@ const SceneEd = (() => {
     const size = P.size || [1, 1, 1], t = P.type || 'group';
     let h = `<div class="hd">${esc(nameOf(P))}</div><label class="f wide"><span>Name</span><input data-k="name" value="${esc(P.name || '')}" placeholder="${esc(nameOf(P))}"></label>`;
     h += vec('at', at, 'Position m', .01) + vec('turn', turn, 'Turn °', 1) + vec('scale', s3, 'Scale', .01);
-    if (!['group', 'light', 'model', 'mesh', 'sketch', 'camera', 'car', 'person', 'fx'].includes(t)) {
+    if (!['group', 'light', 'model', 'mesh', 'sketch', 'camera', 'car', 'person', 'fx', 'liquid'].includes(t)) {
       const lab = t === 'cylinder' || t === 'cone' ? ['Diameter', 'Height', ''] : t === 'torus' ? ['Ring', '', 'Tube'] : t === 'label' ? ['Width', 'Height', ''] : t === 'capsule' ? ['Diameter', 'Length', ''] : ['Width', 'Height', 'Depth'];
       h += `<div class="vec"><div class="vh"><span>Size m</span></div><div class="v3">${[0, 1, 2].map(i => lab[i] ? `<input data-k="size" data-i="${i}" type="number" step=".01" title="${lab[i]}" value="${r3(+size[i] || 1)}">` : '<span></span>').join('')}</div></div>`;
     }
@@ -405,7 +405,7 @@ const SceneEd = (() => {
       <label class="f"><span>Ink</span><input data-k="color" type="color" value="${P.color || '#f2f2f2'}"></label><label class="f"><span>Back</span><input data-k="background" type="color" value="${P.background || '#050505'}"></label>`;
     if (t === 'light') h += `<label class="f"><span>Kind</span><select data-k="light"><option value="point"${P.light !== 'spot' ? ' selected' : ''}>Point</option><option value="spot"${P.light === 'spot' ? ' selected' : ''}>Spot</option></select></label>
       <label class="f"><span>Colour</span><input data-k="color" type="color" value="${P.color || '#ffffff'}"></label>${num('power', P.power ?? 100, 5, 'Power')}${P.light === 'spot' ? num('angle', P.angle ?? 35, 1, 'Cone °') + num('soft', P.soft ?? 40, 5, 'Soft %') : ''}`;
-    if (!['group', 'light', 'label', 'model', 'camera', 'person', 'fx'].includes(t)) {
+    if (!['group', 'light', 'label', 'model', 'camera', 'person', 'fx', 'liquid'].includes(t)) {
       const fins = [...World.FINISHES, ...(World.extraFinishes?.() || [])];
       h += `<label class="f wide"><span>Finish</span><select data-k="finish">${fins.map(f => `<option value="${esc(f)}"${(P.finish || 'plastic') === f ? ' selected' : ''}>${esc(World.finishName?.(f) || f)}</option>`).join('')}</select></label>
         <label class="f"><span>Colour</span><input data-k="color" type="color" value="${P.color || '#' + World.lin(World.FINISH_LOOKS[P.finish || 'plastic']?.color || '#cccccc').getHexString(T.SRGBColorSpace)}"></label>${num('glow', P.glow || 0, .1, 'Glow')}`;
@@ -426,7 +426,7 @@ const SceneEd = (() => {
     if (['at', 'turn', 'scale'].includes(k)) setVal(P, k, k === 'scale' && v.every(x => x === v[0]) ? v[0] : v);
     else if (k === 'name') { if (v) P.name = v; else delete P.name; renderTree(); }
     else P[k] = v;
-    if (k === 'light') renderInsp();
+    if (k === 'light' || (P.type === 'liquid' && (k === 'from' || k === 'kind'))) renderInsp();
     dirty = true; if (record) refresh();
   }
 

@@ -66,8 +66,9 @@ const Blocky = (() => {
   function texOf(img) { const t = new T.Texture(img); t.magFilter = T.NearestFilter; t.minFilter = T.NearestFilter; t.generateMipmaps = false; t.colorSpace = T.SRGBColorSpace; t.needsUpdate = true; return t; }
   // a skin picture from the project's media, by its asset id: loaded once, then kept
   function fromAsset(id) {
+    // a picture taken out of the project is gone from the figure too
+    const a = (typeof S !== 'undefined' && S.assets?.[id]) || null; if (!a?.src) { skins.delete('asset:' + id); return null; }
     if (skins.has('asset:' + id)) return skins.get('asset:' + id);
-    const a = (typeof S !== 'undefined' && S.assets?.[id]) || null; if (!a?.src) return null;
     const im = new Image(); World.pending++;
     skins.set('asset:' + id, null);
     im.onload = () => { skins.set('asset:' + id, texOf(im)); World.pending--; World.version++; SceneEd.redraw?.(); if (typeof render === 'function') render(); };
@@ -122,11 +123,11 @@ const Blocky = (() => {
       if (P.type !== 'blocky') return '';
       const pics = Object.entries((typeof S !== 'undefined' && S.assets) || {}).filter(([, a]) => !a.kind && a.w === 64 && (a.h === 64 || a.h === 32)).map(([id, a]) => [id, a.name]);
       return `<div class="hd">Block figure</div>
-        <label class="f wide"><span>Skin</span>${opt('skin', P.skin || '', [['', 'Painted from the colours below'], ...pics])}</label>
+        <label class="f wide"><span>Skin</span>${opt('skin', P.skin || '', [['', 'Painted from the colours below'], ...pics, ...(P.skin && !pics.some(x => x[0] === P.skin) ? [[P.skin, 'A picture no longer in Media']] : [])])}</label>
         <label class="f"><span>Does</span>${opt('move', P.move || 'idle', [['idle', 'Stand'], ['walk', 'Walk'], ['wave', 'Wave']])}</label>
         <label class="f"><span>Height m</span><input type="number" step=".05" data-k="height" value="${+P.height || 1.8}"></label>
         <label class="f"><span>Outer layer</span>${opt('outer', P.outer === false || P.outer === 'off' ? 'off' : '', [['', 'Shown'], ['off', 'Hidden']])}</label>
-        ${P.skin ? '' : col('skinTone', P.skinTone || '#d6a685', 'Skin') + col('hair', P.hair || '#141210', 'Hair') + col('eyes', P.eyes || '#5a3d2b', 'Eyes') + col('shirt', P.shirt || '#d97757', 'Top') + col('pants', P.pants || '#3b4a3f', 'Trousers') + col('shoes', P.shoes || '#e3dacc', 'Shoes')}
+        ${P.skin && pics.some(x => x[0] === P.skin) ? '' : col('skinTone', P.skinTone || '#d6a685', 'Skin') + col('hair', P.hair || '#141210', 'Hair') + col('eyes', P.eyes || '#5a3d2b', 'Eyes') + col('shirt', P.shirt || '#d97757', 'Top') + col('pants', P.pants || '#3b4a3f', 'Trousers') + col('shoes', P.shoes || '#e3dacc', 'Shoes')}
         <p class="note">A skin is a 64 × 64 picture of each box's faces unfolded, in the usual block-figure layout. Import one under Media and pick it here. Pose it below: presets, or any joint by hand.</p>`;
     },
   });

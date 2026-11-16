@@ -3929,6 +3929,13 @@ $('#assetGrid').addEventListener('click', async e => {
   if (rm) {
     const users = S.layers.filter(l => l.p.asset === rm);
     if (users.length && !await UI.dialog({ title: 'Remove this asset?', body: `${users.length} layer${users.length > 1 ? 's use' : ' uses'} it and will be deleted too.`, ok: 'Remove' })) return;
+    // what is dressed or lit by it lets go of it, back to its own look: a block figure's skin goes back to the one
+    // painted from its colours, a world's sky photo or ground finish back to its own
+    const hit = v => v === rm || v === 'lib:' + rm;
+    const unhook = list => { for (const P of Array.isArray(list) ? list : []) { if (!P || typeof P !== 'object') continue;
+      for (const k of Object.keys(P)) if (typeof P[k] === 'string' && hit(P[k])) delete P[k]; unhook(P.children); } };
+    for (const l of S.layers) { unhook(l.p?.objects); for (const k of ['hdri', 'floorFinish']) if (hit(l.p?.[k])) l.p[k] = ''; }
+    if (typeof World !== 'undefined') World.version++;
     S.layers = S.layers.filter(l => l.p.asset !== rm); delete S.assets[rm]; delete IMG[rm]; if (VURL[rm]) { URL.revokeObjectURL(VURL[rm]); delete VURL[rm]; delete VBLOB[rm]; } if (!cur()) sel = null; refresh(); return;
   }
 });

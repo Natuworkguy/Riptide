@@ -327,10 +327,13 @@ async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "
     "holdLeft": "sword" | "pickaxe" | "axe" | "shovel" | "torch", made of "holdMat"/"holdLeftMat" "wood" | "stone" | "iron" |
     "gold" | "diamond" | "netherite". "hat" "cap" | "beanie" | "helmet" | "tophat" with "hatColor".
     A "structure" (a block build) takes "build" "demo:cottage" | "demo:jungle" or an imported build's asset id, and
-    "actions": [{"t": seconds, "at": [x, y, z] (the block in the build), "do": "open" | "close" | "toggle" | "extend" |
-    "retract"}]: doors and trapdoors swing open and shut, pistons push the line of blocks ahead (up to 12) and sticky
-    pistons pull one back. In the scene editor its panel lists every door, trapdoor and piston with buttons to do it at
-    the playhead.
+    "actions": [{"t": seconds, "at": [x, y, z] (the block in the build), "do": "open" | "close" (doors, trapdoors, fence
+    gates, chests) | "on" | "off" (levers, redstone lamps) | "press" (buttons, pressure plates: they spring back after a
+    second or so) | "extend" | "retract" (pistons) | "toggle"}]. Redstone works: a lever that is on, a pressed button or
+    plate, a redstone torch or block powers what touches it and the block it is fixed to, redstone dust carries power
+    along itself (lit while it does), and doors, gates and trapdoors with power open, pistons push (the line ahead, up to
+    12; sticky ones pull one back), and lamps light. In the scene editor the build's panel lists everything that moves
+    with buttons to do it at the playhead.
     A "coffers" is a coffered dome you stand in the middle of ("radius", "rows", "cols", "span" degrees round, "from"/"to"
     degrees up, "steps", "depth", "rib" m, "color", "ambient" % light in the shade, "ambientColor"); a "sunbeam" is the
     sun through one opening, shining along its own +z ("size" [disc width m, 1, 1], "reach", "soft", "power", "color").

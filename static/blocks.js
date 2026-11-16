@@ -115,7 +115,7 @@ const Blocks = (() => {
     [/end_stone/, '#dcdea2'], [/purpur/, '#a77ca7'], [/prismarine/, '#5ea193'], [/quartz/, '#ebe5dc'], [/red_sandstone|red_sand/, '#b8642a'], [/sandstone|^sand$|suspicious_sand/, '#dccf9e'],
     [/nether_brick/, '#3a1d22'], [/netherrack/, '#6e3532'], [/soul_s/, '#4f3d31'], [/obsidian/, '#17121f'], [/mud_brick/, '#8a6a52'], [/packed_mud|^mud$/, '#4a3d3a'],
     [/terracotta/, '#97604a'], [/clay/, '#a2a7b4'], [/gravel/, '#857f7d'], [/snow|powder_snow/, '#f2f8f8'], [/blue_ice|packed_ice|^ice$|frosted_ice/, '#8db4f4'],
-    [/copper/, '#c06e50'], [/iron/, '#d8d8d8'], [/gold/, '#f1cf47'], [/diamond/, '#68e0d8'], [/emerald/, '#30c763'], [/lapis/, '#2a4ea6'], [/redstone/, '#a3170f'], [/coal/, '#252526'],
+    [/redstone_lamp/, '#7a5236'], [/copper/, '#c06e50'], [/iron/, '#d8d8d8'], [/gold/, '#f1cf47'], [/diamond/, '#68e0d8'], [/emerald/, '#30c763'], [/lapis/, '#2a4ea6'], [/redstone/, '#a3170f'], [/coal/, '#252526'],
     [/amethyst/, '#8a63bd'], [/hay/, '#b39b2a'], [/melon/, '#79a42b'], [/pumpkin/, '#d58425'], [/sponge/, '#c9c04f'], [/honey/, '#e9a02a'], [/slime/, '#76be6d'],
     [/moss/, '#5f7a32'], [/dirt|farmland|rooted|podzol|mycelium/, '#866043'], [/bricks?$/, '#94574a'], [/bone/, '#e2dccb'], [/glowstone|sea_lantern|shroomlight|froglight/, '#f3d797'],
     [/stone|cobble|furnace|smoker|dispenser|dropper|observer|piston/, '#7d7d7f'],
@@ -132,6 +132,7 @@ const Blocks = (() => {
     const key = b.name + JSON.stringify(b.props || {}); if (looks.has(key)) return looks.get(key);
     const n = b.name, p = b.props || {}, wood = woodOf(n), dye = dyeOf(n);
     let base = dye ? DYES[dye] : wood ? WOODS[wood] : (STUFF.find(([re]) => re.test(n)) || [0, '#8a8a8a'])[1];
+    if (n === 'redstone_lamp') base = '#f4c86a';
     let shape = 'cube', pass = 'solid', glow = GLOW.test(n) && !/redstone_torch|soul_torch/.test(n) ? 1 : /soul_torch|soul_lantern|redstone_torch/.test(n) ? .6 : 0;
     const t = s => ({ top: s, side: s, bottom: s });
     let tiles = t(['noise', base]);
@@ -541,121 +542,169 @@ const Blocks = (() => {
   // ----- the parts -----
   const built = new Map();
 
-  // ----- blocks that move: doors and trapdoors that swing, pistons that push and pull -----
-  // A structure's "actions" are what happens to them over time: [{t, at: [x, y, z], do}] with the block's place in
-  // the build and do "open" | "close" | "toggle" (doors, trapdoors, gates) or "extend" | "retract" | "toggle"
-  // (pistons). A door swings on its hinge in a quarter of a second; a piston pushes the line of blocks in front of
-  // it (up to twelve) one block on, and a sticky one pulls the block at its face back as it retracts.
+  // ----- blocks that move, and redstone that moves them -----
+  // A structure's "actions" are what is done to it over time: [{t, at: [x, y, z], do}] with a block's place in the
+  // build and do "open" | "close" (doors, trapdoors, fence gates, chests), "on" | "off" (levers, lamps), "press"
+  // (buttons, pressure plates), "extend" | "retract" (pistons) or "toggle". And power does the rest, as it would: a
+  // lever that is on, a button or plate while pressed, a redstone torch or block, powers what touches it and the block
+  // it is fixed to, and redstone dust carries power along itself (lit while it does); a door, trapdoor or gate with
+  // power opens, a piston pushes, a lamp lights, and they go back when the power goes.
   const SWING = .25, STROKE = .15;
   const FACE = { north: [0, 0, -1], south: [0, 0, 1], east: [1, 0, 0], west: [-1, 0, 0], up: [0, 1, 0], down: [0, -1, 0] };
-  const FIXED = /obsidian|bedrock|barrier|end_portal|command_block|structure_block|jigsaw|reinforced_deepslate|_door$|piston/;
+  const FIXED = /obsidian|bedrock|barrier|end_portal|command_block|structure_block|jigsaw|reinforced_deepslate/;
   const easeIO = v => v * v * (3 - 2 * v);
-  function moversOf(st, key) {
+  const kindOf = n => /_door$/.test(n) ? 'door' : /_trapdoor$/.test(n) ? 'trapdoor' : /_fence_gate$/.test(n) ? 'gate' : n === 'lever' ? 'lever'
+    : /_button$/.test(n) ? 'button' : /_pressure_plate$/.test(n) ? 'plate' : /^(sticky_)?piston$/.test(n) ? 'piston' : n === 'redstone_lamp' ? 'lamp'
+    : /^(trapped_)?chest$|^ender_chest$/.test(n) ? 'chest' : n === 'redstone_wire' ? 'wire' : null;
+  const RESPONDS = new Set(['door', 'trapdoor', 'gate', 'piston', 'lamp']);
+  const SIX = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+  // what a lever or button is fixed to: the block behind it
+  const backOf = m => { const p = m.b.props || {}; if (p.face === 'floor' || (m.kind === 'plate')) return [0, -1, 0]; if (p.face === 'ceiling') return [0, 1, 0];
+    const f = FACE[p.facing] || FACE.north; return [-f[0], -f[1], -f[2]]; };
+  function moversOf(st) {
     if (st._movers) return st._movers;
-    const [X, Y, Z] = st.size, g = st.grid, pal = st.palette, list = [], skip = new Set(), pushable = new Map();
+    const [X, Y, Z] = st.size, g = st.grid, pal = st.palette, list = [], skip = new Set(), pushable = new Map(), sources = [];
     const idx = (x, y, z) => (x < 0 || y < 0 || z < 0 || x >= X || y >= Y || z >= Z ? -1 : (y * Z + z) * X + x);
     const blk = i => (i >= 0 && g[i] ? pal[g[i] - 1] : null), air = b => !b || AIR.test(b.name);
     for (let y = 0; y < Y; y++) for (let z = 0; z < Z; z++) for (let x = 0; x < X; x++) {
-      const i = idx(x, y, z), b = blk(i); if (air(b)) continue; const n = b.name, p = b.props || {};
-      if (/_door$/.test(n)) { list.push({ kind: 'door', x, y, z, b, i }); skip.add(i); }
-      else if (/_trapdoor$/.test(n)) { list.push({ kind: 'trapdoor', x, y, z, b, i }); skip.add(i); }
-      else if (/^(sticky_)?piston$/.test(n)) { list.push({ kind: 'piston', x, y, z, b, i, f: FACE[p.facing] || FACE.up, sticky: /sticky/.test(n), out: p.extended === 'true' }); skip.add(i); }
+      const i = idx(x, y, z), b = blk(i); if (air(b)) continue; const n = b.name, p = b.props || {}, kind = kindOf(n);
+      if (kind) { const m = { kind, x, y, z, b, i };
+        if (kind === 'piston') Object.assign(m, { f: FACE[p.facing] || FACE.up, sticky: /sticky/.test(n), out: p.extended === 'true' });
+        if (kind === 'button') m.hold = /stone|polished_blackstone/.test(n) ? 1 : 1.5;
+        list.push(m); skip.add(i); }
       else if (/^piston_head$/.test(n)) skip.add(i);
+      else if (/^redstone_(wall_)?torch$|^redstone_block$/.test(n)) sources.push([x, y, z]);
     }
-    // what a piston can move: anything in line ahead of it, but the few things that never move
     for (const m of list) if (m.kind === 'piston') for (let k = 1; k <= 14; k++) {
       const x = m.x + m.f[0] * k, y = m.y + m.f[1] * k, z = m.z + m.f[2] * k, i = idx(x, y, z), b = blk(i);
-      if (i < 0) break; if (air(b) || /piston_head/.test(b.name) || skip.has(i) && !pushable.has(i)) continue;
-      if (FIXED.test(b.name)) continue;
+      if (i < 0) break; if (air(b) || /piston_head/.test(b.name) || skip.has(i) || FIXED.test(b.name)) continue;
       if (!pushable.has(i)) { const e = { kind: 'block', x, y, z, b, i }; pushable.set(i, e); list.push(e); skip.add(i); }
     }
-    return st._movers = { list, skip, idx, X, Y, Z, blk, air };
+    const byCell = new Map(list.filter(m => m.kind !== 'block').map(m => [m.i, m]));
+    return st._movers = { list, skip, idx, X, Y, Z, blk, air, sources, byCell };
   }
-  // the parts of the build that are not moving, built once
   function staticMesh(st, key) {
     const k = key + '|still'; let m = built.get(k); if (!m) { m = build(st, moversOf(st).skip); built.set(k, m); } return m;
   }
-  // one block on its own, as it looks shut (a door, a trapdoor) or as it is (a pushed block)
   function blockMesh(b, shut = true) {
     const props = { ...(b.props || {}) }; if (shut && 'open' in props) props.open = 'false';
     const k = 'one|' + b.name + JSON.stringify(props); let m = built.get(k);
     if (!m) { m = build({ size: [1, 1, 1], palette: [{ name: b.name, props }], grid: new Uint16Array([1]) }); built.set(k, m); }
     return m.clone();
   }
-  // a piston, made for one facing up and then turned: its body, the head (a plank face, slime-green if sticky) and the
-  // arm that shows as the head goes out
-  function pistonMesh(m) {
-    const k = 'piston|' + m.sticky; let parts = built.get(k);
-    if (!parts) {
-      const one = name => build({ size: [1, 1, 1], palette: [{ name }], grid: new Uint16Array([1]) });
-      parts = { body: one('cobblestone'), head: one(m.sticky ? 'slime_block' : 'oak_planks'), arm: one('stripped_oak_log') }; built.set(k, parts);
-    }
-    const g = new T.Group(), body = parts.body.clone(), head = parts.head.clone(), arm = parts.arm.clone();
-    body.scale.set(1, .75, 1); body.position.set(-.5, -.5, -.5);
-    head.scale.set(1, .25, 1); head.userData.base = -.5 + .75; head.position.set(-.5, head.userData.base, -.5);
-    arm.scale.set(.25, 1, .25); arm.position.set(-.125, .25, -.125); arm.visible = false;
-    g.add(body, head, arm); g.userData = { head, arm };
-    const f = m.f; if (f[1] === -1) g.rotation.x = Math.PI; else if (f[2]) g.rotation.x = f[2] * Math.PI / 2; else if (f[0]) g.rotation.z = -f[0] * Math.PI / 2;
-    return g;
+  // a box of a block's look, A..B in the block (0..1), for the small parts things are made of
+  function piece(name, a, b) {
+    const m = blockMesh({ name, props: {} }); m.scale.set(b[0] - a[0], b[1] - a[1], b[2] - a[2]); m.position.set(...a);
+    const g = new T.Group(); g.add(m); return g;
   }
-  // how open (0 shut, 1 open) a thing is at T, from where it started and what was done to it
-  function amountAt(events, t, start, dur) {
+  // turn a part made standing on the floor so its up points along DIR
+  function aim(g, dir) { const [x, y, z] = dir; if (y === -1) g.rotation.x = Math.PI; else if (z) g.rotation.x = z * Math.PI / 2; else if (x) g.rotation.z = -x * Math.PI / 2; return g; }
+  const woodOfName = n => (woodOf(n) || 'oak') + '_planks';
+
+  // ----- what happens when: every action, every button letting go, and the power it all makes -----
+  function timeline(st, actions) {
+    const mv = moversOf(st), key = JSON.stringify(actions); if (mv._tl?.key === key) return mv._tl;
+    const comps = mv.list.filter(m => m.kind !== 'block'), on = new Map(), changes = new Map();
+    const doorBase = m => (m.kind === 'door' && m.b.props?.half === 'upper' ? mv.byCell.get(mv.idx(m.x, m.y - 1, m.z)) || m : m);
+    for (const m of comps) { const p = m.b.props || {};
+      on.set(m, m.kind === 'piston' ? m.out : m.kind === 'lever' ? p.powered === 'true' : m.kind === 'lamp' ? p.lit === 'true' : p.open === 'true'); changes.set(m, []); }
+    // what an action at a place does, to which part
+    const evs = [];
+    for (const a of actions) { const m = mv.byCell.get(mv.idx(...a.at)); if (!m || m.kind === 'wire') continue; const tgt = doorBase(m);
+      evs.push({ t: a.t, m: tgt, do: a.do });
+      if (tgt.kind === 'button' || tgt.kind === 'plate') evs.push({ t: a.t + (tgt.hold || 1), m: tgt, do: 'release' }); }
+    evs.sort((a, b) => a.t - b.t);
+    // power: the cells sources power, the blocks they are fixed to (which pass it to all their sides), and the dust
+    const cellsOn = () => {
+      const hot = new Set(), strong = [];
+      for (const [x, y, z] of mv.sources) hot.add(mv.idx(x, y, z));
+      for (const m of comps) if ((m.kind === 'lever' || m.kind === 'button' || m.kind === 'plate') && on.get(m)) {
+        hot.add(m.i); const [bx, by, bz] = backOf(m); const k = mv.idx(m.x + bx, m.y + by, m.z + bz); if (k >= 0) strong.push([m.x + bx, m.y + by, m.z + bz]); }
+      for (const [x, y, z] of strong) hot.add(mv.idx(x, y, z));
+      // dust lights from anything hot beside it, and carries on along itself (up and down a step too)
+      const wires = comps.filter(m => m.kind === 'wire'), lit = new Set(), q = [];
+      const near = (m, set) => SIX.some(([dx, dy, dz]) => set.has(mv.idx(m.x + dx, m.y + dy, m.z + dz)));
+      for (const w of wires) if (near(w, hot)) { lit.add(w.i); q.push(w); }
+      while (q.length) { const w = q.pop();
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (const dy of [0, 1, -1]) { const n = mv.byCell.get(mv.idx(w.x + dx, w.y + dy, w.z + dz));
+          if (n && n.kind === 'wire' && !lit.has(n.i)) { lit.add(n.i); q.push(n); } } }
+      return { hot, lit };
+    };
+    const apply = (t, first) => {
+      const { hot, lit } = cellsOn(), powered = c => [c, ...SIX.map(([dx, dy, dz]) => [c[0] + dx, c[1] + dy, c[2] + dz])].some(([x, y, z]) => { const k = mv.idx(x, y, z); return hot.has(k) || lit.has(k); });
+      for (const m of comps) {
+        if (m.kind === 'wire') { const v = lit.has(m.i); if (v !== on.get(m)) { on.set(m, v); changes.get(m).push({ t, on: v }); } else if (first) on.set(m, v); continue; }
+        if (!RESPONDS.has(m.kind) || (m.kind === 'door' && m.b.props?.half === 'upper')) continue;
+        const cells = [[m.x, m.y, m.z]]; if (m.kind === 'door') cells.push([m.x, m.y + 1, m.z]);
+        const p = cells.some(powered), was = m._power ?? (first ? null : false);
+        if (p !== was) { m._power = p; if (first && !p) continue; if (p !== on.get(m)) { on.set(m, p); if (!first) changes.get(m).push({ t, on: p }); } }
+      }
+    };
+    for (const m of comps) delete m._power;
+    apply(0, true);
+    // start states as they are now (after power at the start)
+    const start = new Map([...on]);
+    for (let i = 0; i < evs.length;) {
+      const t = evs[i].t;
+      for (; i < evs.length && evs[i].t === t; i++) { const e = evs[i], m = e.m, cur = on.get(m);
+        const want = e.do === 'release' ? false : e.do === 'press' ? true : ['open', 'on', 'extend'].includes(e.do) ? true : ['close', 'off', 'retract'].includes(e.do) ? false : !cur;
+        if (want !== cur) { on.set(m, want); changes.get(m).push({ t, on: want }); } }
+      apply(t, false);
+    }
+    for (const m of comps) delete m._power;
+    return mv._tl = { key, start, changes, doorBase };
+  }
+  // how far through (0 to 1) a part is at T, from where it started and its changes, each taking DUR
+  function amountAt(list, t, start, dur) {
     let from = start ? 1 : 0, to = from, t0 = -1e9;
     const at = tt => from + (to - from) * easeIO(clamp((tt - t0) / dur, 0, 1));
-    for (const e of events) { if (e.t > t) break; const now = at(e.t), want = e.do === 'open' || e.do === 'extend' ? 1 : e.do === 'close' || e.do === 'retract' ? 0 : 1 - to;
-      from = now; to = want; t0 = e.t; }
+    for (const c of list) { if (c.t > t) break; from = at(c.t); to = c.on ? 1 : 0; t0 = c.t; }
     return at(t);
   }
   // where every pushed block goes: the pistons' strokes played through in order
-  function plan(st, actions) {
-    const mv = moversOf(st), key = JSON.stringify(actions); if (mv._plan?.key === key) return mv._plan;
-    const where = new Map(), moves = new Map();   // block cell index -> its mover, and each mover's moves
-    for (const m of mv.list) if (m.kind === 'block') { where.set(m.i, m); moves.set(m, []); }
-    const cellOf = (x, y, z) => mv.idx(x, y, z), state = new Map();
-    for (const m of mv.list) if (m.kind === 'piston') state.set(m, m.out);
-    const strokes = new Map(); for (const m of mv.list) if (m.kind === 'piston') strokes.set(m, []);
-    const sorted = [...actions].sort((a, b) => a.t - b.t);
-    for (const a of sorted) {
-      const m = mv.list.find(q => q.kind === 'piston' && q.x === a.at[0] && q.y === a.at[1] && q.z === a.at[2]); if (!m) continue;
-      const out = state.get(m), want = a.do === 'extend' ? true : a.do === 'retract' ? false : !out; if (want === out) continue;
-      const f = m.f;
-      if (want) {
-        // the line ahead, as it stands now: it all moves on one, or (blocked, or more than twelve) nothing does
-        const line = []; let ok = true;
-        for (let k = 1; ; k++) { const i = cellOf(m.x + f[0] * k, m.y + f[1] * k, m.z + f[2] * k); if (i < 0) { ok = false; break; }
-          const b = where.get(i); if (b) { line.push(b); if (line.length > 12) { ok = false; break; } continue; }
-          const s = mv.blk(i); if (!mv.air(s) && !mv.skip.has(i)) { ok = false; break; } break; }
-        if (!ok) continue;
-        for (const b of line.reverse()) { const at0 = [...(b.now || [b.x, b.y, b.z])], at1 = [at0[0] + f[0], at0[1] + f[1], at0[2] + f[2]];
-          where.delete(cellOf(...at0)); where.set(cellOf(...at1), b); b.now = at1; moves.get(b).push({ t: a.t, from: at0, to: at1 }); }
+  function plan(st, tl) {
+    const mv = moversOf(st); if (mv._plan?.tl === tl) return mv._plan;
+    const where = new Map(), moves = new Map();
+    for (const m of mv.list) if (m.kind === 'block') { where.set(m.i, m); moves.set(m, []); m.now = [m.x, m.y, m.z]; }
+    const strokes = [];
+    for (const m of mv.list) if (m.kind === 'piston') for (const c of tl.changes.get(m) || []) strokes.push({ ...c, m });
+    strokes.sort((a, b) => a.t - b.t);
+    const ok = new Map();
+    for (const s of strokes) {
+      const m = s.m, f = m.f, cell = (k, from = [m.x, m.y, m.z]) => mv.idx(from[0] + f[0] * k, from[1] + f[1] * k, from[2] + f[2] * k);
+      if (s.on) {
+        const line = []; let can = true;
+        for (let k = 1; ; k++) { const i = cell(k); if (i < 0) { can = false; break; }
+          const b = where.get(i); if (b) { line.push(b); if (line.length > 12) { can = false; break; } continue; }
+          const sb = mv.blk(i); if (!mv.air(sb) && !mv.skip.has(i)) can = false; break; }
+        ok.set(s, can); if (!can) continue;
+        for (const b of line.reverse()) { const at0 = [...b.now], at1 = [at0[0] + f[0], at0[1] + f[1], at0[2] + f[2]];
+          where.delete(mv.idx(...at0)); where.set(mv.idx(...at1), b); b.now = at1; moves.get(b).push({ t: s.t, from: at0, to: at1 }); }
       } else if (m.sticky) {
-        const i = cellOf(m.x + f[0] * 2, m.y + f[1] * 2, m.z + f[2] * 2), b = where.get(i);
-        if (b) { const at0 = [...b.now], at1 = [at0[0] - f[0], at0[1] - f[1], at0[2] - f[2]]; where.delete(i); where.set(cellOf(...at1), b); b.now = at1; moves.get(b).push({ t: a.t, from: at0, to: at1 }); }
+        const i = cell(2), b = where.get(i);
+        if (b) { const at0 = [...b.now], at1 = [at0[0] - f[0], at0[1] - f[1], at0[2] - f[2]]; where.delete(i); where.set(mv.idx(...at1), b); b.now = at1; moves.get(b).push({ t: s.t, from: at0, to: at1 }); }
       }
-      state.set(m, want); strokes.get(m).push({ t: a.t, do: want ? 'extend' : 'retract' });
     }
     for (const m of mv.list) if (m.kind === 'block') delete m.now;
-    return mv._plan = { key, moves, strokes };
+    // a piston that could not push stays in: its stroke is taken out
+    const pistonChanges = new Map();
+    for (const m of mv.list) if (m.kind === 'piston') pistonChanges.set(m, []);
+    for (const s of strokes) if (!s.on || ok.get(s)) pistonChanges.get(s.m).push({ t: s.t, on: s.on });
+    return mv._plan = { tl, moves, pistonChanges };
   }
-  // a door's two halves move as one, whichever half was clicked
-  const doorKey = m => `${m.x},${m.y - (m.b.props?.half === 'upper' ? 1 : 0)},${m.z}`;
   const pivots = new Map();
   function doorPivot(m) {
     const k = m.kind + JSON.stringify(m.b.props || {}); if (pivots.has(k)) return pivots.get(k);
-    const p = m.b.props || {}, f = (FACE[p.facing] || FACE.south), th = 3 / 16, obj = new T.Object3D();
+    const p = m.b.props || {}, f = (FACE[p.facing] || FACE.south), th = 3 / 16;
     let out;
     if (m.kind === 'door') {
-      // shut, it stands against the side away from where it faces; open, against its hinge side: it turns on the
-      // corner the two share
-      const h = p.hinge === 'left' ? 1 : -1, ax = -f[2] * h, az = f[0] * h;
-      const cx = .5 * (1 - f[0] - ax), cz = .5 * (1 - f[2] - az);
+      const h = p.hinge === 'left' ? 1 : -1, ax = -f[2] * h, az = f[0] * h, cx = .5 * (1 - f[0] - ax), cz = .5 * (1 - f[2] - az);
       const shutC = new T.Vector3(.5 - f[0] * (.5 - th / 2), .5, .5 - f[2] * (.5 - th / 2)), openC = new T.Vector3(.5 - ax * (.5 - th / 2), .5, .5 - az * (.5 - th / 2));
-      let best = 1, bd = 1e9; for (const sgn of [1, -1]) { obj.rotation.set(0, sgn * Math.PI / 2, 0); obj.updateMatrix();
+      let best = 1, bd = 1e9; for (const sgn of [1, -1]) {
         const v = shutC.clone().sub(new T.Vector3(cx, 0, cz)).applyMatrix4(new T.Matrix4().makeRotationY(sgn * Math.PI / 2)).add(new T.Vector3(cx, 0, cz));
         const d = v.distanceTo(openC); if (d < bd) { bd = d; best = sgn; } }
       out = { axis: 'y', sign: best, at: [cx, 0, cz] };
     } else {
-      // a trapdoor lies flat (on the floor of its block, or the ceiling) and swings up on the edge away from where it faces
       const top = p.half === 'top', ey = top ? 1 : 0, ex = .5 - f[0] * .5, ez = .5 - f[2] * .5, axis = f[0] ? 'z' : 'x';
       const c = new T.Vector3(.5, top ? 1 - th / 2 : th / 2, .5), pivot = new T.Vector3(f[0] ? ex : 0, ey, f[2] ? ez : 0);
       let best = 1, bd = 1e9;
@@ -665,26 +714,108 @@ const Blocks = (() => {
     }
     pivots.set(k, out); return out;
   }
+  function pistonMesh(m) {
+    const k = 'piston|' + m.sticky; let parts = built.get(k);
+    if (!parts) { const one = name => build({ size: [1, 1, 1], palette: [{ name }], grid: new Uint16Array([1]) });
+      parts = { body: one('cobblestone'), head: one(m.sticky ? 'slime_block' : 'oak_planks'), arm: one('stripped_oak_log') }; built.set(k, parts); }
+    const g = new T.Group(), body = parts.body.clone(), head = parts.head.clone(), arm = parts.arm.clone();
+    body.scale.set(1, .75, 1); body.position.set(-.5, -.5, -.5);
+    head.scale.set(1, .25, 1); head.userData.base = .25; head.position.set(-.5, .25, -.5);
+    arm.scale.set(.25, 1, .25); arm.position.set(-.125, .25, -.125); arm.visible = false;
+    g.add(body, head, arm); g.userData = { head, arm };
+    return aim(g, m.f);
+  }
+  // a fence gate: two halves, each turning on its post
+  function gateMesh(m, open) {
+    const p = m.b.props || {}, wood = woodOfName(m.b.name), g = new T.Group(), f = FACE[p.facing] || FACE.south, X = 1 / 16;
+    // made spanning x, opening towards +z, then turned to its facing
+    for (const side of [-1, 1]) {
+      const half = new T.Group(), hinge = side < 0 ? 0 : 1;
+      half.add(piece(wood, [side < 0 ? 0 : 1 - 2 * X, 5 * X, 7 * X], [side < 0 ? 2 * X : 1, 1, 9 * X]));
+      const inner = new T.Group();
+      for (const [y0, y1] of [[6 * X, 9 * X], [12 * X, 15 * X]]) inner.add(piece(wood, [side < 0 ? 2 * X : .5, y0, 7 * X], [side < 0 ? .5 : 1 - 2 * X, y1, 9 * X]));
+      inner.add(piece(wood, [side < 0 ? 6 * X : .5 + 0 * X, 9 * X, 7 * X], [side < 0 ? .5 : 10 * X, 12 * X, 9 * X]));
+      const pivot = new T.Group(); pivot.position.set(hinge, 0, .5); inner.position.set(-hinge, 0, -.5); pivot.add(inner);
+      pivot.rotation.y = -side * open * Math.PI / 2; half.add(pivot); g.add(half);
+    }
+    const holder = new T.Group(); g.position.set(-.5, 0, -.5); holder.add(g);
+    holder.rotation.y = f[0] ? -f[0] * Math.PI / 2 : f[2] < 0 ? Math.PI : 0;
+    return holder;
+  }
+  // a lever: its base on the block it is fixed to, its handle thrown one way (off) or the other (on)
+  function leverMesh(m, v) {
+    const X = 1 / 16, g = new T.Group(), base = piece('cobblestone', [5 * X, 0, 4 * X], [11 * X, 3 * X, 12 * X]); g.add(base);
+    const arm = new T.Group(); arm.add(piece('stripped_oak_log', [-X, 0, -X], [X, 10 * X, X])); const knob = piece('redstone_block', [-1.3 * X, 9 * X, -1.3 * X], [1.3 * X, 11 * X, 1.3 * X]);
+    knob.visible = v > .5; arm.add(knob); arm.position.set(.5, 2 * X, .5); arm.rotation.x = (v * 2 - 1) * .7; g.add(arm);
+    return place(g, m);
+  }
+  // a button, in when pressed
+  function buttonMesh(m, v) {
+    const X = 1 / 16, name = /stone|blackstone/.test(m.b.name) ? 'stone' : woodOfName(m.b.name);
+    return place(piece(name, [5 * X, 0, 6 * X], [11 * X, (2 - v) * X, 10 * X]), m);
+  }
+  function plateMesh(m, v) {
+    const X = 1 / 16, name = /light_weighted/.test(m.b.name) ? 'gold_block' : /heavy_weighted/.test(m.b.name) ? 'iron_block' : /stone|blackstone/.test(m.b.name) ? 'stone' : woodOfName(m.b.name);
+    return piece(name, [X, 0, X], [15 * X, (1 - v * .5) * X, 15 * X]);
+  }
+  // stood on its face: the floor, the ceiling, or a wall it sticks out of
+  function place(g, m) {
+    const p = m.b.props || {};
+    const up = p.face === 'ceiling' ? [0, -1, 0] : p.face === 'floor' ? [0, 1, 0] : p.face === 'wall' || (m.kind === 'button' && p.facing && !p.face) ? FACE[p.facing] || [0, 1, 0] : [0, 1, 0];
+    // made standing on the floor of its block; turned about the block's middle so its base meets what it is fixed to
+    const wrap = new T.Group(); g.position.set(-.5, -.5, -.5); wrap.add(g); aim(wrap, up); wrap.position.set(.5, .5, .5);
+    const h = new T.Group(); h.add(wrap); return h;
+  }
+  function lampMesh(m, v) { return blockMesh({ name: v > .5 ? 'redstone_lamp' : 'redstone_lamp_off', props: {} }); }
+  // a chest: its body, and a lid that lifts on its back edge
+  function chestMesh(m, v) {
+    const X = 1 / 16, p = m.b.props || {}, f = FACE[p.facing] || FACE.south, wood = /ender/.test(m.b.name) ? 'obsidian' : 'oak_planks';
+    // made facing +z (its latch at the front), the lid hinged along the back
+    const g = new T.Group(); g.add(piece(wood, [X, 0, X], [15 * X, 10 * X, 15 * X]));
+    const lid = new T.Group(); lid.add(piece(wood, [X, 0, 0], [15 * X, 4 * X, 14 * X])); lid.add(piece('gold_block', [7 * X, -2 * X, 13.6 * X], [9 * X, 2 * X, 14.6 * X]));
+    lid.position.set(0, 10 * X, X); lid.rotation.x = -v * 1.35; g.add(lid);
+    const holder = new T.Group(); g.position.set(-.5, 0, -.5); holder.add(g);
+    holder.rotation.y = f[0] ? f[0] * Math.PI / 2 : f[2] < 0 ? Math.PI : 0; return holder;
+  }
+  // redstone dust: a dot, and an arm to each neighbour it joins, dull red, glowing while it carries power
+  const dustMats = { off: new T.MeshStandardMaterial({ color: '#5a0d08', roughness: .9 }), on: new T.MeshStandardMaterial({ color: '#ff3a24', emissive: new T.Color('#ff2a12'), emissiveIntensity: 1.4, roughness: .7 }) };
+  function wireMesh(mv, m, v) {
+    const X = 1 / 16, g = new T.Group(), mat = v > .5 ? dustMats.on : dustMats.off, flat = (x0, z0, x1, z1) => { const q = new T.Mesh(new T.BoxGeometry(x1 - x0, .02, z1 - z0), mat); q.position.set((x0 + x1) / 2, .015, (z0 + z1) / 2); g.add(q); };
+    flat(5 * X, 5 * X, 11 * X, 11 * X);
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const joins = [0, 1, -1].some(dy => { const n = mv.byCell.get(mv.idx(m.x + dx, m.y + dy, m.z + dz)); return n && (n.kind === 'wire' || dy === 0); })
+        || mv.sources.some(([x, y, z]) => x === m.x + dx && y === m.y && z === m.z + dz);
+      if (joins) flat(dx > 0 ? 11 * X : dx < 0 ? 0 : 6 * X, dz > 0 ? 11 * X : dz < 0 ? 0 : 6 * X, dx > 0 ? 1 : dx < 0 ? 5 * X : 10 * X, dz > 0 ? 1 : dz < 0 ? 5 * X : 10 * X);
+    }
+    return g;
+  }
   function movingParts(st, P, t) {
     const mv = moversOf(st), acts = (Array.isArray(P.actions) ? P.actions : []).filter(a => a && Array.isArray(a.at) && isFinite(+a.t))
       .map(a => ({ t: +a.t, at: a.at.map(Number), do: a.do || 'toggle' })).sort((a, b) => a.t - b.t);
-    const g = new T.Group(), pl = plan(st, acts.filter(a => mv.list.some(m => m.kind === 'piston' && m.x === a.at[0] && m.y === a.at[1] && m.z === a.at[2])));
+    const tl = timeline(st, acts), pl = plan(st, tl), g = new T.Group();
+    const amt = (m, dur) => { const b = tl.doorBase(m); return amountAt((b.kind === 'piston' ? pl.pistonChanges.get(b) : tl.changes.get(b)) || [], t, tl.start.get(b), dur); };
     for (const m of mv.list) {
+      let part = null;
       if (m.kind === 'door' || m.kind === 'trapdoor') {
-        const key = m.kind === 'door' ? doorKey(m) : `${m.x},${m.y},${m.z}`;
-        const evs = acts.filter(a => (m.kind === 'door' ? doorKey({ ...m, x: a.at[0], y: a.at[1], z: a.at[2], b: { props: { half: mv.blk(mv.idx(...a.at))?.props?.half } } }) : `${a.at[0]},${a.at[1]},${a.at[2]}`) === key);
-        const open = amountAt(evs, t, m.b.props?.open === 'true', SWING), pv = doorPivot(m);
-        const holder = new T.Group(), mesh = blockMesh(m.b); mesh.position.set(-pv.at[0], -pv.at[1], -pv.at[2]); holder.add(mesh);
-        holder.position.set(m.x + pv.at[0], m.y + pv.at[1], m.z + pv.at[2]); holder.rotation[pv.axis] = pv.sign * open * Math.PI / 2; g.add(holder);
-      } else if (m.kind === 'piston') {
-        const pm = pistonMesh(m), e = amountAt(pl.strokes.get(m) || [], t, m.out, STROKE), { head, arm } = pm.userData;
-        head.position.y = head.userData.base + e; arm.visible = e > .01; arm.scale.y = Math.max(.001, e); arm.position.y = .25;
-        pm.position.set(m.x + .5, m.y + .5, m.z + .5); g.add(pm);
-      } else {
+        const open = amt(m, SWING), pv = doorPivot(m);
+        part = new T.Group(); const mesh = blockMesh(m.b); mesh.position.set(-pv.at[0], -pv.at[1], -pv.at[2]); part.add(mesh);
+        part.position.set(m.x + pv.at[0], m.y + pv.at[1], m.z + pv.at[2]); part.rotation[pv.axis] = pv.sign * open * Math.PI / 2; g.add(part); continue;
+      }
+      if (m.kind === 'piston') {
+        const pm = pistonMesh(m), e = amt(m, STROKE), { head, arm } = pm.userData;
+        head.position.y = head.userData.base + e; arm.visible = e > .01; arm.scale.y = Math.max(.001, e);
+        pm.position.set(m.x + .5, m.y + .5, m.z + .5); g.add(pm); continue;
+      }
+      if (m.kind === 'block') {
         const mesh = blockMesh(m.b, false); let p = [m.x, m.y, m.z];
         for (const mo of pl.moves.get(m) || []) { if (mo.t > t) break; const f = easeIO(clamp((t - mo.t) / STROKE, 0, 1)); p = mo.from.map((v, i) => v + (mo.to[i] - v) * f); }
-        mesh.position.set(...p); g.add(mesh);
+        mesh.position.set(...p); g.add(mesh); continue;
       }
+      const v = amt(m, m.kind === 'button' || m.kind === 'plate' ? .08 : m.kind === 'lever' ? .12 : m.kind === 'chest' ? .35 : .05);
+      part = m.kind === 'gate' ? (() => { const h = gateMesh(m, v); h.position.set(.5, 0, .5); return h; })() : m.kind === 'lever' ? leverMesh(m, v) : m.kind === 'button' ? buttonMesh(m, v)
+        : m.kind === 'plate' ? plateMesh(m, v) : m.kind === 'lamp' ? lampMesh(m, v) : m.kind === 'chest' ? (() => { const h = chestMesh(m, v); h.position.set(.5, 0, .5); return h; })() : m.kind === 'wire' ? wireMesh(mv, m, v) : null;
+      if (!part) continue;
+      const holder = new T.Group(); holder.add(part); holder.position.set(m.x, m.y, m.z); g.add(holder);
     }
     return g;
   }
@@ -825,7 +956,7 @@ const Blocks = (() => {
 
   // the moving blocks of the selected build, each with a button that makes it move at the playhead, and what is
   // already set to happen, each with a button to take it out
-  const NAMES = { door: 'Door', trapdoor: 'Trapdoor', piston: 'Piston' };
+  const NAMES = { door: 'Door', trapdoor: 'Trapdoor', piston: 'Piston', gate: 'Fence gate', lever: 'Lever', button: 'Button', plate: 'Pressure plate', lamp: 'Lamp', chest: 'Chest' };
   function moversPanel(P, Q) {
     const st = structureOf(Q); if (!st) return '';
     const mv = moversOf(st), list = mv.list.filter(m => m.kind !== 'block' && !(m.kind === 'door' && m.b.props?.half === 'upper'));
@@ -833,12 +964,13 @@ const Blocks = (() => {
     const acts = Array.isArray(P.actions) ? P.actions : [], esc = v => String(v).replace(/[<>&"]/g, '');
     const label = m => `${m.kind === 'piston' && m.sticky ? 'Sticky piston' : NAMES[m.kind]} ${m.x}, ${m.y}, ${m.z}`;
     const rows = list.slice(0, 60).map(m => {
-      const verbs = m.kind === 'piston' ? [['extend', 'Push'], ['retract', 'Pull']] : [['open', 'Open'], ['close', 'Shut']];
+      const verbs = m.kind === 'piston' ? [['extend', 'Push'], ['retract', 'Pull']] : m.kind === 'lever' || m.kind === 'lamp' ? [['on', 'On'], ['off', 'Off']]
+        : m.kind === 'button' || m.kind === 'plate' ? [['press', 'Press']] : [['open', 'Open'], ['close', 'Shut']];
       return `<div class="mv-row"><span>${esc(label(m))}</span>${verbs.map(([d, l]) => `<button class="tb small" data-bact="${m.x},${m.y},${m.z},${d}" title="${l} it at the playhead">${l}</button>`).join('')}</div>`;
     }).join('');
     const done = acts.map((a, i) => ({ a, i })).sort((p, q) => p.a.t - q.a.t).map(({ a, i }) =>
       `<div class="mv-row"><span>${(+a.t).toFixed(2)} s · ${esc(a.do || 'toggle')} ${esc((a.at || []).join(', '))}</span><button class="tb small" data-bdel="${i}" title="Take this out">×</button></div>`).join('');
-    return `<div class="hd">Moving blocks</div><p class="note">Put the playhead where it should happen, then press: a door swings in a quarter second; a piston pushes the blocks ahead of it (up to twelve), and a sticky one pulls the one at its face back.</p>
+    return `<div class="hd">Moving blocks</div><p class="note">Put the playhead where it should happen, then press. Doors, gates and trapdoors swing; pistons push the blocks ahead of them (up to twelve) and sticky ones pull one back; chests open. Redstone works: a lever, a pressed button or plate, a redstone torch or block powers what touches it and what it is fixed to, dust carries the power, and doors, gates, trapdoors, pistons and lamps with power open, push or light.</p>
       ${rows}${list.length > 60 ? `<p class="note">And ${list.length - 60} more.</p>` : ''}${done ? '<div class="hd">Happens</div>' + done : ''}`;
   }
   SceneEd.extras.push({

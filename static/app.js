@@ -73,7 +73,7 @@ function curveSVG(name, w = 34, h = 22, fn = null) {
 
 // ---------- model ----------
 const ANIM = ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'radius', 'fill', 'fill2', 'mid1', 'mid2', 'mid3', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth',
-  'blur', 'shadow', 'rgb', 'size', 'reveal', 'sweep', 'spacing', 'bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert',
+  'blur', 'shadow', 'rgb', 'size', 'reveal', 'erase', 'sweep', 'spacing', 'bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert',
   'boil', 'vapor', 'echo', 'echoGap', 'echoFade', 'echoScale', 'zblur', 'smear', 'smearAt', 'cutEdge', 'cutGrow', 'count', 'lineLen', 'thick', 'hole', 'rush', 'cover', 'holeX', 'holeY', 'soft', 'drift', 'glints', 'morph', 'wobble', 'rotX', 'rotY', 'z', 'd', 'lightAngle', 'orbit', 'tilt', 'dolly', 'zoom', ...Figure.JOINTS, 'side', 'limb', 'caps', 'lineh', 'speed', 'vol',
   'mx', 'my', 'mw', 'mh', 'mround', 'feather', 'keyTol', 'keySoft', 'spill', ...Grade.GRADE, 'vig', 'vigSize', 'lutMix'];
 const ADJUST = ['bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert'];
@@ -104,10 +104,10 @@ const PROPS = {
   ellipse: [...FLAT, 'w', 'h', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
   star:    [...FLAT, 'w', 'h', 'points', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
   polygon: [...FLAT, 'w', 'h', 'points', 'radius', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
-  arc:     [...FLAT, 'w', 'h', 'sweep', 'stroke', 'strokeWidth', ...PHYS],
-  wave:    [...FLAT, 'w', 'h', 'reveal', 'stroke', 'strokeWidth', ...PHYS],
+  arc:     [...FLAT, 'w', 'h', 'sweep', 'erase', 'stroke', 'strokeWidth', ...PHYS],
+  wave:    [...FLAT, 'w', 'h', 'reveal', 'erase', 'stroke', 'strokeWidth', ...PHYS],
   // a line drawn by hand: SVG path data (pathd) in its own view box (vb), stretched to w × h, drawn on by reveal
-  path:    [...FLAT, 'w', 'h', 'pathd', 'vb', 'reveal', 'stroke', 'strokeWidth', 'pfill', 'fill', ...PHYS],
+  path:    [...FLAT, 'w', 'h', 'pathd', 'vb', 'reveal', 'erase', 'stroke', 'strokeWidth', 'pfill', 'fill', ...PHYS],
   // an organic shape: a soft polygon of points sides, pushed out of true by wobble, its outline changing as morph moves
   blob:    [...FLAT, 'w', 'h', 'points', 'wobble', 'morph', 'seed', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
   text:    [...FLAT, 'text', 'font', 'size', 'weight', 'italic', 'align', 'tcase', 'lineh', 'spacing', 'reveal', 'retype', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
@@ -139,7 +139,7 @@ const GROUPS = [['Transform', ['x', 'y', 'w', 'h', 'd', 'rotation', 'scale', 'sx
 GROUPS.splice(1, 0, ...World.GROUPS);
 const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', scale: 'Scale', sx: 'Stretch X', sy: 'Stretch Y',
   opacity: 'Opacity', radius: 'Corners', fill: 'Fill', grad: 'Gradient', fill2: 'Fill 2', mid1: 'Via', mid2: 'Via 2', mid3: 'Via 3', gradAngle: 'Angle°', gradMorph: 'To radial %', stroke: 'Stroke', strokeWidth: 'Stroke W', blur: 'Blur', shadow: 'Shadow', rgb: 'RGB split',
-  size: 'Font size', text: 'Text', points: 'Points', pathd: 'Path', vb: 'View box', pfill: 'Fill it', boil: 'Boil', vapor: 'Vaporize %', morph: 'Morph', wobble: 'Wobble', seed: 'Seed', weight: 'Weight', reveal: 'Reveal', retype: 'Retype to', sweep: 'Sweep°', spacing: 'Tracking',
+  size: 'Font size', text: 'Text', points: 'Points', pathd: 'Path', vb: 'View box', pfill: 'Fill it', boil: 'Boil', vapor: 'Vaporize %', morph: 'Morph', wobble: 'Wobble', seed: 'Seed', weight: 'Weight', reveal: 'Reveal', erase: 'Erased', retype: 'Retype to', sweep: 'Sweep°', spacing: 'Tracking',
   font: 'Font', italic: 'Italic', align: 'Align', tcase: 'Case', lineh: 'Leading',
   mask: 'Mask', matte: 'Track matte', mx: 'Mask X', my: 'Mask Y', mw: 'Mask W', mh: 'Mask H', mround: 'Corners', feather: 'Feather',
   smear: 'Smear px', smearDir: 'Smear to°', smearAt: 'Brighter than %',
@@ -157,11 +157,11 @@ const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', sca
 // a camera's position is the point it looks at, and its rotation turns the whole view
 const CAMERA_LABEL = { x: 'Look at X', y: 'Look at Y', rotation: 'Roll°' };
 Object.assign(LABEL, World.LABELS);
-const STEP = { echoGap: .01, gradMorph: 1, opacity: .05, scale: .05, sx: .05, sy: .05, reveal: .05, zoom: .05, expo: .05, gamma: .05, ...World.STEP };
+const STEP = { echoGap: .01, gradMorph: 1, opacity: .05, scale: .05, sx: .05, sy: .05, reveal: .05, erase: .05, zoom: .05, expo: .05, gamma: .05, ...World.STEP };
 const PALETTE = ['#7c5cff', '#ff5c8a', '#20c997', '#ffb020', '#3fa9ff', '#ff7a45'];
 const DEFAULTS = { smear: 0, smearDir: 0, smearAt: 55, echo: 0, echoGap: .05, echoFade: 80, echoScale: 0, zblur: 0, cutout: false, cutEdge: 2, cutGrow: 0,
   count: 90, lineLen: 30, thick: 3, hole: 35, rush: 100, thing: 'ribbon', cover: 60, holeX: 56, holeY: 55, soft: 60, drift: 25, glints: 5, pathd: '', vb: '0 0 100 100', pfill: false, boil: 0, vapor: 0, morph: 0, wobble: 40, seed: 1, rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0, rgb: 0,
-  size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, retype: '', font: 'Inter', italic: false, align: 'center', tcase: 'none', lineh: 110,
+  size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, erase: 0, retype: '', font: 'Inter', italic: false, align: 'center', tcase: 'none', lineh: 110,
   speed: 100, reverse: false, vol: 100, mute: false, afadeIn: 0, afadeOut: 0,
   mask: 'none', matte: 'none', mx: 0, my: 0, mw: 0, mh: 0, mround: 0, feather: 0, minv: false,
   chroma: false, keyColor: '#00b140', keyTol: 30, keySoft: 15, spill: 50, ...Grade.NEUTRAL, vig: 0, vigSize: 60, lut: '', lutMix: 100, sweep: 270, points: 5, w: 300, h: 300,
@@ -324,17 +324,43 @@ function pathLength(d) {
   return pathLens.get(d);
 }
 const viewBox = vb => { const v = String(vb || '').trim().split(/[\s,]+/).map(Number); return v.length === 4 && v.every(isFinite) && v[2] > 0 && v[3] > 0 ? v : [0, 0, 100, 100]; };
+// Show only the part of a line from E to R of the way along it (0 to 1): the pen has drawn up to R, and an eraser
+// following the pen's own path has taken away up to E.
+function strokeSpan(c, len, e, r) { c.setLineDash([len * (r - e), len * 2 + 1]); c.lineDashOffset = -len * e; }
+// A path's strokes, in the order the pen draws them: split where a new one starts with an absolute M (one starting
+// with a relative m is measured from where the last ended, so such a path is kept whole), each with its length.
+const strokeCache = new Map();
+function strokesOf(d) {
+  if (!strokeCache.has(d)) {
+    const parts = String(d).split(/(?=M)/).map(x => x.trim()).filter(Boolean);
+    const list = parts.length > 1 && parts.every(x => x[0] === 'M') ? parts : [String(d)];
+    let out = null;
+    try { out = list.map(x => ({ P: new Path2D(x), len: pathLength(x) })); } catch (_) { out = null; }
+    if (strokeCache.size > 300) strokeCache.clear();
+    strokeCache.set(d, out);
+  }
+  return strokeCache.get(d);
+}
 function drawPath(c, o) {
   if (!o.pathd) return;
-  let P; try { P = new Path2D(o.pathd); } catch (_) { return; }
+  const strokes = strokesOf(o.pathd); if (!strokes) return;
   const [vx, vy, vw, vh] = viewBox(o.vb), kx = o.w / vw, ky = o.h / vh;
   c.save(); c.translate(-o.w / 2, -o.h / 2); c.scale(kx, ky); c.translate(-vx, -vy);
-  if (o.pfill) { c.fillStyle = fillOf(c, o, vw, vh); c.fill(P); }
-  const r = Math.max(0, Math.min(1, o.reveal));
-  if (o.strokeWidth > 0 && r > 0) {
+  if (o.pfill) { let P; try { P = new Path2D(o.pathd); } catch (_) { P = null; } if (P) { c.fillStyle = fillOf(c, o, vw, vh); c.fill(P); } }
+  const r = Math.max(0, Math.min(1, o.reveal)), e = Math.max(0, Math.min(r, +o.erase || 0));
+  if (o.strokeWidth > 0 && r > e) {
     c.lineWidth = o.strokeWidth / Math.sqrt(Math.abs(kx * ky) || 1);
-    if (r < 1) { const len = pathLength(o.pathd); c.setLineDash([len * r, len + 1]); }
-    c.shadowColor = 'transparent'; c.stroke(P);
+    c.shadowColor = 'transparent';
+    // the pen goes stroke by stroke: drawn up to R and erased up to E of the whole way, each stroke its own share
+    const total = strokes.reduce((n, s) => n + s.len, 0) || 1;
+    let at = 0;
+    for (const s of strokes) {
+      const from = at / total, to = (at + s.len) / total; at += s.len;
+      const sr = Math.max(0, Math.min(1, (r - from) / (to - from || 1))), se = Math.max(0, Math.min(1, (e - from) / (to - from || 1)));
+      if (sr <= se) continue;
+      if (sr < 1 || se > 0) strokeSpan(c, s.len, se, sr); else { c.setLineDash([]); c.lineDashOffset = 0; }
+      c.stroke(s.P);
+    }
   }
   c.restore();
 }
@@ -354,8 +380,8 @@ function shapePath(c, L, o) {
     for (let i = 0; i < n; i++) { const q = mid(pts[i], pts[(i + 1) % n]); c.quadraticCurveTo(pts[i][0], pts[i][1], q[0], q[1]); }
     c.closePath();
   } else if (L.type === 'arc') {
-    const sw = Math.max(0, Math.min(360, o.sweep)) * PI / 180;
-    c.ellipse(0, 0, Math.abs(w / 2), Math.abs(h / 2), 0, -PI / 2, -PI / 2 + sw);
+    const sw = Math.max(0, Math.min(360, o.sweep)) * PI / 180, from = sw * Math.max(0, Math.min(1, +o.erase || 0));
+    c.ellipse(0, 0, Math.abs(w / 2), Math.abs(h / 2), 0, -PI / 2 + from, -PI / 2 + sw);
   } else if (L.type === 'wave') {
     // a wave curve (the original Wobble logo shape), scaled to w × h
     const X = x => (x - 16) / 20 * w, Y = y => (y - 18.5) / 10 * h;
@@ -567,9 +593,12 @@ function drawContent(c, L, o, t) {
       else { c.fillStyle = '#2a2a2a'; c.fill(); }
       c.restore();
     } else if (L.type !== 'arc' && L.type !== 'wave') c.fill();
-    if (L.type === 'wave') { const len = Math.abs(o.w) * 1.35 + Math.abs(o.h) * 1.2, r = Math.max(0, Math.min(1, o.reveal));
-      if (r < 1) c.setLineDash([len * r, len]); }
-    if (o.strokeWidth > 0 && !(L.type === 'wave' && o.reveal <= 0)) { c.shadowColor = 'transparent'; c.stroke(); }
+    let gone = false;
+    if (L.type === 'wave') { const len = Math.abs(o.w) * 1.35 + Math.abs(o.h) * 1.2, r = Math.max(0, Math.min(1, o.reveal)), e = Math.max(0, Math.min(r, +o.erase || 0));
+      gone = r <= e; if (r < 1 || e > 0) strokeSpan(c, len, e, r); }
+    if (L.type === 'arc') gone = (+o.erase || 0) >= 1;
+    if (o.strokeWidth > 0 && !gone) { c.shadowColor = 'transparent'; c.stroke(); }
+    c.setLineDash([]); c.lineDashOffset = 0;
   }
 }
 // Speed lines: Lines streaks, each on its own spoke from the middle, rushing out from Clear middle to the box's edge
@@ -1854,8 +1883,8 @@ const PRESETS = {
     'Spin out': (a, o) => { a('rotation', 0, o.rotation, 'backIn'); a('rotation', .7, o.rotation + 180); a('scale', 0, o.scale, 'backIn'); a('scale', .7, 0); },
     'Vaporize': (a, o) => { a('vapor', 0, 0, 'sineIn'); a('vapor', 1.4, 100); },
     'Erase': (a, o, L) => { if (L.type === 'text') { a('reveal', 0, 1, 'linear'); a('reveal', .6, 0); }
-      else if (L.type === 'arc') { a('sweep', 0, o.sweep, 'expoInOut'); a('sweep', .8, 0); }
-      else if (L.type === 'path' || L.type === 'wave') { a('reveal', 0, 1, 'sineInOut'); a('reveal', .8, 0); } else return 'Text, arc and line layers only'; },
+      // a drawn line is erased the way the pen drew it: from its start, along its own path
+      else if (L.type === 'arc' || L.type === 'path' || L.type === 'wave') { a('erase', 0, 0, 'sineInOut'); a('erase', .8, 1); } else return 'Text, arc and line layers only'; },
   },
   '3D': {
     'Flip': (a, o, L) => { if (L.type === 'camera') return 'Not for a camera'; a('rotY', 0, o.rotY, 'expoInOut'); a('rotY', .9, o.rotY + 180); },

@@ -278,19 +278,24 @@ to the part both share, then type the rest of the new one (reveal 0-1 types, 1-2
 
 
 @mcp.tool()
-async def export_scene(folder: str, layer: str | None = None, at_time: float | str = 0) -> dict:
-    """Export a 3D world as a scene a game engine can open, into FOLDER (made if missing): scene.glb (its land,
-    props, people and 3D layers, in metres, y up, the ground at 0) and scene.json (the world's sky, sun, fog, ground
-    and water settings, the camera, and every prop with its type, name and place, for a game's rules to point at).
-    LAYER is the world (the first one if left out); AT_TIME the moment taken, for anything that moves."""
+async def export_scene(path: str, layer: str | None = None, at_time: float | str = 0) -> dict:
+    """Export a 3D world as one file a game engine opens: a .glb of its land, props, people and 3D layers (metres,
+    y up, the ground at 0) with the world's sky, sun, fog, ground and water settings, the camera, and every prop by
+    type, name and place inside it (the root's extras, riptideScene). PATH is the file (.glb), or a folder to write
+    <world>.glb into. LAYER is the world (the first if left out); AT_TIME the moment taken, for what moves.
+    Kiln imports the file as it is."""
     out = await acall("export_scene", {"id": layer, "time": at_time}, timeout=180)
-    os.makedirs(folder, exist_ok=True)
-    with open(os.path.join(folder, "scene.glb"), "wb") as f:
+    target = os.path.expanduser(path)
+    if os.path.isdir(target) or not target.lower().endswith(".glb"):
+        name = "".join(c if c.isalnum() else "-" for c in str(out["scene"].get("world_name") or "world").lower()).strip("-")
+        os.makedirs(target, exist_ok=True)
+        target = os.path.join(target, f"{name or 'world'}.glb")
+    else:
+        os.makedirs(os.path.dirname(os.path.abspath(target)), exist_ok=True)
+    with open(target, "wb") as f:
         f.write(base64.b64decode(out["glb"]))
-    with open(os.path.join(folder, "scene.json"), "w", encoding="utf-8") as f:
-        json.dump(out["scene"], f, indent=2)
-    return {"folder": os.path.abspath(folder), "glb_bytes": out["bytes"], "objects": len(out["scene"]["objects"]),
-            "note": "open it in a game engine; Kiln imports this folder as it is"}
+    return {"file": os.path.abspath(target), "bytes": out["bytes"], "objects": len(out["scene"]["objects"]),
+            "note": "one file; Kiln imports it as it is"}
 
 
 @mcp.tool()

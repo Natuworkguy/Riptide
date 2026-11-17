@@ -4342,6 +4342,7 @@ function layerItems(L) {
       { label: 'Hold this frame (2s)', act: () => holdFrame(L) }] },
       { label: L.p.mute ? 'Unmute clip sound' : 'Mute clip sound', act: () => { L.p.mute = !L.p.mute; refresh(); } }] : []),
     ...(L.type === 'shape3d' || L.type === 'model' ? [{ label: 'Export as 3D model…', icon: ICON.model, act: () => exportModelFile(L) }] : []),
+    ...(L.type === 'world' ? [{ label: 'Export world for a game…', icon: ICON.model, act: () => exportWorldFile(L) }] : []),
     { label: 'Split at playhead', icon: ICON.blade, kbd: '⌘K', disabled: !(time > lin(L) && time < lout(L)), act: splitLayer },
     { label: 'Start here', kbd: '[', act: () => { L.in = Math.min(time, lout(L) - 1 / FPS); refresh(); } },
     { label: 'End here', kbd: ']', act: () => { L.out = Math.max(time, lin(L) + 1 / FPS); refresh(); } },
@@ -4423,6 +4424,52 @@ addEventListener('contextmenu', e => {
   if (t.closest('#app')) e.preventDefault();               // no browser menu over the editor chrome
 });
 
+// ---------- a 3D world as one file for a game engine ----------
+// A world's land, props, people and the 3D layers in it as one glTF binary (metres, y up, the ground at 0), with what
+// an engine needs to light and dress it the same way inside it, in the root's extras as riptideScene: the world's
+// settings (sky, sun, fog, ground, water), the camera, and every prop by id, type, name and place. Kiln opens it.
+async function exportWorld(L, t) {
+  if (!L || L.type !== 'world') throw new Error('there is no 3D world to export: add_world first');
+  if (!World.available) throw new Error('3D is not available in this window');
+  const rnd = v => Math.round(v * 1000) / 1000;
+  await R3D.ready();
+  // every prop with an id, so the engine can tell which is which; and people and models loaded, not stand-ins
+  if (Array.isArray(L.p.objects)) World.ensureIds(L.p.objects);
+  World.stage(L, state(L, t), t);
+  for (let i = 0; i < 300 && World.pending > 0; i++) await new Promise(r => setTimeout(r, 100));
+  const o = state(L, t), { B, cam, ground } = World.stage(L, o, t);
+  const byId = new Map(); (function walk(xs) { for (const P of Array.isArray(xs) ? xs : []) { if (P?.id) byId.set(P.id, P); walk(P?.children); } })(o.objects);
+  B.props?.traverse(n => { const P = n.isGroup && byId.get(n.userData.partId);
+    if (P) { n.name = P.name || P.type; n.userData.kiln = { id: P.id, type: P.type, name: P.name || P.type, move: P.move, body: P.body, count: P.count, size: P.size, say: P.say }; } });
+  const M = World.M, eye = +o.eye || 1.7, T = window.RiptideThree;
+  const pos = cam.position.clone().divideScalar(M); pos.y += eye;
+  const dir = new T.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+  const world = {}; for (const k of World.FIELDS) if (k !== 'objects' && k !== 'shots') world[k] = o[k];
+  const list = (xs, up = '') => (Array.isArray(xs) ? xs : []).flatMap(P => [{ id: P.id, type: P.type, name: P.name || P.type, parent: up || undefined,
+    at: (P.at || [0, 0, 0]).map(v => rnd(+v || 0)), size: P.size, move: P.move, say: P.say }, ...list(P.children, P.id)]);
+  const scene = { format: 'riptide-scene', version: 1, name: projectName, world_name: L.name, units: 'metres', up: 'y', time: t,
+    world, camera: { pos: pos.toArray().map(rnd), dir: dir.toArray().map(rnd), fov: rnd(cam.fov) }, objects: list(o.objects) };
+  // what is only for the editor (camera guides, light beams, dust drawn as points, shader-drawn sky and sea) stays
+  // out; the engine makes its own sky, water and air from the settings
+  const roots = [B.land, B.props, ...(B.members || [])].filter(Boolean), hidden = [];
+  for (const r of roots) r.traverse(n => { if (n.visible && (n.userData.guide || n.userData.bulb || n.isPoints || n.material?.isShaderMaterial)) { n.visible = false; hidden.push(n); } });
+  if (B.land) B.land.name = 'Ground';
+  if (B.props) B.props.name = 'Props';
+  const wrap = new T.Group(); wrap.name = L.name || 'Scene'; wrap.scale.setScalar(1 / M); wrap.position.y = -ground / M;
+  wrap.userData.riptideScene = scene;
+  const parents = roots.map(r => r.parent); for (const r of roots) wrap.add(r);
+  try { return { scene, glb: new Uint8Array(await new T.GLTFExporter().parseAsync(wrap, { binary: true, onlyVisible: true })) }; }
+  finally { roots.forEach((r, i) => { parents[i]?.add(r); }); for (const n of hidden) n.visible = true; }
+}
+// from a world's right-click menu: the file, downloaded
+async function exportWorldFile(L) {
+  status('Exporting the world…');
+  try { const { glb } = await exportWorld(L, time);
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([glb], { type: 'model/gltf-binary' })), download: `${(L.name || 'world').replace(/[\\/:*?"<>|]+/g, '-')}.glb` });
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); status('Exported the world as one file: open it in Kiln'); }
+  catch (e) { status('Could not export the world: ' + e.message); }
+}
+
 // ---------- live link for agents (MCP) ----------
 // server.py relays requests from mcp_server.py over Server-Sent Events; each one runs here against the open project,
 // goes through the normal edit path (so it shows up instantly, can be undone, and marks the file as edited),
@@ -4478,39 +4525,9 @@ const LIVE = (() => {
     // settings: sky, sun, fog, ground, water) with the camera and the props listed, for a game to hang its rules on.
     export_scene: async a => {
       const L = a.id != null ? findL(a) : S.layers.find(l => l.type === 'world');
-      if (!L || L.type !== 'world') throw new Error('there is no 3D world to export: add_world first');
-      if (!World.available) throw new Error('3D is not available in this window');
-      const t = Math.max(0, Math.min(S.dur, beatTime(a.time ?? 0)));
-      await R3D.ready();
-      // every prop with an id, so the engine can tell which is which; and people and models loaded, not stand-ins
-      if (Array.isArray(L.p.objects)) World.ensureIds(L.p.objects);
-      World.stage(L, state(L, t), t);
-      for (let i = 0; i < 300 && World.pending > 0; i++) await new Promise(r => setTimeout(r, 100));
-      const o = state(L, t), { B, cam, ground } = World.stage(L, o, t);
-      const byId = new Map(); (function walk(xs) { for (const P of Array.isArray(xs) ? xs : []) { if (P?.id) byId.set(P.id, P); walk(P?.children); } })(o.objects);
-      B.props?.traverse(n => { const P = n.isGroup && byId.get(n.userData.partId);
-        if (P) { n.name = P.name || P.type; n.userData.kiln = { id: P.id, type: P.type, name: P.name || P.type, move: P.move, body: P.body, count: P.count, size: P.size, say: P.say }; } });
-      const M = World.M, eye = +o.eye || 1.7, T = window.RiptideThree;
-      // what is only for the editor (camera guides, light beams, dust drawn as points, shader-drawn sky and sea) stays
-      // out; the engine makes its own sky, water and air from the settings
-      const roots = [B.land, B.props, ...(B.members || [])].filter(Boolean), hidden = [];
-      for (const r of roots) r.traverse(n => { if (n.visible && (n.userData.guide || n.userData.bulb || n.isPoints || n.material?.isShaderMaterial)) { n.visible = false; hidden.push(n); } });
-      if (B.land) B.land.name = 'Ground';
-      if (B.props) B.props.name = 'Props';
-      const wrap = new T.Group(); wrap.name = L.name || 'Scene'; wrap.scale.setScalar(1 / M); wrap.position.y = -ground / M;
-      const parents = roots.map(r => r.parent); for (const r of roots) wrap.add(r);
-      let glb;
-      try { glb = new Uint8Array(await new T.GLTFExporter().parseAsync(wrap, { binary: true, onlyVisible: true })); }
-      finally { roots.forEach((r, i) => { parents[i]?.add(r); }); for (const n of hidden) n.visible = true; }
-      let bin = ''; for (let i = 0; i < glb.length; i += 0x8000) bin += String.fromCharCode.apply(null, glb.subarray(i, i + 0x8000));
-      const pos = cam.position.clone().divideScalar(M); pos.y += eye;
-      const dir = new T.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
-      const world = {}; for (const k of World.FIELDS) if (k !== 'objects' && k !== 'shots') world[k] = o[k];
-      const list = (xs, up = '') => (Array.isArray(xs) ? xs : []).flatMap(P => [{ id: P.id, type: P.type, name: P.name || P.type, parent: up || undefined,
-        at: (P.at || [0, 0, 0]).map(v => round(+v || 0)), size: P.size, move: P.move, say: P.say }, ...list(P.children, P.id)]);
-      const scene = { format: 'riptide-scene', version: 1, name: projectName, world_name: L.name, units: 'metres', up: 'y', time: t,
-        world, camera: { pos: pos.toArray().map(round), dir: dir.toArray().map(round), fov: round(cam.fov) }, objects: list(o.objects) };
-      return { ok: true, scene, glb: btoa(bin), bytes: glb.length };
+      const out = await exportWorld(L, Math.max(0, Math.min(S.dur, beatTime(a.time ?? 0))));
+      let bin = ''; for (let i = 0; i < out.glb.length; i += 0x8000) bin += String.fromCharCode.apply(null, out.glb.subarray(i, i + 0x8000));
+      return { ok: true, scene: out.scene, glb: btoa(bin), bytes: out.glb.length };
     },
     // a time in seconds from "bar:beat" with the project's tempo
     beat_time: a => ({ ok: true, times: [].concat(a.times ?? a.time).map(x => round(beatTime(x))) }),

@@ -558,9 +558,9 @@ def world(scene: str = "", name: str = "", props=None, window: str = "") -> str:
             "at the bottom: 3D shapes and models above it stand in it.")
 
 
-def export_scene(folder: str = "", window: str = "", at_time=0) -> str:
-    """Write the 3D world in the project open in Riptide to FOLDER as a scene a game engine opens (scene.glb and
-    scene.json): by default a new folder in ~/.flash/riptide-scenes. What happened, in a line."""
+def export_scene(path: str = "", window: str = "", at_time=0) -> str:
+    """Write the 3D world in the project open in Riptide as one file a game engine opens (a .glb with the world's
+    settings inside it): to PATH, or a new file in ~/.flash/riptide-scenes. What happened, in a line."""
 
     window = target(window)
     answer = ask("/api/live/op", {"op": "export_scene", "args": {"time": at_time}, "timeout": 180,
@@ -569,16 +569,15 @@ def export_scene(folder: str = "", window: str = "", at_time=0) -> str:
         raise SendError(answer.get("error") or "Riptide could not export it.")
     out = answer.get("result", answer)
     scene = out["scene"]
-    if not folder:
-        name = re.sub(r"[^a-z0-9]+", "-", str(scene.get("world_name") or scene.get("name") or "scene").lower()).strip("-")
-        folder = str(flash_home() / "riptide-scenes" / f"{name or 'scene'}-{time.strftime('%Y%m%d-%H%M%S')}")
-    dest = Path(folder).expanduser()
-    dest.mkdir(parents=True, exist_ok=True)
-    (dest / "scene.glb").write_bytes(base64.b64decode(out["glb"]))
-    (dest / "scene.json").write_text(json.dumps(scene, indent=2), encoding="utf-8")
+    name = re.sub(r"[^a-z0-9]+", "-", str(scene.get("world_name") or scene.get("name") or "world").lower()).strip("-") or "world"
+    dest = Path(path).expanduser() if path else flash_home() / "riptide-scenes" / f"{name}-{time.strftime('%Y%m%d-%H%M%S')}.glb"
+    if dest.is_dir() or dest.suffix.lower() != ".glb":
+        dest = dest / f"{name}.glb"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(base64.b64decode(out["glb"]))
     props = ", ".join(sorted({o.get("name") or o.get("type") for o in scene.get("objects", [])})) or "none"
-    return (f"Exported the 3D world to {dest} (scene.glb, {out.get('bytes', 0) // 1024} KB, and scene.json){where(answer)}. "
-            f"Its props: {props}. A game engine such as Kiln imports this folder.")
+    return (f"Exported the 3D world as one file: {dest} ({out.get('bytes', 0) // 1024} KB){where(answer)}. "
+            f"Its props: {props}. Kiln imports this file.")
 
 
 def open_windows() -> list:
@@ -649,7 +648,7 @@ def main(argv: list) -> int:
             asked = json.load(sys.stdin) if not sys.stdin.isatty() else {}
             asked["window"] = attached(str(asked.get("window") or ""))
             need_window(str(asked.get("window") or ""))
-            print(export_scene(str(asked.get("folder") or ""), str(asked.get("window") or ""), asked.get("time") or 0))
+            print(export_scene(str(asked.get("path") or asked.get("folder") or ""), str(asked.get("window") or ""), asked.get("time") or 0))
         except SendError as why:
             print(f"Error: {why}")
         except (urllib.error.URLError, OSError) as why:

@@ -179,13 +179,13 @@ async def list_capabilities() -> dict:
 
 
 @mcp.tool()
-async def see_frame(time: float | None = None, width: int = 720) -> Image:
+async def see_frame(time: float | str | None = None, width: int = 720) -> Image:
     """Render the animation at `time` seconds (default: the playhead) and return it as an image `width` px wide."""
     return png((await acall("render_frame", {"time": time, "width": width}))["png"])
 
 
 @mcp.tool()
-async def see_frames(count: int = 8, times: list[float] | None = None, width: int = 300) -> Image:
+async def see_frames(count: int = 8, times: list[float | str] | None = None, width: int = 300) -> Image:
     """A contact sheet of the animation: `count` evenly spaced moments (2-16) or the exact `times` you list,
     each labelled with its time. The best way to judge motion and timing."""
     return png((await acall("render_frames", {"count": count, "times": times, "width": width}))["png"])
@@ -194,12 +194,20 @@ async def see_frames(count: int = 8, times: list[float] | None = None, width: in
 # ---------- changing ----------
 @mcp.tool()
 async def add_layer(type: Literal["rect", "ellipse", "polygon", "star", "arc", "text", "wave", "path", "blob", "speedlines", "through", "shape3d", "camera", "figure", "adjust"], name: str | None = None,
-              props: dict | None = None, start: float | None = None, end: float | None = None) -> dict:
+              props: dict | None = None, start: float | str | None = None, end: float | str | None = None) -> dict:
     """Add a layer on top. `props` are initial values, e.g. {"x": 540, "y": 300, "w": 400, "h": 120, "fill": "#ff5a36", "radius": 20}
     or for text {"text": "Hello", "size": 96, "weight": 800, "fill": "#111111"}. `start`/`end` limit when it is visible (seconds).
     Text also takes "font" (a font's name: Inter, Arial, Georgia, or a library font such as Montserrat, Bebas Neue, Playfair
     Display, Pacifico, JetBrains Mono, fetched when used), "italic" (true/false), "align" ("left" | "center" | "right"),
     "tcase" ("none" | "upper" | "lower" | "title") and "lineh" (line height, % of the size, 110 by default).
+Changing words: text "words" ("make it | ask Flash | ship it", split by |) take turns after the layer's own "text"
+("Just"), one space after it, changing at each time in "wordTimes" (comma separated seconds or "bar:beat", e.g.
+"2:1, 2:3, 3:1"; or "wordStart" then every "wordEvery" seconds). On each change the whole line re-centres on its
+new width over "wordMove" seconds (0.25 by default), the old word lifting away as the new one rises in, every
+width measured in the loaded font; "wordFill" colours the words (the fill by default). Nothing to measure or key.
+Fit around: a "rect" or "ellipse" with "fit" (layer names or ids, comma separated) sizes and places itself round
+those layers at every moment, plus "fitPad" pixels each side (30 by default): a pill round a changing line of
+text, a card round a plan, always tight and centred. Put it below them.
 Text "retype" is a second text to change to: with it set, apply the "Retype" preset to type the text, backspace
 to the part both share, then type the rest of the new one (reveal 0-1 types, 1-2 erases, 2-3 types the new text).
 
@@ -236,7 +244,9 @@ to the part both share, then type the rest of the new one (reveal 0-1 types, 1-2
     Any flat layer becomes 3D with {"three": true}, then turns with rotX and rotY (degrees) and moves back with z
     (pixels; positive is further away). A "camera" films every 3D layer: x and y are the point it looks at,
     orbit and tilt swing it round that point (degrees), dolly moves it closer (pixels), zoom narrows the lens
-    (1 is normal) and rotation rolls it. The top visible camera is the one that films; with none, depth 0 is the
+    (1 is normal) and rotation rolls it. A camera with "follow" (a layer's name or id) looks at that layer at every
+    frame, exactly, with no lag, however it moves; "followMix" (0 to 100, animatable) mixes from the camera's own x
+    and y to the layer's, to ease into a follow and out of it. The top visible camera is the one that films; with none, depth 0 is the
     canvas exactly. All of these animate.
 
     A "figure" is a person, a wooden mannequin: h is its height. Its joints are angles in degrees, all 0 standing
@@ -364,8 +374,8 @@ async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "
 
 
 @mcp.tool()
-async def update_layer(layer: str, props: dict | None = None, at_time: float | None = None, keyframe: bool = False,
-                 ease: str | None = None, name: str | None = None, start: float | None = None, end: float | None = None,
+async def update_layer(layer: str, props: dict | None = None, at_time: float | str | None = None, keyframe: bool = False,
+                 ease: str | None = None, name: str | None = None, start: float | str | None = None, end: float | str | None = None,
                  hidden: bool | None = None, locked: bool | None = None, blend: str | None = None,
                  lock_position: bool | None = None, lock_width: bool | None = None,
                  lock_height: bool | None = None) -> dict:
@@ -386,7 +396,8 @@ async def update_layer(layer: str, props: dict | None = None, at_time: float | N
 async def set_keyframes(layer: str, prop: str, keys: list[dict], replace: bool = False) -> dict:
     """Animate one property with keyframes, e.g. prop "y", keys [{"t": 0, "v": 600, "ease": "expoOut"}, {"t": 0.8, "v": 400}].
     The ease on a key shapes the motion towards the next key: a named one, or a custom curve as
-    "cubic-bezier(x1, y1, x2, y2)" (as in CSS; y may go past 0 and 1 to overshoot). `replace` clears that property's existing keys first."""
+    "cubic-bezier(x1, y1, x2, y2)" (as in CSS; y may go past 0 and 1 to overshoot). With the tempo set
+    (set_composition bpm), "t" may be "bar:beat" ("2:3", "4:1.5"), as may any time this server takes. `replace` clears that property's existing keys first."""
     return await acall("set_keyframes", {"id": layer, "prop": prop, "keys": keys, "replace": replace})
 
 
@@ -432,12 +443,34 @@ async def reorder_layer(layer: str, to: str) -> dict:
 
 @mcp.tool()
 async def set_composition(width: int | None = None, height: int | None = None, background: str | None = None,
-                    duration: float | None = None, name: str | None = None, scale_content: bool = True) -> dict:
+                    duration: float | str | None = None, name: str | None = None, scale_content: bool = True,
+                    bpm: float | None = None, downbeat: float | None = None, beats_per_bar: int | None = None) -> dict:
     """Change the canvas size, background colour, duration in seconds, or project name. On a resize the content is
     re-centred and, with scale_content (default), scaled to fit the new frame; keyframed positions move with it.
-    Common sizes: 1080x1080 post, 1080x1350 portrait, 1080x1920 story/TikTok, 1920x1080 1080p, 3840x2160 4K."""
+    Common sizes: 1080x1080 post, 1080x1350 portrait, 1080x1920 story/TikTok, 1920x1080 1080p, 3840x2160 4K.
+    bpm, downbeat (the time of the first beat, seconds) and beats_per_bar (4) set the tempo: from then on every time
+    this server takes (keyframe "t", start, end, at_time, see_frame, markers) may be "bar:beat", both counted from 1
+    ("1:1" is the downbeat, "3:2.5" half way through bar 3's second beat), so cuts and changes land on the beat
+    exactly. bpm 0 clears it."""
     return await acall("set_composition", {"width": width, "height": height, "background": background,
-                                           "duration": duration, "name": name, "scale_content": scale_content})
+                                           "duration": duration, "name": name, "scale_content": scale_content,
+                                           "bpm": bpm, "downbeat": downbeat, "beats_per_bar": beats_per_bar})
+
+
+@mcp.tool()
+async def measure_text(text: str | None = None, texts: list[str] | None = None, font: str = "Inter", size: float = 120,
+                       weight: int = 400, italic: bool = False, spacing: float = 0) -> dict:
+    """Measure text in the real font, after it has loaded: each text's width (its advance, what a text layer is
+    centred on), its ink left and right of the start, ascent and descent, and the width of a space. Use it to lay
+    out text exactly instead of guessing from letter counts; "loaded" false means the font did not arrive."""
+    return await acall("measure_text", {"text": text, "texts": texts, "font": font, "size": size, "weight": weight,
+                                        "italic": italic, "spacing": spacing})
+
+
+@mcp.tool()
+async def beat_time(times: list[str]) -> dict:
+    """Turn "bar:beat" times into seconds with the project's tempo (set_composition bpm)."""
+    return await acall("beat_time", {"times": times})
 
 
 @mcp.tool()
@@ -447,7 +480,7 @@ async def new_project(width: int = 1080, height: int = 1080, background: str = "
 
 
 @mcp.tool()
-async def set_playhead(time: float) -> dict:
+async def set_playhead(time: float | str) -> dict:
     """Move the editor's playhead so the user sees that moment."""
     return await acall("set_playhead", {"time": time})
 
@@ -473,7 +506,7 @@ async def select_layer(layer: str | None = None) -> dict:
 
 
 @mcp.tool()
-async def add_marker(time: float, label: str = "") -> dict:
+async def add_marker(time: float | str, label: str = "") -> dict:
     """Add a named timeline marker."""
     return await acall("add_marker", {"time": time, "label": label})
 
@@ -509,7 +542,7 @@ def _audio_src(path: str) -> tuple[str, str]:
 
 
 @mcp.tool()
-async def add_audio(path: str, start: float = 0, track: str | None = None,
+async def add_audio(path: str, start: float | str = 0, track: str | None = None,
                     fade_in: float | None = None, fade_out: float | None = None) -> dict:
     """Add an audio file from this computer (mp3, wav, m4a, aac, ogg, flac; up to 40 MB) as a clip starting at `start`
     seconds. It goes on a new audio track unless `track` names one (its id, name or 1-based number); clips on different

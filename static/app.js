@@ -103,8 +103,8 @@ const FLAT = [...COMMON, 'three', ...DEPTH];
 // Physics: what a layer does when it falls, and the scene's gravity, walls and air, set from any layer
 const PHYS = [...Physics.FIELDS, ...Physics.SCENE];
 const PROPS = {
-  rect:    [...FLAT, 'w', 'h', 'radius', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
-  ellipse: [...FLAT, 'w', 'h', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
+  rect:    [...FLAT, 'fit', 'fitPad', 'w', 'h', 'radius', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
+  ellipse: [...FLAT, 'fit', 'fitPad', 'w', 'h', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
   star:    [...FLAT, 'w', 'h', 'points', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
   polygon: [...FLAT, 'w', 'h', 'points', 'radius', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
   arc:     [...FLAT, 'w', 'h', 'sweep', 'erase', 'stroke', 'strokeWidth', ...PHYS],
@@ -113,7 +113,7 @@ const PROPS = {
   path:    [...FLAT, 'w', 'h', 'pathd', 'vb', 'reveal', 'erase', 'stroke', 'strokeWidth', 'pfill', 'fill', ...PHYS],
   // an organic shape: a soft polygon of points sides, pushed out of true by wobble, its outline changing as morph moves
   blob:    [...FLAT, 'w', 'h', 'points', 'wobble', 'morph', 'seed', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
-  text:    [...FLAT, 'text', 'font', 'size', 'weight', 'italic', 'align', 'tcase', 'lineh', 'spacing', 'reveal', 'retype', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
+  text:    [...FLAT, 'text', 'font', 'size', 'weight', 'italic', 'align', 'tcase', 'lineh', 'spacing', 'reveal', 'retype', 'words', 'wordTimes', 'wordStart', 'wordEvery', 'wordMove', 'wordFill', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
   image:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...CUTP, ...KEYP, ...PHYS],
   video:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...CLIP, ...CUTP, ...KEYP, ...PHYS],
   // speed lines: streaks rushing out from the middle of the box to its edge, as a dash forward or a hit
@@ -126,17 +126,17 @@ const PROPS = {
   shape3d: [...COMMON, ...DEPTH, 'w', 'h', 'd', 'shape', 'text', 'radius', 'fill', 'material', 'lightAngle'],
   model:   [...COMMON, ...DEPTH, 'w', 'h', 'lightAngle'],
   figure:  [...COMMON, 'w', 'h', 'fill', 'stroke', 'strokeWidth', 'side', 'limb', 'caps', ...Figure.JOINTS, ...PHYS],
-  camera:  ['x', 'y', 'orbit', 'tilt', 'dolly', 'zoom', 'rotation'],
+  camera:  ['follow', 'followMix', 'x', 'y', 'orbit', 'tilt', 'dolly', 'zoom', 'rotation'],
   // a whole place to film (world3d.js): the 3D shapes and models above it stand in it
   world:   ['opacity', ...ADJUST, ...FINISH, ...World.FIELDS],
   // a group (see groupOf): draws nothing itself, and moves, turns, scales and fades its layers with its box
   group:   ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy', 'opacity'],
 };
-ANIM.push(...World.NUMBERS, ...World.COLORS);
+ANIM.push(...World.NUMBERS, ...World.COLORS, 'fitPad', 'followMix');
 const GROUPS = [['Transform', ['x', 'y', 'w', 'h', 'd', 'rotation', 'scale', 'sx', 'sy']],
-  ['3D', ['three', 'shape', 'rotX', 'rotY', 'z', 'material', 'lightAngle']], ['Camera', ['orbit', 'tilt', 'dolly', 'zoom']],
+  ['3D', ['three', 'shape', 'rotX', 'rotY', 'z', 'material', 'lightAngle']], ['Camera', ['follow', 'followMix', 'orbit', 'tilt', 'dolly', 'zoom']], ['Fit around', ['fit', 'fitPad']],
   ['Drawing', ['pathd', 'vb', 'pfill']], ['Style', ['fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', 'radius', 'points', 'wobble', 'morph', 'seed', 'sweep', 'opacity']],
-  ['Text', ['text', 'font', 'weight', 'size', 'lineh', 'italic', 'align', 'tcase', 'spacing', 'reveal', 'retype']], ['Pose', ['side', 'limb', 'caps', ...Figure.JOINTS]], ['Physics', PHYS],
+  ['Text', ['text', 'font', 'weight', 'size', 'lineh', 'italic', 'align', 'tcase', 'spacing', 'reveal', 'retype']], ['Changing words', ['words', 'wordTimes', 'wordStart', 'wordEvery', 'wordMove', 'wordFill']], ['Pose', ['side', 'limb', 'caps', ...Figure.JOINTS]], ['Physics', PHYS],
   ['Clip', CLIP], ['Speed lines', ['count', 'lineLen', 'thick', 'hole', 'rush']], ['Shoot through', ['thing', 'cover', 'holeX', 'holeY', 'soft', 'drift', 'glints']], ['Effects', ['blur', 'zblur', 'shadow', 'rgb', 'boil', 'vapor']], ['Echo', ECHO], ['Pixel smear', SMEAR], ['Fluted glass', FLUTE], ['Cut out', CUTP], ['Adjust', ADJUST], ['Green screen', KEYP], ['Mask', MASK],
   ['Grade', Grade.GRADE], ['Curves', ['curves']], ['Vignette and LUT', LOOKP]];
 GROUPS.splice(1, 0, ...World.GROUPS);
@@ -144,6 +144,8 @@ const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', sca
   opacity: 'Opacity', radius: 'Corners', fill: 'Fill', grad: 'Gradient', fill2: 'Fill 2', mid1: 'Via', mid2: 'Via 2', mid3: 'Via 3', gradAngle: 'Angle°', gradMorph: 'To radial %', stroke: 'Stroke', strokeWidth: 'Stroke W', blur: 'Blur', shadow: 'Shadow', rgb: 'RGB split',
   size: 'Font size', text: 'Text', points: 'Points', pathd: 'Path', vb: 'View box', pfill: 'Fill it', boil: 'Boil', vapor: 'Vaporize %', morph: 'Morph', wobble: 'Wobble', seed: 'Seed', weight: 'Weight', reveal: 'Reveal', erase: 'Erased', retype: 'Retype to', sweep: 'Sweep°', spacing: 'Tracking',
   font: 'Font', italic: 'Italic', align: 'Align', tcase: 'Case', lineh: 'Leading',
+  words: 'Words', wordTimes: 'Change at', wordStart: 'First change s', wordEvery: 'Then every s', wordMove: 'Change takes s', wordFill: 'Word colour',
+  fit: 'Fit around', fitPad: 'Padding', follow: 'Follow layer', followMix: 'Follow %',
   mask: 'Mask', matte: 'Track matte', mx: 'Mask X', my: 'Mask Y', mw: 'Mask W', mh: 'Mask H', mround: 'Corners', feather: 'Feather',
   smear: 'Smear px', smearDir: 'Smear to°', smearAt: 'Brighter than %',
   flute: 'Rib width px', fluteDir: 'Ribs run', fluteBend: 'Bend %', fluteStreak: 'Streak px', fluteLines: 'Fine lines %', fluteShine: 'Shine %', fluteChroma: 'Colour split px', fluteShift: 'Slide px',
@@ -165,6 +167,7 @@ const STEP = { echoGap: .01, gradMorph: 1, opacity: .05, scale: .05, sx: .05, sy
 const PALETTE = ['#7c5cff', '#ff5c8a', '#20c997', '#ffb020', '#3fa9ff', '#ff7a45'];
 const DEFAULTS = { smear: 0, smearDir: 0, smearAt: 55, flute: 0, fluteDir: 'down', fluteBend: 40, fluteStreak: 30, fluteLines: 55, fluteShine: 40, fluteChroma: 3, fluteShift: 0, echo: 0, echoGap: .05, echoFade: 80, echoScale: 0, zblur: 0, cutout: false, cutEdge: 2, cutGrow: 0,
   count: 90, lineLen: 30, thick: 3, hole: 35, rush: 100, thing: 'ribbon', cover: 60, holeX: 56, holeY: 55, soft: 60, drift: 25, glints: 5, pathd: '', vb: '0 0 100 100', pfill: false, boil: 0, vapor: 0, morph: 0, wobble: 40, seed: 1, rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0, rgb: 0,
+  words: '', wordTimes: '', wordStart: 1, wordEvery: .5, wordMove: .25, wordFill: '', fit: '', fitPad: 30, follow: '', followMix: 100,
   size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, erase: 0, retype: '', font: 'Inter', italic: false, align: 'center', tcase: 'none', lineh: 110,
   speed: 100, reverse: false, vol: 100, mute: false, afadeIn: 0, afadeOut: 0,
   mask: 'none', matte: 'none', mx: 0, my: 0, mw: 0, mh: 0, mround: 0, feather: 0, minv: false,
@@ -184,7 +187,9 @@ const GRADS = [['none', 'None'], ['linear', 'Linear'], ['radial', 'Radial']];
 // Between Fill and Fill 2 a gradient can run through up to three more colours (Via), evenly spaced:
 // #fff -> #abc -> #fff is a Fill, one Via and a Fill 2. An empty Via is not a stop.
 const MIDS = ['mid1', 'mid2', 'mid3'];
-const COLORS = ['fill', 'fill2', ...MIDS, 'stroke', 'keyColor', ...World.COLORS];
+// properties typed as a line of text in the inspector
+const TEXT_P = ['vb', 'words', 'wordTimes', 'fit', 'follow'];
+const COLORS = ['fill', 'fill2', ...MIDS, 'stroke', 'keyColor', 'wordFill', ...World.COLORS];
 function fillOf(c, o, w, h) {
   if ((o.grad !== 'linear' && o.grad !== 'radial') || !isColor(o.fill2)) return o.fill;
   const m = Math.max(0, Math.min(1, (+o.gradMorph || 0) / 100)), round = o.grad === 'radial' ? 1 - m : m;
@@ -303,7 +308,67 @@ function keyState(L, t) { const o = { ...L.p }; for (const k of ANIM) if (L.keys
   for (const k of COLORS) if (isVar(o[k])) o[k] = resolveColor(o[k]); return o; }
 // what a layer is at time t: its keyframes, then what the physics did to it
 function state(L, t) { let o = keyState(L, t); if (L.p.phys && L.p.phys !== 'none') o = Physics.apply(L, t, o);
-  return L.react?.length && typeof Reactive !== 'undefined' ? Reactive.apply(L, t, o) : o; }
+  if (L.react?.length && typeof Reactive !== 'undefined') o = Reactive.apply(L, t, o);
+  if (o.fit) fitAround(L, t, o);
+  if (L.type === 'camera' && o.follow) followLayer(L, t, o);
+  return o; }
+// a layer named by its name or its id
+const layerRef = ref => { ref = String(ref).trim(); return S.layers.find(l => l.name === ref) || S.layers.find(l => String(l.id) === ref); };
+// Fit around: a box that sizes and places itself round other layers (names or ids, comma separated) as they are at
+// that moment, plus Padding on every side. It follows them as they move, grow and change their words, so a pill
+// or a card round a line of text never has to be measured or keyed by hand.
+const fitting = new Set();
+function fitAround(L, t, o) {
+  if (fitting.has(L)) return; fitting.add(L);
+  try {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const ref of String(o.fit).split(',')) {
+      const T = ref.trim() && layerRef(ref); if (!T || T === L || !visibleAt(T, t) || T.type === 'camera') continue;
+      const b = bounds(T, t), q = b.o, a = (q.rotation || 0) * PI / 180;
+      const hw = b.w * Math.abs((q.scale ?? 1) * (q.sx ?? 1)) / 2, hh = b.h * Math.abs((q.scale ?? 1) * (q.sy ?? 1)) / 2;
+      const ex = hw * Math.abs(Math.cos(a)) + hh * Math.abs(Math.sin(a)), ey = hw * Math.abs(Math.sin(a)) + hh * Math.abs(Math.cos(a));
+      x0 = Math.min(x0, q.x - ex); x1 = Math.max(x1, q.x + ex); y0 = Math.min(y0, q.y - ey); y1 = Math.max(y1, q.y + ey);
+    }
+    if (x1 < x0) return;
+    const pad = +o.fitPad || 0;
+    o.x = (x0 + x1) / 2; o.y = (y0 + y1) / 2; o.w = x1 - x0 + pad * 2; o.h = y1 - y0 + pad * 2;
+  } finally { fitting.delete(L); }
+}
+// Follow layer: the camera looks where that layer is, at every frame, with no lag, so a move filmed this way never
+// drifts off the subject. Follow % mixes from the camera's own X and Y (0) to the layer's (100): key it to ease
+// into a follow and out of it.
+function followLayer(L, t, o) {
+  const T = layerRef(o.follow); if (!T || T === L || T.type === 'camera' || fitting.has(L)) return;
+  fitting.add(L);
+  try { const q = state(T, t), m = Math.max(0, Math.min(100, o.followMix ?? 100)) / 100;
+    o.x += (q.x - o.x) * m; o.y += (q.y - o.y) * m; } finally { fitting.delete(L); }
+}
+// Beat times: with the project's tempo set (S.bpm, S.downbeat the time of the first beat, S.beatsPerBar), "bar:beat"
+// (both from 1, the beat may be a fraction: "3:2.5") is a time in seconds. Numbers pass through.
+function beatTime(v) {
+  if (typeof v === 'number') return v;
+  const s = String(v).trim(), m = s.match(/^(\d+):(\d+(?:\.\d+)?)$/);
+  if (!m) { const n = parseFloat(s); if (isNaN(n)) throw new Error(`"${s}" is not a time: use seconds or "bar:beat"`); return n; }
+  if (!(S.bpm > 0)) throw new Error(`"${s}" is a bar and beat: set the tempo first (set_composition bpm)`);
+  return (S.downbeat || 0) + ((+m[1] - 1) * (S.beatsPerBar || 4) + (+m[2] - 1)) * 60 / S.bpm;
+}
+// Changing words: a text layer's Text stays and its Words (split by |) take turns after it, changing at each time
+// in Change at (seconds or bar:beat, comma separated), or at First change and then every Then every seconds. On
+// each change the line re-centres on its new width over Change takes, the old word lifting away as the new one
+// rises in, every width measured in the font itself, with one space between the two.
+function wordLine(c, o, t) {
+  const words = String(o.words).split('|').map(w => caseText({ ...o, text: w.trim() })), n = words.length;
+  let at = [];
+  if (String(o.wordTimes || '').trim()) for (const x of String(o.wordTimes).split(',')) { try { at.push(beatTime(x)); } catch (e) { } }
+  else { const every = Math.max(.05, +o.wordEvery || .5); for (let i = 1; i < n; i++) at.push((+o.wordStart || 0) + (i - 1) * every); }
+  at = at.slice(0, n - 1).sort((a, b) => a - b);
+  let i = 0; while (i < at.length && t >= at[i]) i++;
+  const p = i ? Math.max(0, Math.min(1, (t - at[i - 1]) / Math.max(.001, +o.wordMove || .25))) : 1, e = 1 - Math.pow(1 - p, 4);
+  const lead = caseText(o).split('\n')[0], wl = lead ? c.measureText(lead).width : 0, sp = lead ? c.measureText(' ').width + (+o.spacing || 0) : 0;
+  const ww = words.map(w => c.measureText(w).width), wn = ww[i], wo = i ? ww[i - 1] : wn;
+  const W = wl + sp + wo + (wn - wo) * e, full = wl + sp + Math.max(...ww);
+  return { lead, words, i, e, wl, sp, W, full };
+}
 Physics.init({ keyState, bounds });
 // a blob's outline: 72 points round it, a soft polygon pushed in and out by a few slow waves whose phases the
 // seed picks and morph turns, fitted back into w × h. Morph 0 to 100 is one full change of shape and back to new.
@@ -572,7 +637,18 @@ function drawContent(c, L, o, t) {
   if (L.type === 'path') return drawPath(c, o);
   if (L.type === 'speedlines') return drawSpeedLines(c, o, t);
   if (L.type === 'through') return drawThrough(c, o, t);
-  if (L.type === 'text') {
+  if (L.type === 'text' && o.words) {
+    setFont(c, o); c.textAlign = 'left'; c.textBaseline = 'middle';
+    const q = wordLine(c, o, t), lh = lineH(o), base = c.globalAlpha;
+    const x0 = o.align === 'left' ? -q.full / 2 : o.align === 'right' ? q.full / 2 - q.W : -q.W / 2, xw = x0 + q.wl + q.sp;
+    const ink = (s, x, y) => { if (o.strokeWidth > 0) c.strokeText(s, x, y); c.fillText(s, x, y); };
+    if (q.lead) { c.fillStyle = fillOf(c, o, q.W, lh); ink(q.lead, x0, 0); }
+    // the words slide through a window the height of the line, so the old one is gone before the new one is read
+    c.fillStyle = o.wordFill || o.fill; const rise = lh * .9;
+    c.save(); if (q.e < 1) { c.beginPath(); c.rect(xw - o.size, -lh / 2, q.W + o.size * 2, lh); c.clip(); }
+    if (q.e < 1 && q.i) { c.globalAlpha = base * (1 - q.e); ink(q.words[q.i - 1], xw, -rise * q.e); }
+    c.globalAlpha = base * (q.i ? Math.min(1, q.e * 1.5) : 1); ink(q.words[q.i], xw, rise * (1 - q.e)); c.restore(); c.globalAlpha = base;
+  } else if (L.type === 'text') {
     setFont(c, o); c.textAlign = 'left'; c.textBaseline = 'middle';
     const full = caseText(o).split('\n'), shown = textOf(o).split('\n'), lh = lineH(o), y0 = -(full.length - 1) * lh / 2;
     const widest = Math.max(10, ...full.map(s => c.measureText(s).width));
@@ -788,6 +864,7 @@ function placeholder3d(c, L, o) {
 function bounds(L, t) {
   const o = state(L, t);
   if (L.type === 'camera') return { o, w: 0, h: 0 };
+  if (L.type === 'text' && o.words) { setFont(ctx, o); return { o, w: Math.max(10, wordLine(ctx, o, t).W), h: lineH(o) }; }
   if (L.type === 'text') { setFont(ctx, o); const ls = caseText(o).split('\n');
     return { o, w: Math.max(10, ...ls.map(s => ctx.measureText(s).width)), h: lineH(o) * ls.length }; }
   const lined = L.type === 'arc' || L.type === 'wave' || L.type === 'path';
@@ -1568,6 +1645,9 @@ function renderProps() {
         if (k === 'vigSize' && !(o.vig > 0) && !L.keys.vig?.length) continue;
         if (k === 'curves') { h += curvesHTML(L); continue; }
         if (k === 'mpts' || k === 'objects') continue;
+        if (['wordTimes', 'wordStart', 'wordEvery', 'wordMove', 'wordFill'].includes(k) && !o.words) continue;
+        if ((k === 'wordStart' || k === 'wordEvery') && String(o.wordTimes || '').trim()) continue;
+        if ((k === 'fitPad' && !o.fit) || (k === 'followMix' && !o.follow)) continue;
         if (L.type === 'world' && World.FIELDS.includes(k) && !World.shows(k, o, !!L.keys[k]?.length)) continue;
         const anim = ANIM.includes(k), here = L.keys[k]?.some(x => near(x.t, time)), keyed = L.keys[k]?.length,
           v = Physics.SCENE.includes(k) ? S[k] ?? SCENE_DEFAULTS[k] : o[k];
@@ -1576,9 +1656,9 @@ function renderProps() {
         let field;
         if (k === 'grad') field = `<button class="selectbtn" data-menu="grad"><span>${(GRADS.find(g => g[0] === (v || 'none')) || GRADS[0])[1]}</span>${ICON.chev}</button>`;
         else if (COLORS.includes(k)) { const linked = !L.keys[k]?.length && varName(L.p[k]);
-          field = `<button class="swatch${linked ? ' linked' : ''}" data-color="${k}"><i style="background:${v}"></i><span>${linked ? '--' + linked : v.toUpperCase()}</span></button>`; }
+          const cv = v || o.fill; field = `<button class="swatch${linked ? ' linked' : ''}" data-color="${k}"><i style="background:${cv}"></i><span>${linked ? '--' + linked : cv.toUpperCase()}</span></button>`; }
         else if (k === 'text' || k === 'retype' || k === 'pathd') field = `<textarea data-p="${k}" rows="2" spellcheck="false"${k === 'pathd' ? ' class="mono"' : ''}>${esc(v)}</textarea>`;
-        else if (k === 'vb') field = `<input type="text" data-p="vb" value="${esc(v)}" spellcheck="false">`;
+        else if (TEXT_P.includes(k)) field = `<input type="text" data-p="${k}" value="${esc(v ?? '')}" spellcheck="false"${k === 'words' ? ' placeholder="make it | ask Flash | ship it"' : k === 'wordTimes' ? ' placeholder="1.25, 1.75 or 2:1, 2:3"' : k === 'fit' || k === 'follow' ? ' placeholder="a layer\'s name"' : ''}>`;
         else if (k === 'pfill') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="pfill"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
         else if (k === 'weight') field = `<button class="selectbtn" data-menu="weight"><span>${WEIGHTS.find(w => w[0] == v)?.[1] || v}</span>${ICON.chev}</button>`;
         else if (k === 'font') field = `<button class="selectbtn" data-menu="font"><span style="font-family:${esc(Fonts.stack(v))}">${esc(v || 'Inter')}</span>${ICON.chev}</button>`;
@@ -1742,8 +1822,8 @@ function maskDrag(d, px, py) {
 function renderPropsValues() {
   const L = cur(); if (!L || tab !== 'props') return; const o = state(L, time);
   document.querySelectorAll('#props [data-p]').forEach(i => { const k = i.dataset.p;
-    if (i !== document.activeElement && k !== 'text') i.value = fmt(Physics.SCENE.includes(k) ? S[k] ?? SCENE_DEFAULTS[k] : o[k]); });
-  document.querySelectorAll('#props [data-color]').forEach(b => { const k = b.dataset.color, v = o[k], linked = !L.keys[k]?.length && varName(L.p[k]);
+    if (i !== document.activeElement && k !== 'text' && !TEXT_P.includes(k)) i.value = fmt(Physics.SCENE.includes(k) ? S[k] ?? SCENE_DEFAULTS[k] : o[k]); });
+  document.querySelectorAll('#props [data-color]').forEach(b => { const k = b.dataset.color, v = o[k] || o.fill, linked = !L.keys[k]?.length && varName(L.p[k]);
     b.classList.toggle('linked', !!linked); b.querySelector('i').style.background = v; b.querySelector('span').textContent = linked ? '--' + linked : v.toUpperCase(); });
   document.querySelectorAll('#props [data-key]').forEach(b => { const k = b.dataset.key, here = L.keys[k]?.some(x => near(x.t, time));
     b.classList.toggle('here', !!here); b.innerHTML = here ? ICON.key : ICON.keyOff; });
@@ -1758,7 +1838,7 @@ Pn.addEventListener('input', e => {
     render(); renderTracks(); return; }
   const k = e.target.dataset.p; if (!k) return;
   if (Physics.SCENE.includes(k)) { const v = parseFloat(e.target.value); if (isNaN(v)) return; S[k] = v; render(); return; }
-  if (k === 'text' || k === 'retype' || k === 'pathd' || k === 'vb') setProp(L, k, e.target.value);
+  if (k === 'text' || k === 'retype' || k === 'pathd' || TEXT_P.includes(k)) setProp(L, k, e.target.value);
   else { const v = parseFloat(e.target.value); if (isNaN(v)) return;
     if ((k === 'w' || k === 'h') && aspectLocked(L)) { const o = state(L, time), other = k === 'w' ? 'h' : 'w';
       if (o.w > 0 && o.h > 0 && v > 0) { setProp(L, other, Math.max(1, Math.round(v * o[other] / o[k]))); renderPropsValues(); } }
@@ -1767,7 +1847,7 @@ Pn.addEventListener('input', e => {
 });
 Pn.addEventListener('change', () => refresh());
 Pn.addEventListener('keydown', e => {
-  const i = e.target; if (!i.dataset?.p || i.dataset.p === 'text') return;
+  const i = e.target; if (!i.dataset?.p || i.dataset.p === 'text' || TEXT_P.includes(i.dataset.p)) return;
   if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault();
     const s = (STEP[i.dataset.p] || 1) * (e.shiftKey ? 10 : 1) * (e.key === 'ArrowUp' ? 1 : -1);
     i.value = fmt((parseFloat(i.value) || 0) + s); i.dispatchEvent(new Event('input', { bubbles: true })); }
@@ -4333,6 +4413,7 @@ const LIVE = (() => {
   };
   const summary = () => ({
     name: projectName, mode: S.mode || 'video', canvas: { width: S.w, height: S.h, background: S.bg }, duration: S.dur, fps: FPS,
+    tempo: S.bpm > 0 ? { bpm: S.bpm, downbeat: S.downbeat || 0, beats_per_bar: S.beatsPerBar || 4 } : null,
     playhead: round(time), selected: sel, markers: (S.markers || []).map(m => ({ t: round(m.t), label: m.label || '' })),
     audio_tracks: tracks().map(T => ({ id: T.id, name: T.name, volume: T.volume ?? 1, muted: !!T.muted,
       clips: T.clips.map(c => ({ id: c.id, file: S.sounds?.[c.sound]?.name, start: round(c.start), end: round(c.start + c.len), source_start: round(c.in), fade_in: round(c.fadeIn || 0), fade_out: round(c.fadeOut || 0) })) })),
@@ -4349,6 +4430,18 @@ const LIVE = (() => {
   const ops = {
     get_project: () => summary(),
     get_layer: a => layerInfo(findL(a), true),
+    // widths in the real font, once it has loaded: for laying out text before it is drawn
+    measure_text: async a => {
+      const o = { font: a.font || 'Inter', weight: +a.weight || 400, italic: !!a.italic, size: +a.size || 120, spacing: +a.spacing || 0 };
+      await Fonts.ready([{ type: 'text', p: o }]);
+      const loaded = document.fonts.check(Fonts.css(o)), c = document.createElement('canvas').getContext('2d'); setFont(c, o);
+      const one = s => { const m = c.measureText(s); return { text: s, width: round(m.width), ink_left: round(-m.actualBoundingBoxLeft), ink_right: round(m.actualBoundingBoxRight),
+        ascent: round(m.actualBoundingBoxAscent), descent: round(m.actualBoundingBoxDescent) }; };
+      const texts = Array.isArray(a.texts) ? a.texts.map(String) : [String(a.text ?? '')];
+      return { ok: true, loaded, font: o.font, space: round(c.measureText(' ').width), line_height: round(o.size * 1.1), results: texts.map(one) };
+    },
+    // a time in seconds from "bar:beat" with the project's tempo
+    beat_time: a => ({ ok: true, times: [].concat(a.times ?? a.time).map(x => round(beatTime(x))) }),
     list_capabilities: () => ({
       layer_types: Object.fromEntries(Object.entries(PROPS).filter(([t]) => !['image', 'video', 'model', 'group'].includes(t)).map(([t, ps]) => [t, ps])),
       shapes_3d: R3D.SHAPES.map(s => s[0]), materials_3d: R3D.MATERIALS.map(m => m[0]),
@@ -4358,11 +4451,11 @@ const LIVE = (() => {
       easings: EASE_ITEMS.map(i => i.value), presets: Object.fromEntries(Object.entries(PRESETS).map(([g, it]) => [g, Object.keys(it)])),
       blend_modes: BLENDS.map(b => b[0] === 'source-over' ? 'normal' : b[0]), looks: Object.keys(LOOKS),
     }),
-    render_frame: async a => { const t = Math.max(0, Math.min(S.dur, +(a.time ?? time))); await Reactive.ready(); await seekVideos(t);
+    render_frame: async a => { const t = Math.max(0, Math.min(S.dur, beatTime(a.time ?? time))); await Reactive.ready(); await seekVideos(t);
       return { ok: true, time: t, png: frameURL(t, +a.width || 540) }; },
     render_frames: async a => {   // contact sheet of several moments, so an agent can see motion in one image
       await Reactive.ready();
-      const n = Math.max(2, Math.min(16, +a.count || 8)), ts = a.times?.length ? a.times.map(Number) : Array.from({ length: n }, (_, i) => i * S.dur / (n - 1) * .999);
+      const n = Math.max(2, Math.min(16, +a.count || 8)), ts = a.times?.length ? a.times.map(beatTime) : Array.from({ length: n }, (_, i) => i * S.dur / (n - 1) * .999);
       const cols = Math.min(4, ts.length), rows = Math.ceil(ts.length / cols), cw = Math.min(360, +a.width || 300), chh = Math.round(cw * S.h / S.w);
       const sh = document.createElement('canvas'); sh.width = cols * (cw + 6) - 6; sh.height = rows * (chh + 24) - 6; const g = sh.getContext('2d');
       g.fillStyle = '#111'; g.fillRect(0, 0, sh.width, sh.height);
@@ -4380,7 +4473,7 @@ const LIVE = (() => {
       const N = NEW_LAYER[a.type], { name: _, ...base } = (typeof N === 'function' ? N() : N) || {};
       const L = makeLayer(a.type, { ...base, ...props }, a.name || _);
       for (const [p, v] of Object.entries(scene)) S[p] = p === 'walls' ? String(v) : +v;
-      if (a.in != null) L.in = +a.in; if (a.out != null) L.out = +a.out;
+      if (a.in != null) L.in = beatTime(a.in); if (a.out != null) L.out = beatTime(a.out);
       sel = L.id; return done(`added ${L.type} "${L.name}"`, { id: L.id });
     },
     add_world: a => {
@@ -4441,7 +4534,7 @@ const LIVE = (() => {
       return done(`added the Flash file "${L.name}" as a video`, { id: L.id, dur: S.assets[got.id].dur });
     },
     update_layer: a => {
-      const L = findL(a), t = a.time != null ? +a.time : time, props = a.props || {};
+      const L = findL(a), t = a.time != null ? beatTime(a.time) : time, props = a.props || {};
       for (const [p, v] of Object.entries(props)) {
         checkProp(L, p);
         if (fixed(L, p)) throw new Error(`"${L.name}" has its ${FIX_NAME[FIX_OF[p]].toLowerCase()} locked: unlock it first (lock_${FIX_OF[p] === 'pos' ? 'position' : FIX_OF[p] === 'w' ? 'width' : 'height'}: false)`);
@@ -4451,8 +4544,8 @@ const LIVE = (() => {
         if (a.keyframe || L.keys[p]?.length) setKey(L, p, t, v, easeOK(a.ease) || 'easeInOut'); else L.p[p] = keyValue(p, v);
       }
       if (a.name) L.name = String(a.name);
-      if (a.in !== undefined) L.in = a.in == null ? undefined : +a.in;
-      if (a.out !== undefined) L.out = a.out == null ? undefined : +a.out;
+      if (a.in !== undefined) L.in = a.in == null ? undefined : beatTime(a.in);
+      if (a.out !== undefined) L.out = a.out == null ? undefined : beatTime(a.out);
       if (a.hidden != null) L.hidden = !!a.hidden; if (a.locked != null) L.locked = !!a.locked;
       for (const [arg, which] of [['lock_position', 'pos'], ['lock_width', 'w'], ['lock_height', 'h']])
         if (a[arg] != null && !!a[arg] !== !!L.fix?.[which]) { L.fix = { ...L.fix, [which]: !!a[arg] }; if (!Object.values(L.fix).some(Boolean)) delete L.fix; }
@@ -4463,7 +4556,7 @@ const LIVE = (() => {
       const L = findL(a); checkProp(L, a.prop); if (!ANIM.includes(a.prop)) throw new Error(`"${a.prop}" cannot be animated`);
       if (fixed(L, a.prop)) throw new Error(`"${L.name}" has its ${FIX_NAME[FIX_OF[a.prop]].toLowerCase()} locked: unlock it first`);
       if (a.replace) delete L.keys[a.prop];
-      for (const k of a.keys || []) setKey(L, a.prop, Math.max(0, +k.t), k.v, easeOK(k.ease) || 'easeInOut');
+      for (const k of a.keys || []) setKey(L, a.prop, Math.max(0, beatTime(k.t)), k.v, easeOK(k.ease) || 'easeInOut');
       return done(`set ${(a.keys || []).length} keyframes on ${L.name}.${a.prop}`);
     },
     follow_music: async a => {
@@ -4496,9 +4589,11 @@ const LIVE = (() => {
     set_composition: a => {
       if (a.width || a.height) resizeComp(+a.width || S.w, +a.height || S.h, a.scale_content === false ? 'keep' : 'fit');
       if (a.background) S.bg = String(a.background); if (a.name) projectName = String(a.name);
-      if (a.duration) setDuration(+a.duration); return done('updated the composition');
+      if (a.bpm != null) { if (+a.bpm > 0) S.bpm = +a.bpm; else delete S.bpm; }
+      if (a.downbeat != null) S.downbeat = +a.downbeat; if (a.beats_per_bar != null) S.beatsPerBar = Math.max(1, Math.round(+a.beats_per_bar));
+      if (a.duration) setDuration(beatTime(a.duration)); return done('updated the composition' + (S.bpm ? `: ${S.bpm} bpm, first beat at ${S.downbeat || 0}s` : ''));
     },
-    set_playhead: a => { seek(+a.time || 0); return { ok: true, time }; },
+    set_playhead: a => { seek(beatTime(a.time || 0)); return { ok: true, time }; },
     select_layers: a => { setSelection((a.layers || []).map(x => findL({ id: x }).id)); refresh(true, false); return done(`selected ${selLayers().length} layer(s)`); },
     align_layers: a => {
       if (a.layers) setSelection(a.layers.map(x => findL({ id: x }).id));
@@ -4515,12 +4610,12 @@ const LIVE = (() => {
     find_beats: async () => { await findBeats(); return { ok: true, beats: beatMarks().map(m => m.t) }; },
     beat_hit: a => { if (!HITS[a.hit] && a.hit !== 'Flash') throw new Error(`unknown hit. Use one of: ${[...Object.keys(HITS), 'Flash'].join(', ')}`);
       if (a.hit !== 'Flash') sel = findL(a).id; hitBeats(a.hit); return { ok: true }; },
-    add_marker: a => { addMarker(+a.time); const m = S.markers.find(x => near(x.t, frame(+a.time))); if (m && a.label) m.label = String(a.label); refresh(); return { ok: true }; },
+    add_marker: a => { const at = beatTime(a.time); addMarker(at); const m = S.markers.find(x => near(x.t, frame(at))); if (m && a.label) m.label = String(a.label); refresh(); return { ok: true }; },
     // audio: tracks of clips. Clip and track ids come from get_project; a track can also be named or given as a 1-based number.
     add_audio: async a => {
       if (!a.src) throw new Error('pass an audio file');
       const T = a.track != null ? findTrack(a.track) : null;
-      const c = await addSound(String(a.name || 'audio'), a.src, a.start != null ? +a.start : 0, T?.id);
+      const c = await addSound(String(a.name || 'audio'), a.src, a.start != null ? beatTime(a.start) : 0, T?.id);
       if (!c) throw new Error('could not decode that audio file');
       if (a.fade_in != null || a.fade_out != null) { c.fadeIn = +a.fade_in || 0; c.fadeOut = +a.fade_out || 0; clampFades(c); syncAudio(); }
       const [TT] = findClip(c.id);

@@ -4482,7 +4482,14 @@ const LIVE = (() => {
       if (!World.available) throw new Error('3D is not available in this window');
       const t = Math.max(0, Math.min(S.dur, beatTime(a.time ?? 0)));
       await R3D.ready();
+      // every prop with an id, so the engine can tell which is which; and people and models loaded, not stand-ins
+      if (Array.isArray(L.p.objects)) World.ensureIds(L.p.objects);
+      World.stage(L, state(L, t), t);
+      for (let i = 0; i < 300 && World.pending > 0; i++) await new Promise(r => setTimeout(r, 100));
       const o = state(L, t), { B, cam, ground } = World.stage(L, o, t);
+      const byId = new Map(); (function walk(xs) { for (const P of Array.isArray(xs) ? xs : []) { if (P?.id) byId.set(P.id, P); walk(P?.children); } })(o.objects);
+      B.props?.traverse(n => { const P = n.isGroup && byId.get(n.userData.partId);
+        if (P) { n.name = P.name || P.type; n.userData.kiln = { id: P.id, type: P.type, name: P.name || P.type, move: P.move, body: P.body, count: P.count, size: P.size, say: P.say }; } });
       const M = World.M, eye = +o.eye || 1.7, T = window.RiptideThree;
       // what is only for the editor (camera guides, light beams, dust drawn as points, shader-drawn sky and sea) stays
       // out; the engine makes its own sky, water and air from the settings

@@ -82,8 +82,10 @@ Elsewhere Riptide is a desktop app too: each of these opens it in a window of it
 starts its server if it is not running. Nothing to set up: the window is Chrome, Edge, Brave or Chromium in app mode with a profile
 of its own, so it sits in the dock or taskbar as Riptide and remembers its size; on a computer with none of those it is
 a native window when pywebview is installed, else a browser tab. `riptide --tab` (or `RIPTIDE_OPEN=tab`) opens a tab
-instead, and from a tab, the browser's Install app button makes it an app too. `riptide --stop` stops the server. Run the installer again to update, and `--uninstall` (`-Uninstall`) takes
-Riptide back out. ffmpeg is still yours to install, for video export.
+instead, and from a tab, the browser's Install app button makes it an app too. `riptide --stop` stops the server. Run the installer again to update. To take
+Riptide back out, run `riptide --uninstall` (or the installer with `--uninstall`, `-Uninstall` on Windows): it stops the
+server and removes the app, the command, the shortcut, the riptide:// links and its settings. Your .rip projects stay
+where you saved them. ffmpeg is still yours to install, for video export.
 
 ### The dev version
 

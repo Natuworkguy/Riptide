@@ -31,7 +31,7 @@ uninstall() {
     rm -f "$LAUNCHER" "$DESKTOP"
     rm -rf "$HOME/Applications/Riptide.app"
     command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$DATA/applications" >/dev/null 2>&1 || true
-    rm -rf "$HOME_DIR"
+    rm -rf "$HOME_DIR" "${XDG_STATE_HOME:-$HOME/.local/state}/riptide"
     say "Riptide is uninstalled. Your projects (.rip files) are where you saved them, untouched."
 }
 

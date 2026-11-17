@@ -11,6 +11,7 @@ is closed, so it opens again at once; it writes to a log beside the install.
     riptide --serve          start the server only, opening no window
     riptide riptide://open   the same as riptide, as a link hands it over
     riptide --stop           stop the server started in the background
+    riptide --uninstall      take Riptide off this machine (your .rip projects stay where you saved them)
 """
 
 import os
@@ -168,10 +169,33 @@ def fail(message: str) -> int:
     return 1
 
 
+def uninstall() -> int:
+    """Run the installer's own uninstall, from the copy installed beside this file."""
+
+    if os.name == "nt":
+        script = APP / "install.ps1"
+        if not script.exists():
+            return fail(f"Riptide runs from {APP}, not an install. Delete that folder to remove it.")
+        stop()
+        # It deletes the Python running this, so it runs on its own once this has exited.
+        subprocess.Popen(  # nosec B603 B607 -- the installer that came with Riptide
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+             f"Start-Sleep 2; & '{script}' -Uninstall"],
+            creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0), close_fds=True)
+        print("Riptide is being uninstalled in a new window.")
+        return 0
+    script = APP / "install.sh"
+    if not script.exists() or (APP / ".." / "venv").resolve() != Path(sys.prefix).resolve():
+        return fail(f"Riptide runs from {APP}, not an install. Delete that folder to remove it.")
+    return subprocess.call(["bash", str(script), "--uninstall"])  # nosec B603 B607
+
+
 def main(argv: list[str]) -> int:
     args = [a for a in argv if a]
     if args[:1] == ["--stop"]:
         return stop()
+    if args[:1] == ["--uninstall"]:
+        return uninstall()
     tab = "--tab" in args or os.environ.get("RIPTIDE_OPEN", "").lower() == "tab"
     # the server alone, no window: for an editor shown somewhere else (Flash docks it beside a chat)
     serve_only = "--serve" in args

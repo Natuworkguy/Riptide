@@ -4484,10 +4484,10 @@ const LIVE = (() => {
       easings: EASE_ITEMS.map(i => i.value), presets: Object.fromEntries(Object.entries(PRESETS).map(([g, it]) => [g, Object.keys(it)])),
       blend_modes: BLENDS.map(b => b[0] === 'source-over' ? 'normal' : b[0]), looks: Object.keys(LOOKS),
     }),
-    render_frame: async a => { const t = Math.max(0, Math.min(S.dur, beatTime(a.time ?? time))); await Reactive.ready(); await seekVideos(t);
+    render_frame: async a => { const t = Math.max(0, Math.min(S.dur, beatTime(a.time ?? time))); await Reactive.ready(); await Fonts.ready(S.layers); await seekVideos(t);
       return { ok: true, time: t, png: frameURL(t, +a.width || 540) }; },
     render_frames: async a => {   // contact sheet of several moments, so an agent can see motion in one image
-      await Reactive.ready();
+      await Reactive.ready(); await Fonts.ready(S.layers);
       const n = Math.max(2, Math.min(16, +a.count || 8)), ts = a.times?.length ? a.times.map(beatTime) : Array.from({ length: n }, (_, i) => i * S.dur / (n - 1) * .999);
       const cols = Math.min(4, ts.length), rows = Math.ceil(ts.length / cols), cw = Math.min(360, +a.width || 300), chh = Math.round(cw * S.h / S.w);
       const sh = document.createElement('canvas'); sh.width = cols * (cw + 6) - 6; sh.height = rows * (chh + 24) - 6; const g = sh.getContext('2d');

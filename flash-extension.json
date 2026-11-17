@@ -83,7 +83,7 @@
     },
     {
       "name": "riptide_export_scene",
-      "description": "Export the 3D world in a project open in Riptide as one file a game engine opens: a .glb of its land, props, people and 3D layers (metres, y up, the ground at 0) with the world's sky, sun, fog, ground and water settings, the camera, and every prop by name inside it. Build the world with riptide_world first. Kiln's kiln_make_game turns the file into a playable game.",
+      "description": "Export the 3D world in a project open in Riptide as one scene file: a .glb of its land, props, people and 3D layers (metres, y up, the ground at 0) with the world's sky, sun, fog, ground and water settings, the camera, and every prop by name inside it. Build the world with riptide_world first.",
       "parameters": {
         "type": "object",
         "properties": {

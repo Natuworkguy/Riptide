@@ -559,7 +559,7 @@ def world(scene: str = "", name: str = "", props=None, window: str = "") -> str:
 
 
 def export_scene(path: str = "", window: str = "", at_time=0) -> str:
-    """Write the 3D world in the project open in Riptide as one file a game engine opens (a .glb with the world's
+    """Write the 3D world in the project open in Riptide as one scene file (a .glb with the world's
     settings inside it): to PATH, or a new file in ~/.flash/riptide-scenes. What happened, in a line."""
 
     window = target(window)
@@ -577,7 +577,7 @@ def export_scene(path: str = "", window: str = "", at_time=0) -> str:
     dest.write_bytes(base64.b64decode(out["glb"]))
     props = ", ".join(sorted({o.get("name") or o.get("type") for o in scene.get("objects", [])})) or "none"
     return (f"Exported the 3D world as one file: {dest} ({out.get('bytes', 0) // 1024} KB){where(answer)}. "
-            f"Its props: {props}. Kiln imports this file.")
+            f"Its props: {props}.")
 
 
 def open_windows() -> list:

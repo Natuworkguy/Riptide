@@ -4342,7 +4342,7 @@ function layerItems(L) {
       { label: 'Hold this frame (2s)', act: () => holdFrame(L) }] },
       { label: L.p.mute ? 'Unmute clip sound' : 'Mute clip sound', act: () => { L.p.mute = !L.p.mute; refresh(); } }] : []),
     ...(L.type === 'shape3d' || L.type === 'model' ? [{ label: 'Export as 3D model…', icon: ICON.model, act: () => exportModelFile(L) }] : []),
-    ...(L.type === 'world' ? [{ label: 'Export world for a game…', icon: ICON.model, act: () => exportWorldFile(L) }] : []),
+    ...(L.type === 'world' ? [{ label: 'Export Scene…', icon: ICON.model, act: () => exportWorldFile(L) }] : []),
     { label: 'Split at playhead', icon: ICON.blade, kbd: '⌘K', disabled: !(time > lin(L) && time < lout(L)), act: splitLayer },
     { label: 'Start here', kbd: '[', act: () => { L.in = Math.min(time, lout(L) - 1 / FPS); refresh(); } },
     { label: 'End here', kbd: ']', act: () => { L.out = Math.max(time, lin(L) + 1 / FPS); refresh(); } },
@@ -4424,10 +4424,10 @@ addEventListener('contextmenu', e => {
   if (t.closest('#app')) e.preventDefault();               // no browser menu over the editor chrome
 });
 
-// ---------- a 3D world as one file for a game engine ----------
+// ---------- Export Scene: a 3D world as one file ----------
 // A world's land, props, people and the 3D layers in it as one glTF binary (metres, y up, the ground at 0), with what
-// an engine needs to light and dress it the same way inside it, in the root's extras as riptideScene: the world's
-// settings (sky, sun, fog, ground, water), the camera, and every prop by id, type, name and place. Kiln opens it.
+// another program needs to light and dress it the same way inside it, in the root's extras as riptideScene: the
+// world's settings (sky, sun, fog, ground, water), the camera, and every prop by id, type, name and place.
 async function exportWorld(L, t) {
   if (!L || L.type !== 'world') throw new Error('there is no 3D world to export: add_world first');
   if (!World.available) throw new Error('3D is not available in this window');
@@ -4440,7 +4440,7 @@ async function exportWorld(L, t) {
   const o = state(L, t), { B, cam, ground } = World.stage(L, o, t);
   const byId = new Map(); (function walk(xs) { for (const P of Array.isArray(xs) ? xs : []) { if (P?.id) byId.set(P.id, P); walk(P?.children); } })(o.objects);
   B.props?.traverse(n => { const P = n.isGroup && byId.get(n.userData.partId);
-    if (P) { n.name = P.name || P.type; n.userData.kiln = { id: P.id, type: P.type, name: P.name || P.type, move: P.move, body: P.body, count: P.count, size: P.size, say: P.say }; } });
+    if (P) { n.name = P.name || P.type; n.userData.prop = { id: P.id, type: P.type, name: P.name || P.type, move: P.move, body: P.body, count: P.count, size: P.size, say: P.say }; } });
   const M = World.M, eye = +o.eye || 1.7, T = window.RiptideThree;
   const pos = cam.position.clone().divideScalar(M); pos.y += eye;
   const dir = new T.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
@@ -4466,7 +4466,7 @@ async function exportWorldFile(L) {
   status('Exporting the world…');
   try { const { glb } = await exportWorld(L, time);
     const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([glb], { type: 'model/gltf-binary' })), download: `${(L.name || 'world').replace(/[\\/:*?"<>|]+/g, '-')}.glb` });
-    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); status('Exported the world as one file: open it in Kiln'); }
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); status('Exported the scene as one file'); }
   catch (e) { status('Could not export the world: ' + e.message); }
 }
 
@@ -4520,9 +4520,8 @@ const LIVE = (() => {
       const texts = Array.isArray(a.texts) ? a.texts.map(String) : [String(a.text ?? '')];
       return { ok: true, loaded, font: o.font, space: round(c.measureText(' ').width), line_height: round(o.size * 1.1), results: texts.map(one) };
     },
-    // A 3D world as a scene a game engine can open: its land, props, people and the 3D layers in it as one glTF
-    // (metres, y up, the ground at 0), and what the engine needs to light and dress it the same way (the world's
-    // settings: sky, sun, fog, ground, water) with the camera and the props listed, for a game to hang its rules on.
+    // Export Scene: a 3D world's land, props, people and the 3D layers in it as one glTF (metres, y up, the ground
+    // at 0), with its settings (sky, sun, fog, ground, water), the camera and the props listed inside it.
     export_scene: async a => {
       const L = a.id != null ? findL(a) : S.layers.find(l => l.type === 'world');
       const out = await exportWorld(L, Math.max(0, Math.min(S.dur, beatTime(a.time ?? 0))));

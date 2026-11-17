@@ -371,7 +371,8 @@ async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "
     "pants", "shoes", "belt"), "outer" false to hide the skin's outer layer. Its "move" is also "run" | "talk" (hands
     going with the words, the head nodding) | "salute" | "attack" (swinging what it holds). "hold" (right hand) and
     "holdLeft": "sword" | "pickaxe" | "axe" | "shovel" | "torch", made of "holdMat"/"holdLeftMat" "wood" | "stone" | "iron" |
-    "gold" | "diamond" | "netherite". "hat" "cap" | "beanie" | "helmet" | "tophat" with "hatColor".
+    "gold" | "diamond" | "netherite". "hat" "cap" | "beanie" | "helmet" | "tophat" with "hatColor". "glowEyes" true lights
+    its eyes ("glowColor", "glowPower").
     A "structure" (a block build) takes "build" "demo:cottage" | "demo:jungle" or an imported build's asset id, and
     "actions": [{"t": seconds, "at": [x, y, z] (the block in the build), "do": "open" | "close" (doors, trapdoors, fence
     gates, chests) | "on" | "off" (levers, redstone lamps) | "press" (buttons, pressure plates: they spring back after a
@@ -387,7 +388,12 @@ async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "
     degrees up, "steps", "depth", "rib" m, "color", "ambient" % light in the shade, "ambientColor"); a "sunbeam" is the
     sun through one opening, shining along its own +z ("size" [disc width m, 1, 1], "reach", "soft", "power", "color").
     An "fx" is particles: "kind" "smoke" | "fire" | "explosion" | "sparks" | "dust" | "steam" | "tendril" (a tall
-    twisting column of sparkles), "amount", "scale".
+    twisting column of sparkles) | "lightning" (a jagged bolt with forks from "reach" m up, flickering for "length"
+    seconds) | "blast" (blocks of "debris" colour thrown out tumbling, and a scorched crater of "color"), "amount",
+    "scale". Explosion, lightning and blast go off at "start" seconds; explosion, fire, sparks and lightning take a
+    "color" of their own (e.g. "#b45cff" for a purple blast). A block named "purple_tnt" (or blue_tnt, green_tnt) is
+    TNT in that colour. For a block short of this kind: a blocky with glowing eyes, a lightning strike, an explosion and
+    a blast at the same spot and start, and word-by-word captions with a text layer's "words".
     A "liquid" is water, mud or lava, simulated over the 50 m of ground round it (any ground but the ocean): it runs
     downhill, pools, goes round props, soaks in leaving the ground dark and wet, and on sand and soil carves channels
     and leaves ripple marks. "kind" "water" | "mud" | "lava" (glows, crusts, sets to rock), "from" "pour" (a stream

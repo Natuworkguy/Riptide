@@ -56,7 +56,8 @@ const FX = (() => {
   });
 
   // ----- effects: particles from a place, each from its own birth time -----
-  const KINDS = [['smoke', 'Smoke'], ['fire', 'Fire'], ['explosion', 'Explosion'], ['sparks', 'Sparks'], ['dust', 'Dust from the ground'], ['steam', 'Steam'], ['tendril', 'Tendril (a twisting column of sparkles)']];
+  const KINDS = [['smoke', 'Smoke'], ['fire', 'Fire'], ['explosion', 'Explosion'], ['sparks', 'Sparks'], ['dust', 'Dust from the ground'], ['steam', 'Steam'], ['tendril', 'Tendril (a twisting column of sparkles)'],
+    ['lightning', 'Lightning (a strike from the sky)'], ['blast', 'Blast (blocks thrown out, a scorched crater)']];
   const KIND = { smoke: 0, fire: 1, sparks: 2, dust: 3, explosion: 4, steam: 5, tendril: 6 };
   const LIFE = { smoke: 5, fire: 1.1, sparks: 1.4, dust: 2.6, explosion: 6, steam: 3, tendril: 6 };
   const fxCache = new Map();
@@ -67,9 +68,12 @@ const FX = (() => {
     const idx = new Float32Array(n); for (let i = 0; i < n; i++) idx[i] = i / n; g.setAttribute('aIdx', new T.BufferAttribute(idx, 1));
     return g;
   }
-  const FX_VERT = `uniform float uTime, uLife, uSize, uStart, uWind, uPx; uniform int uKind; attribute vec4 aSeed; attribute float aIdx;
+  const FX_VERT = `uniform float uTime, uLife, uSize, uStart, uWind, uPx, uTintOn; uniform vec3 uTint; uniform int uKind; attribute vec4 aSeed; attribute float aIdx;
     varying vec3 vCol; varying float vA, vSoft;
-    vec3 fireCol(float a) { return mix(mix(vec3(1., .92, .7) * 9., vec3(1., .42, .08) * 5., smoothstep(0., .35, a)), vec3(.25, .08, .02), smoothstep(.35, .9, a)); }
+    vec3 fireCol0(float a) { return mix(mix(vec3(1., .92, .7) * 9., vec3(1., .42, .08) * 5., smoothstep(0., .35, a)), vec3(.25, .08, .02), smoothstep(.35, .9, a)); }
+    // a colour of its own (a purple blast): the same light and dark, in that colour, white at the hottest
+    vec3 fireCol(float a) { vec3 f = fireCol0(a); float l = dot(f, vec3(.3, .6, .1));
+      return mix(f, mix(uTint * l * 1.4, vec3(l), smoothstep(5., 9., l) * .5), uTintOn); }
     void main() {
       vec4 s = aSeed; float age, a; vec3 p = vec3(0.); float size = .3; vCol = vec3(.5); vA = 1.; vSoft = 1.;
       if (uKind == 4) { age = uTime - uStart - s.w * .08; a = age / uLife;
@@ -79,7 +83,7 @@ const FX = (() => {
           size = uSize * (.7 + age * 1.6) * (.6 + .4 * s.x); float b = smoothstep(.0, 1.6, age);
           vCol = mix(fireCol(age / 1.4), vec3(.09, .085, .08), b); vA = (1. - smoothstep(.55, 1., a)) * mix(.95, .6, b); vSoft = 1. + b; }
         else if (aIdx < .8) { vec3 v = (s.xyz - .5) * vec3(26., 14., 26.) * uSize / 3. + vec3(0., 6., 0.); p = v * age + vec3(0., -4.9 * age * age, 0.);
-          size = .07; vCol = vec3(1., .65, .25) * 6.; vA = 1. - smoothstep(.0, .35, a); vSoft = .5; }
+          size = .07; vCol = mix(vec3(1., .65, .25), uTint, uTintOn) * 6.; vA = 1. - smoothstep(.0, .35, a); vSoft = .5; }
         else { float d = max(0., age - .5); p = (s.xyz - .5) * uSize * 3. + vec3(uWind * d * .6, d * 1.3 * uSize, 0.); size = uSize * (1.2 + d * .9);
           vCol = vec3(.1); vA = smoothstep(.0, .6, d) * (1. - smoothstep(.4, 1., a)) * .7; vSoft = 2.; }
       } else {
@@ -89,7 +93,7 @@ const FX = (() => {
         else if (uKind == 1) { p = vec3((s.x - .5) * .5, 0., (s.z - .5) * .5) * uSize * (1. - a) + vec3(uWind * age * .2 + sin(age * 9. + s.y * 6.) * .05, age * 2.1 * uSize, 0.);
           size = uSize * mix(.75, .15, a) * (.6 + .4 * s.y); vCol = fireCol(a * .7); vA = (1. - a) * smoothstep(0., .1, a); vSoft = 1.; }
         else if (uKind == 2) { vec3 v = vec3((s.x - .5) * 3., 2.5 + s.y * 3.5, (s.z - .5) * 3.) * uSize; p = v * age + vec3(0., -4.9 * age * age, 0.);
-          size = .05 * uSize; vCol = vec3(1., .7, .3) * 7.; vA = 1. - a; vSoft = .5; }
+          size = .05 * uSize; vCol = mix(vec3(1., .7, .3), uTint, uTintOn) * 7.; vA = 1. - a; vSoft = .5; }
         else if (uKind == 6) {
           // a tendril: sparkles climbing a column that twists and sways, thick ribbons of them, as if smoke were made of stars
           float h = a * 14. * uSize, tw = h * .55 + uTime * .8, rib = floor(s.z * 3.) * 2.094, sway = sin(h * .35 + uTime * .6) * .9 * uSize;
@@ -106,19 +110,86 @@ const FX = (() => {
     void main() { vec2 c = gl_PointCoord - .5; float d = length(c); if (d > .5) discard;
       float puff = vSoft > 1.5 ? (.7 + .3 * vn(gl_PointCoord * 4. + vA * 3.)) : 1.;
       float a = vA * smoothstep(.5, .5 - .35 * min(vSoft, 1.), d) * puff; gl_FragColor = vec4(vCol, a); }`;
+  // ----- lightning: a jagged bolt from the sky to this spot, with forks, flickering for as long as it lasts -----
+  const boltCache = new Map();
+  function bolt(P, seed) {
+    const reach = clamp(+P.reach || 60, 5, 400), key = `${P.id}|${seed}|${reach}|${+P.scale || 1}`;
+    if (boltCache.has(key)) return boltCache.get(key);
+    let s = (seed * 9301 + 49297) >>> 0; const r = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+    const w = clamp(+P.scale || 1, .2, 10), parts = [];
+    // a path down from the sky, kinked at every step; forks leave it and fade out
+    const path = (from, to, steps, jag) => { const pts = [from.clone()];
+      for (let i = 1; i < steps; i++) { const k = i / steps, p = from.clone().lerp(to, k); p.x += (r() - .5) * jag; p.z += (r() - .5) * jag; pts.push(p); }
+      pts.push(to.clone()); return pts; };
+    const main = path(new T.Vector3((r() - .5) * reach * .25, reach, (r() - .5) * reach * .25), new T.Vector3(0, 0, 0), 26, reach * .07);
+    const tube = (pts, rad) => { const curve = new T.CatmullRomCurve3(pts, false, 'catmullrom', 0); return new T.TubeGeometry(curve, pts.length * 3, rad, 5, false); };
+    parts.push([tube(main, .06 * w), 1]); parts.push([tube(main, .32 * w), .18]);
+    for (let f = 0; f < 4; f++) { const at = main[4 + Math.floor(r() * 16)], dir = new T.Vector3((r() - .5), -.6 - r(), (r() - .5)).normalize();
+      const end = at.clone().addScaledVector(dir, reach * (.12 + r() * .18)); parts.push([tube(path(at, end, 9, reach * .04), .035 * w), .8]); }
+    boltCache.set(key, parts); if (boltCache.size > 60) boltCache.delete(boltCache.keys().next().value);
+    return parts;
+  }
+  function lightning(P, t) {
+    const g = new T.Group(), start = +P.start || 0, dur = clamp(+P.length || .6, .05, 60), age = t - start, col = new T.Color(P.color || '#c9a2ff');
+    if (age < 0 || age > dur) return g;
+    // a new bolt every few frames, and dark gaps between flashes
+    const flick = Math.floor(age * 14), on = (Math.sin(flick * 12.9898) * 43758.5453 % 1 + 1) % 1 > .22 || age < .08;
+    if (!on) return g;
+    for (const [geo, a] of bolt(P, flick % 5)) {
+      const m = new T.Mesh(geo, new T.MeshBasicMaterial({ color: col.clone().multiplyScalar(a > .5 ? 6 : 2.5), transparent: true, opacity: a, blending: T.AdditiveBlending, depthWrite: false, fog: false }));
+      m.scale.setScalar(M); g.add(m); }
+    const l = new T.PointLight(col, 40 * Math.exp(-((age % .25) * 8)), 14 * M, 0); l.position.y = 2 * M; g.add(l);
+    return g;
+  }
+
+  // ----- a blast: blocks thrown up and out, tumbling and coming to rest, a scorched crater where it went off -----
+  const debrisCache = new Map(), scorchMats = new Map();
+  function blast(P, t) {
+    const g = new T.Group(), start = +P.start || 0, age = t - start, size = clamp(+P.scale || 1, .2, 20), n = Math.round(clamp(+P.amount || 60, 1, 100) * 1.2);
+    // the crater: a dark, uneven bowl of scorch on the ground, there from the moment it goes off
+    if (age >= 0) {
+      const key = String(P.color || '#2a1f26'); let sm = scorchMats.get(key);
+      if (!sm) { sm = new T.ShaderMaterial({ transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, uniforms: { uCol: { value: new T.Color(key) }, uGlow: { value: new T.Color('#ff6a2a') }, uAge: { value: 0 } },
+          vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }',
+          fragmentShader: `${NOISE} uniform vec3 uCol, uGlow; uniform float uAge; varying vec2 vUv;
+            void main(){ vec2 q = vUv * 2. - 1.; float r = length(q) + (vn(q * 4.) - .5) * .35; if (r > 1.) discard;
+              float a = smoothstep(1., .55, r); vec3 c = mix(uCol * .25, uCol, smoothstep(.2, .9, r)); c += uGlow * 3. * exp(-uAge * 1.5) * smoothstep(.6, .1, r) * vn(q * 9. + uAge);
+              gl_FragColor = vec4(c, a * .92); }` }); scorchMats.set(key, sm); }
+      sm = sm.clone(); sm.uniforms.uAge.value = age;
+      const disc = new T.Mesh(new T.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), sm); disc.scale.setScalar(size * 6 * M); disc.position.y = .02 * M; g.add(disc);
+    }
+    // the debris: cubes of the ground's colour, each its own throw, tumbling until they land
+    const key = `${P.id}|${n}`; let inst = debrisCache.get(key);
+    if (!inst) { inst = new T.InstancedMesh(new T.BoxGeometry(1, 1, 1), new T.MeshStandardMaterial({ color: new T.Color(P.debris || '#8a6a45'), roughness: .9 }), n); inst.castShadow = true; inst.frustumCulled = false; debrisCache.set(key, inst); }
+    inst.material.color.set(P.debris || '#8a6a45');
+    let s = 77; const r = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296, m = new T.Matrix4(), q = new T.Quaternion(), e = new T.Euler(), v = new T.Vector3(), sc = new T.Vector3();
+    for (let i = 0; i < n; i++) {
+      const a = r() * Math.PI * 2, out = (2 + r() * 6) * size, up = (5 + r() * 9) * Math.sqrt(size), cube = (.25 + r() * .35) * size, spin = (r() - .5) * 14;
+      if (age < 0) { m.makeScale(0, 0, 0); inst.setMatrixAt(i, m); continue; }
+      const land = 2 * up / 9.8, tt = Math.min(age, land), x = Math.cos(a) * out * tt, z = Math.sin(a) * out * tt, y = Math.max(cube / 2, up * tt - 4.9 * tt * tt + cube / 2);
+      e.set(spin * tt, spin * .7 * tt, spin * .4 * tt); q.setFromEuler(e); v.set(x, y, z).multiplyScalar(M); sc.setScalar(cube * M);
+      m.compose(v, q, sc); inst.setMatrixAt(i, m);
+    }
+    inst.instanceMatrix.needsUpdate = true; g.add(inst);
+    return g;
+  }
+
   World.custom.fx = (P, t = 0) => {
+    if (P.kind === 'lightning') return lightning(P, t);
+    if (P.kind === 'blast') return blast(P, t);
     const kind = KIND[P.kind] != null ? P.kind : 'smoke', n = kind === 'explosion' ? 900 : Math.round(clamp(+P.amount || 60, 1, 100) * (kind === 'sparks' ? 6 : kind === 'tendril' ? 40 : 4));
     const key = `${P.id}|${kind}|${n}`; let c = fxCache.get(key);
     if (!c) { const m = new T.ShaderMaterial({ transparent: true, depthWrite: false, fog: false, blending: kind === 'fire' || kind === 'sparks' || kind === 'tendril' ? T.AdditiveBlending : T.NormalBlending,
-        uniforms: { uTime: { value: 0 }, uLife: { value: LIFE[kind] }, uSize: { value: 1 }, uStart: { value: 0 }, uWind: { value: 0 }, uPx: { value: 800 }, uKind: { value: KIND[kind] } },
+        uniforms: { uTime: { value: 0 }, uLife: { value: LIFE[kind] }, uSize: { value: 1 }, uStart: { value: 0 }, uWind: { value: 0 }, uPx: { value: 800 }, uKind: { value: KIND[kind] }, uTint: { value: new T.Color() }, uTintOn: { value: 0 } },
         vertexShader: FX_VERT, fragmentShader: FX_FRAG });
       const pts = new T.Points(fxPoints(n), m); pts.frustumCulled = false; pts.userData.fxMat = m;
       const g = new T.Group(); g.add(pts);
       if (kind === 'explosion' || kind === 'fire') { const l = new T.PointLight(0xff8a3a, 0, 0, 0); l.position.y = .8 * M; g.add(l); c = { g, m, l }; } else c = { g, m };
       fxCache.set(key, c); }
     const u = c.m.uniforms; u.uTime.value = t; u.uSize.value = clamp(+P.scale || 1, .05, 50) * (+P.size?.[0] || 1); u.uStart.value = +P.start || 0; u.uWind.value = (+P.wind || 0);
+    u.uTintOn.value = P.color ? 1 : 0; if (P.color) u.uTint.value.set(P.color);
     c.g.children[0].scale.setScalar(M);
-    if (c.l) { const age = t - (+P.start || 0); c.l.intensity = kind === 'explosion' ? (age > 0 && age < 2 ? 40 * Math.exp(-age * 2.5) : 0) : 6 + 2 * Math.sin(t * 17) * Math.sin(t * 7.3); c.l.distance = 0; }
+    if (c.l) { c.l.color.set(P.color || '#ff8a3a'); const age = t - (+P.start || 0); c.l.intensity = kind === 'explosion' ? (age > 0 && age < 2 ? 40 * Math.exp(-age * 2.5) : 0) : 6 + 2 * Math.sin(t * 17) * Math.sin(t * 7.3); c.l.distance = 0; }
     return c.g;
   };
 
@@ -182,8 +253,11 @@ const FX = (() => {
     inspector(P) {
       if (P.type === 'fx') return `<div class="hd">Effect</div><label class="f"><span>Kind</span>${opt('kind', P.kind || 'smoke', KINDS)}</label>
         <label class="f"><span>Size</span><input type="number" step=".1" data-k="scale" value="${+P.scale || 1}"></label>
-        ${P.kind === 'explosion' ? `<label class="f"><span>Goes off at s</span><input type="number" step=".05" data-k="start" value="${+P.start || 0}"></label><div class="acts"><button class="tb small" data-fx="now">Go off at the playhead</button></div>`
-        : `<label class="f"><span>Amount</span><input type="number" step="5" min="1" max="100" data-k="amount" value="${+P.amount || 60}"></label>`}
+        ${['explosion', 'lightning', 'blast'].includes(P.kind) ? `<label class="f"><span>Goes off at s</span><input type="number" step=".05" data-k="start" value="${+P.start || 0}"></label><div class="acts"><button class="tb small" data-fx="now">Go off at the playhead</button></div>` : ''}
+        ${P.kind !== 'explosion' && P.kind !== 'lightning' ? `<label class="f"><span>Amount</span><input type="number" step="5" min="1" max="100" data-k="amount" value="${+P.amount || 60}"></label>` : ''}
+        ${P.kind === 'lightning' ? `<label class="f"><span>Lasts s</span><input type="number" step=".1" data-k="length" value="${+P.length || .6}"></label><label class="f"><span>From m up</span><input type="number" step="5" data-k="reach" value="${+P.reach || 60}"></label>` : ''}
+        ${['explosion', 'fire', 'sparks', 'lightning'].includes(P.kind) ? `<label class="f"><span>Colour</span>${opt('color', P.color || '', [['', P.kind === 'lightning' ? 'Violet white' : 'Fire'], ['#b45cff', 'Purple'], ['#4aa8ff', 'Blue'], ['#4dff7a', 'Green'], ['#ff3b5c', 'Red'], ...(P.color && !['#b45cff', '#4aa8ff', '#4dff7a', '#ff3b5c'].includes(P.color) ? [[P.color, P.color]] : [])])}</label>` : ''}
+        ${P.kind === 'blast' ? `<label class="f"><span>Debris</span><input type="color" data-k="debris" value="${P.debris || '#8a6a45'}"></label><label class="f"><span>Scorch</span><input type="color" data-k="color" value="${P.color || '#2a1f26'}"></label>` : ''}
         <label class="f"><span>Wind m/s</span><input type="number" step=".5" data-k="wind" value="${+P.wind || 0}"></label>`;
       if (P.type === 'neon') return `<div class="hd">Neon sign</div><label class="f wide"><span>Words</span><textarea data-k="text" rows="2">${esc(P.text || '')}</textarea></label>
         <label class="f"><span>Colour</span><input type="color" data-k="color" value="${P.color || '#ff2fb0'}"></label>

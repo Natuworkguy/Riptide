@@ -160,7 +160,8 @@ const Blocks = (() => {
     if (/crafting_table/.test(n)) tiles = { top: ['grid', WOODS.oak], side: ['planks', WOODS.oak], bottom: ['planks', WOODS.oak] };
     if (/pumpkin|melon/.test(n) && !/stem/.test(n)) tiles = { top: ['rings', base, '#6a8a2a'], side: [/jack_o_lantern/.test(n) ? 'face' : 'ribs', base], bottom: ['rings', base, base] };
     if (/hay_block/.test(n)) tiles = { top: ['rings', base, '#8c6f1c'], side: ['straw', base], bottom: ['rings', base, '#8c6f1c'] };
-    if (/tnt/.test(n)) tiles = { top: ['flat', '#d43b2b'], side: ['band', '#d43b2b', '#efe9df'], bottom: ['flat', '#d43b2b'] };
+    if (/tnt/.test(n)) { const c = /purple|violet/.test(n) ? '#8a3fd4' : /blue/.test(n) ? '#3b62d4' : /green/.test(n) ? '#3fa24a' : '#d43b2b';
+      tiles = { top: ['flat', c], side: ['band', c, '#efe9df'], bottom: ['flat', c] }; if (/purple|violet/.test(n)) glow = .35; }
     // what light goes through
     if (/glass/.test(n)) { pass = 'clear'; tiles = t(['glass', dye ? DYES[dye] : '#cfe6ee']); }
     if (/ice$/.test(n) && !/packed|blue/.test(n)) { pass = 'clear'; tiles = t(['glass', '#9ec4f6']); }

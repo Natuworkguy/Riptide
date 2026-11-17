@@ -78,11 +78,19 @@ const Blocky = (() => {
     im.src = a.src;
     return null;
   }
-  const mats = new Map();
-  function matsFor(tex) {
-    let m = mats.get(tex);
-    if (!m) { m = { inner: new T.MeshStandardMaterial({ map: tex, roughness: .85, metalness: 0, alphaTest: .5, transparent: false }),
-      outer: new T.MeshStandardMaterial({ map: tex, roughness: .85, metalness: 0, alphaTest: .5, transparent: true, side: T.DoubleSide }) }; mats.set(tex, m); }
+  const mats = new Map(), glows = new Map();
+  // glowing eyes: the face's eye pixels lit in a colour, bright enough to bloom
+  function glowMap(color) {
+    if (glows.has(color)) return glows.get(color);
+    const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g = cv.getContext('2d');
+    g.fillStyle = '#000'; g.fillRect(0, 0, 64, 64); g.fillStyle = color; g.fillRect(9, 12, 2, 1); g.fillRect(13, 12, 2, 1);
+    const t = texOf(cv); glows.set(color, t); return t;
+  }
+  function matsFor(tex, glow = '', power = 4) {
+    const key = tex?.uuid + '|' + glow + '|' + power; let m = mats.get(key);
+    if (!m) { const lit = glow ? { emissive: new T.Color('#ffffff'), emissiveMap: glowMap(glow), emissiveIntensity: power } : {};
+      m = { inner: new T.MeshStandardMaterial({ map: tex, roughness: .85, metalness: 0, alphaTest: .5, transparent: false, ...lit }),
+      outer: new T.MeshStandardMaterial({ map: tex, roughness: .85, metalness: 0, alphaTest: .5, transparent: true, side: T.DoubleSide }) }; mats.set(key, m); }
     return m;
   }
 
@@ -170,7 +178,7 @@ const Blocky = (() => {
 
   // ----- the figure: bones with the usual names, a box on each -----
   function figure(P, t) {
-    const skinTex = (P.skin && fromAsset(P.skin)) || painted(P), m = matsFor(skinTex);
+    const skinTex = (P.skin && fromAsset(P.skin)) || painted(P), m = matsFor(skinTex, P.glowEyes ? P.glowColor || '#b45cff' : '', clamp(+P.glowPower || 4, 0, 40));
     const bone = (name, x, y, z) => { const b = new T.Bone(); b.name = name; b.position.set(x * PX, y * PX, z * PX); return b; };
     const hips = bone('Hips', 0, 12, 0), spine = bone('Spine', 0, 0, 0), head = bone('Head', 0, 12, 0);
     const armR = bone('RightArm', -6, 10, 0), armL = bone('LeftArm', 6, 10, 0), legR = bone('RightUpLeg', -2, 0, 0), legL = bone('LeftUpLeg', 2, 0, 0);
@@ -233,6 +241,8 @@ const Blocky = (() => {
         <label class="f"><span>Hat</span>${opt('hat', P.hat || 'none', [['none', 'None'], ['cap', 'Peaked cap'], ['beanie', 'Beanie'], ['helmet', 'Helmet'], ['tophat', 'Top hat']])}</label>
         ${P.hat && P.hat !== 'none' ? col('hatColor', P.hatColor || '#3f5a2a', 'Hat colour') : ''}
         <label class="f"><span>Height m</span><input type="number" step=".05" data-k="height" value="${+P.height || 1.8}"></label>
+        <label class="f"><span>Eyes</span>${opt('glowEyes', P.glowEyes ? '1' : '', [['', 'As painted'], ['1', 'Glowing']])}</label>
+        ${P.glowEyes ? col('glowColor', P.glowColor || '#b45cff', 'Glow colour') + `<label class="f"><span>Glow</span><input type="number" step=".5" data-k="glowPower" value="${+P.glowPower || 4}"></label>` : ''}
         <label class="f"><span>Outer layer</span>${opt('outer', P.outer === false || P.outer === 'off' ? 'off' : '', [['', 'Shown'], ['off', 'Hidden']])}</label>
         ${P.skin && pics.some(x => x[0] === P.skin) ? '' : col('skinTone', P.skinTone || '#d6a685', 'Skin') + col('hair', P.hair || '#141210', 'Hair') + col('eyes', P.eyes || '#5a3d2b', 'Eyes') + col('shirt', P.shirt || '#d97757', 'Top') + col('pants', P.pants || '#3b4a3f', 'Trousers') + col('shoes', P.shoes || '#e3dacc', 'Shoes') + col('belt', P.belt || '#2b2118', 'Belt')}
         <p class="note">A skin is a 64 × 64 picture of each box's faces unfolded, in the usual block-figure layout. Import one under Media and pick it here. Pose it below: presets, or any joint by hand.</p>`;

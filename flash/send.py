@@ -558,6 +558,29 @@ def world(scene: str = "", name: str = "", props=None, window: str = "") -> str:
             "at the bottom: 3D shapes and models above it stand in it.")
 
 
+def export_scene(folder: str = "", window: str = "", at_time=0) -> str:
+    """Write the 3D world in the project open in Riptide to FOLDER as a scene a game engine opens (scene.glb and
+    scene.json): by default a new folder in ~/.flash/riptide-scenes. What happened, in a line."""
+
+    window = target(window)
+    answer = ask("/api/live/op", {"op": "export_scene", "args": {"time": at_time}, "timeout": 180,
+                                  "window": window or None}, timeout=200)
+    if answer.get("ok") is False:
+        raise SendError(answer.get("error") or "Riptide could not export it.")
+    out = answer.get("result", answer)
+    scene = out["scene"]
+    if not folder:
+        name = re.sub(r"[^a-z0-9]+", "-", str(scene.get("world_name") or scene.get("name") or "scene").lower()).strip("-")
+        folder = str(flash_home() / "riptide-scenes" / f"{name or 'scene'}-{time.strftime('%Y%m%d-%H%M%S')}")
+    dest = Path(folder).expanduser()
+    dest.mkdir(parents=True, exist_ok=True)
+    (dest / "scene.glb").write_bytes(base64.b64decode(out["glb"]))
+    (dest / "scene.json").write_text(json.dumps(scene, indent=2), encoding="utf-8")
+    props = ", ".join(sorted({o.get("name") or o.get("type") for o in scene.get("objects", [])})) or "none"
+    return (f"Exported the 3D world to {dest} (scene.glb, {out.get('bytes', 0) // 1024} KB, and scene.json){where(answer)}. "
+            f"Its props: {props}. A game engine such as Kiln imports this folder.")
+
+
 def open_windows() -> list:
     """The Riptide windows open now, [] when none are or Riptide is not running."""
     try:
@@ -616,6 +639,17 @@ def main(argv: list) -> int:
             need_window(str(asked.get("window") or ""))
             print(world(str(asked.get("scene") or ""), str(asked.get("name") or ""), asked.get("props"), str(asked.get("window") or ""))
                   + watch_line())
+        except SendError as why:
+            print(f"Error: {why}")
+        except (urllib.error.URLError, OSError) as why:
+            print(f"Error: Could not reach Riptide at {riptide_url()}: {why}")
+        return 0
+    if argv[:1] == ["--export"]:
+        try:
+            asked = json.load(sys.stdin) if not sys.stdin.isatty() else {}
+            asked["window"] = attached(str(asked.get("window") or ""))
+            need_window(str(asked.get("window") or ""))
+            print(export_scene(str(asked.get("folder") or ""), str(asked.get("window") or ""), asked.get("time") or 0))
         except SendError as why:
             print(f"Error: {why}")
         except (urllib.error.URLError, OSError) as why:

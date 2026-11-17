@@ -82,6 +82,33 @@
       "timeout": 90
     },
     {
+      "name": "riptide_export_scene",
+      "description": "Export the 3D world in a project open in Riptide as a scene a game engine can open: a folder with scene.glb (its land, props, people and 3D layers, in metres, y up, the ground at 0) and scene.json (its sky, sun, fog, ground and water settings, the camera, and every prop with its name and place). Build the world with riptide_world first. Kiln's kiln_make_game turns the folder into a playable game.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "folder": {
+            "type": "string",
+            "description": "Optional: where to write it. Left out, a new folder in ~/.flash/riptide-scenes, named in the answer."
+          },
+          "time": {
+            "type": "number",
+            "description": "Optional: the moment taken, in seconds, for anything that moves (0 by default)."
+          },
+          "window": {
+            "type": "string",
+            "description": "Optional: which Riptide window, as for riptide_world."
+          }
+        }
+      },
+      "run": [
+        "python",
+        "./flash/send.py",
+        "--export"
+      ],
+      "timeout": 240
+    },
+    {
       "name": "riptide_windows",
       "description": "The Riptide windows open in the browser, each a project of its own: their project names and ids, and which was used last. send_to_riptide and riptide_world take one of them as window.",
       "parameters": {

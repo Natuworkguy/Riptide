@@ -4473,6 +4473,38 @@ const LIVE = (() => {
       const texts = Array.isArray(a.texts) ? a.texts.map(String) : [String(a.text ?? '')];
       return { ok: true, loaded, font: o.font, space: round(c.measureText(' ').width), line_height: round(o.size * 1.1), results: texts.map(one) };
     },
+    // A 3D world as a scene a game engine can open: its land, props, people and the 3D layers in it as one glTF
+    // (metres, y up, the ground at 0), and what the engine needs to light and dress it the same way (the world's
+    // settings: sky, sun, fog, ground, water) with the camera and the props listed, for a game to hang its rules on.
+    export_scene: async a => {
+      const L = a.id != null ? findL(a) : S.layers.find(l => l.type === 'world');
+      if (!L || L.type !== 'world') throw new Error('there is no 3D world to export: add_world first');
+      if (!World.available) throw new Error('3D is not available in this window');
+      const t = Math.max(0, Math.min(S.dur, beatTime(a.time ?? 0)));
+      await R3D.ready();
+      const o = state(L, t), { B, cam, ground } = World.stage(L, o, t);
+      const M = World.M, eye = +o.eye || 1.7, T = window.RiptideThree;
+      // what is only for the editor (camera guides, light beams, dust drawn as points, shader-drawn sky and sea) stays
+      // out; the engine makes its own sky, water and air from the settings
+      const roots = [B.land, B.props, ...(B.members || [])].filter(Boolean), hidden = [];
+      for (const r of roots) r.traverse(n => { if (n.visible && (n.userData.guide || n.userData.bulb || n.isPoints || n.material?.isShaderMaterial)) { n.visible = false; hidden.push(n); } });
+      if (B.land) B.land.name = 'Ground';
+      if (B.props) B.props.name = 'Props';
+      const wrap = new T.Group(); wrap.name = L.name || 'Scene'; wrap.scale.setScalar(1 / M); wrap.position.y = -ground / M;
+      const parents = roots.map(r => r.parent); for (const r of roots) wrap.add(r);
+      let glb;
+      try { glb = new Uint8Array(await new T.GLTFExporter().parseAsync(wrap, { binary: true, onlyVisible: true })); }
+      finally { roots.forEach((r, i) => { parents[i]?.add(r); }); for (const n of hidden) n.visible = true; }
+      let bin = ''; for (let i = 0; i < glb.length; i += 0x8000) bin += String.fromCharCode.apply(null, glb.subarray(i, i + 0x8000));
+      const pos = cam.position.clone().divideScalar(M); pos.y += eye;
+      const dir = new T.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+      const world = {}; for (const k of World.FIELDS) if (k !== 'objects' && k !== 'shots') world[k] = o[k];
+      const list = (xs, up = '') => (Array.isArray(xs) ? xs : []).flatMap(P => [{ id: P.id, type: P.type, name: P.name || P.type, parent: up || undefined,
+        at: (P.at || [0, 0, 0]).map(v => round(+v || 0)), size: P.size, move: P.move, say: P.say }, ...list(P.children, P.id)]);
+      const scene = { format: 'riptide-scene', version: 1, name: projectName, world_name: L.name, units: 'metres', up: 'y', time: t,
+        world, camera: { pos: pos.toArray().map(round), dir: dir.toArray().map(round), fov: round(cam.fov) }, objects: list(o.objects) };
+      return { ok: true, scene, glb: btoa(bin), bytes: glb.length };
+    },
     // a time in seconds from "bar:beat" with the project's tempo
     beat_time: a => ({ ok: true, times: [].concat(a.times ?? a.time).map(x => round(beatTime(x))) }),
     list_capabilities: () => ({

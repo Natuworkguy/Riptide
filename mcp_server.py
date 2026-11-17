@@ -205,6 +205,10 @@ Changing words: text "words" ("make it | ask Flash | ship it", split by |) take 
 "2:1, 2:3, 3:1"; or "wordStart" then every "wordEvery" seconds). On each change the whole line re-centres on its
 new width over "wordMove" seconds (0.25 by default), the old word lifting away as the new one rises in, every
 width measured in the loaded font; "wordFill" colours the words (the fill by default). Nothing to measure or key.
+Word gap: a font's space plus the side bearings either side of it reads too wide at display sizes. Any text layer
+with "wordGap" (% of the size; 0, the default, is the font's own space) sets every space in it to exactly that
+distance from the last ink of one word to the first ink of the next, and centres each line on its ink; 22 to 28
+reads right for headlines. Changing words always space this way (24 unless set), "Just" to the word included.
 Fit around: a "rect" or "ellipse" with "fit" (layer names or ids, comma separated) sizes and places itself round
 those layers at every moment, plus "fitPad" pixels each side (30 by default): a pill round a changing line of
 text, a card round a plan, always tight and centred. Put it below them.

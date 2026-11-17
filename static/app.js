@@ -113,7 +113,7 @@ const PROPS = {
   path:    [...FLAT, 'w', 'h', 'pathd', 'vb', 'reveal', 'erase', 'stroke', 'strokeWidth', 'pfill', 'fill', ...PHYS],
   // an organic shape: a soft polygon of points sides, pushed out of true by wobble, its outline changing as morph moves
   blob:    [...FLAT, 'w', 'h', 'points', 'wobble', 'morph', 'seed', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
-  text:    [...FLAT, 'text', 'font', 'size', 'weight', 'italic', 'align', 'tcase', 'lineh', 'spacing', 'reveal', 'retype', 'words', 'wordTimes', 'wordStart', 'wordEvery', 'wordMove', 'wordFill', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
+  text:    [...FLAT, 'text', 'font', 'size', 'weight', 'italic', 'align', 'tcase', 'lineh', 'spacing', 'wordGap', 'reveal', 'retype', 'words', 'wordTimes', 'wordStart', 'wordEvery', 'wordMove', 'wordFill', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
   image:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...CUTP, ...KEYP, ...PHYS],
   video:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...CLIP, ...CUTP, ...KEYP, ...PHYS],
   // speed lines: streaks rushing out from the middle of the box to its edge, as a dash forward or a hit
@@ -132,11 +132,11 @@ const PROPS = {
   // a group (see groupOf): draws nothing itself, and moves, turns, scales and fades its layers with its box
   group:   ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy', 'opacity'],
 };
-ANIM.push(...World.NUMBERS, ...World.COLORS, 'fitPad', 'followMix');
+ANIM.push(...World.NUMBERS, ...World.COLORS, 'fitPad', 'followMix', 'wordGap');
 const GROUPS = [['Transform', ['x', 'y', 'w', 'h', 'd', 'rotation', 'scale', 'sx', 'sy']],
   ['3D', ['three', 'shape', 'rotX', 'rotY', 'z', 'material', 'lightAngle']], ['Camera', ['follow', 'followMix', 'orbit', 'tilt', 'dolly', 'zoom']], ['Fit around', ['fit', 'fitPad']],
   ['Drawing', ['pathd', 'vb', 'pfill']], ['Style', ['fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', 'radius', 'points', 'wobble', 'morph', 'seed', 'sweep', 'opacity']],
-  ['Text', ['text', 'font', 'weight', 'size', 'lineh', 'italic', 'align', 'tcase', 'spacing', 'reveal', 'retype']], ['Changing words', ['words', 'wordTimes', 'wordStart', 'wordEvery', 'wordMove', 'wordFill']], ['Pose', ['side', 'limb', 'caps', ...Figure.JOINTS]], ['Physics', PHYS],
+  ['Text', ['text', 'font', 'weight', 'size', 'lineh', 'italic', 'align', 'tcase', 'spacing', 'wordGap', 'reveal', 'retype']], ['Changing words', ['words', 'wordTimes', 'wordStart', 'wordEvery', 'wordMove', 'wordFill']], ['Pose', ['side', 'limb', 'caps', ...Figure.JOINTS]], ['Physics', PHYS],
   ['Clip', CLIP], ['Speed lines', ['count', 'lineLen', 'thick', 'hole', 'rush']], ['Shoot through', ['thing', 'cover', 'holeX', 'holeY', 'soft', 'drift', 'glints']], ['Effects', ['blur', 'zblur', 'shadow', 'rgb', 'boil', 'vapor']], ['Echo', ECHO], ['Pixel smear', SMEAR], ['Fluted glass', FLUTE], ['Cut out', CUTP], ['Adjust', ADJUST], ['Green screen', KEYP], ['Mask', MASK],
   ['Grade', Grade.GRADE], ['Curves', ['curves']], ['Vignette and LUT', LOOKP]];
 GROUPS.splice(1, 0, ...World.GROUPS);
@@ -144,7 +144,7 @@ const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', sca
   opacity: 'Opacity', radius: 'Corners', fill: 'Fill', grad: 'Gradient', fill2: 'Fill 2', mid1: 'Via', mid2: 'Via 2', mid3: 'Via 3', gradAngle: 'Angle°', gradMorph: 'To radial %', stroke: 'Stroke', strokeWidth: 'Stroke W', blur: 'Blur', shadow: 'Shadow', rgb: 'RGB split',
   size: 'Font size', text: 'Text', points: 'Points', pathd: 'Path', vb: 'View box', pfill: 'Fill it', boil: 'Boil', vapor: 'Vaporize %', morph: 'Morph', wobble: 'Wobble', seed: 'Seed', weight: 'Weight', reveal: 'Reveal', erase: 'Erased', retype: 'Retype to', sweep: 'Sweep°', spacing: 'Tracking',
   font: 'Font', italic: 'Italic', align: 'Align', tcase: 'Case', lineh: 'Leading',
-  words: 'Words', wordTimes: 'Change at', wordStart: 'First change s', wordEvery: 'Then every s', wordMove: 'Change takes s', wordFill: 'Word colour',
+  words: 'Words', wordGap: 'Word gap %', wordTimes: 'Change at', wordStart: 'First change s', wordEvery: 'Then every s', wordMove: 'Change takes s', wordFill: 'Word colour',
   fit: 'Fit around', fitPad: 'Padding', follow: 'Follow layer', followMix: 'Follow %',
   mask: 'Mask', matte: 'Track matte', mx: 'Mask X', my: 'Mask Y', mw: 'Mask W', mh: 'Mask H', mround: 'Corners', feather: 'Feather',
   smear: 'Smear px', smearDir: 'Smear to°', smearAt: 'Brighter than %',
@@ -167,7 +167,7 @@ const STEP = { echoGap: .01, gradMorph: 1, opacity: .05, scale: .05, sx: .05, sy
 const PALETTE = ['#7c5cff', '#ff5c8a', '#20c997', '#ffb020', '#3fa9ff', '#ff7a45'];
 const DEFAULTS = { smear: 0, smearDir: 0, smearAt: 55, flute: 0, fluteDir: 'down', fluteBend: 40, fluteStreak: 30, fluteLines: 55, fluteShine: 40, fluteChroma: 3, fluteShift: 0, echo: 0, echoGap: .05, echoFade: 80, echoScale: 0, zblur: 0, cutout: false, cutEdge: 2, cutGrow: 0,
   count: 90, lineLen: 30, thick: 3, hole: 35, rush: 100, thing: 'ribbon', cover: 60, holeX: 56, holeY: 55, soft: 60, drift: 25, glints: 5, pathd: '', vb: '0 0 100 100', pfill: false, boil: 0, vapor: 0, morph: 0, wobble: 40, seed: 1, rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0, rgb: 0,
-  words: '', wordTimes: '', wordStart: 1, wordEvery: .5, wordMove: .25, wordFill: '', fit: '', fitPad: 30, follow: '', followMix: 100,
+  words: '', wordGap: 0, wordTimes: '', wordStart: 1, wordEvery: .5, wordMove: .25, wordFill: '', fit: '', fitPad: 30, follow: '', followMix: 100,
   size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, erase: 0, retype: '', font: 'Inter', italic: false, align: 'center', tcase: 'none', lineh: 110,
   speed: 100, reverse: false, vol: 100, mute: false, afadeIn: 0, afadeOut: 0,
   mask: 'none', matte: 'none', mx: 0, my: 0, mw: 0, mh: 0, mround: 0, feather: 0, minv: false,
@@ -352,6 +352,26 @@ function beatTime(v) {
   if (!(S.bpm > 0)) throw new Error(`"${s}" is a bar and beat: set the tempo first (set_composition bpm)`);
   return (S.downbeat || 0) + ((+m[1] - 1) * (S.beatsPerBar || 4) + (+m[2] - 1)) * 60 / S.bpm;
 }
+// Word gap: spaces set by the ink. A font's space, with the side bearings either side of it (the room the font
+// leaves after the last letter of one word and before the first of the next), reads far too wide at display sizes.
+// With Word gap (% of the size) every space in a line becomes exactly that distance from the last ink of one word to
+// the first ink of the next, and the line is measured and centred on its ink. inkRun lays a line out from where its
+// ink starts: each word's pen position (x), where it starts in the line (a), and the ink's width (w).
+function inkRun(c, line, gap) {
+  const parts = []; let a = 0, end = null;
+  for (const t of line.split(' ')) {
+    if (t) { const m = c.measureText(t), l = -m.actualBoundingBoxLeft;
+      const x = end == null ? -l : end + gap - l; parts.push({ t, x, a }); end = x + m.actualBoundingBoxRight; }
+    a += t.length + 1;
+  }
+  return { parts, w: end ?? 0 };
+}
+const gapOf = o => o.size * (+o.wordGap || 0) / 100;
+// draws a run's words from x, the first `upto` letters of the line (all of it when left out)
+function drawRun(c, o, run, x, y, upto = Infinity) {
+  for (const p of run.parts) { const s = p.t.slice(0, Math.max(0, upto - p.a)); if (!s) continue;
+    if (o.strokeWidth > 0) c.strokeText(s, x + p.x, y); c.fillText(s, x + p.x, y); }
+}
 // Changing words: a text layer's Text stays and its Words (split by |) take turns after it, changing at each time
 // in Change at (seconds or bar:beat, comma separated), or at First change and then every Then every seconds. On
 // each change the line re-centres on its new width over Change takes, the old word lifting away as the new one
@@ -364,10 +384,11 @@ function wordLine(c, o, t) {
   at = at.slice(0, n - 1).sort((a, b) => a - b);
   let i = 0; while (i < at.length && t >= at[i]) i++;
   const p = i ? Math.max(0, Math.min(1, (t - at[i - 1]) / Math.max(.001, +o.wordMove || .25))) : 1, e = 1 - Math.pow(1 - p, 4);
-  const lead = caseText(o).split('\n')[0], wl = lead ? c.measureText(lead).width : 0, sp = lead ? c.measureText(' ').width + (+o.spacing || 0) : 0;
-  const ww = words.map(w => c.measureText(w).width), wn = ww[i], wo = i ? ww[i - 1] : wn;
-  const W = wl + sp + wo + (wn - wo) * e, full = wl + sp + Math.max(...ww);
-  return { lead, words, i, e, wl, sp, W, full };
+  // spaced by the ink (see inkRun): Word gap between the fixed text and the word and inside each, 24% if unset
+  const gap = o.size * (o.wordGap > 0 ? o.wordGap : 24) / 100, lead = caseText(o).split('\n')[0];
+  const lr = lead ? inkRun(c, lead, gap) : null, leadW = lr ? lr.w + gap : 0, runs = words.map(w => inkRun(c, w, gap)), ww = runs.map(r => r.w);
+  const was = ww[i ? i - 1 : 0], W = leadW + was + (ww[i] - was) * e, full = leadW + Math.max(...ww);
+  return { lead, lr, runs, i, e, W, full, leadW };
 }
 Physics.init({ keyState, bounds });
 // a blob's outline: 72 points round it, a soft polygon pushed in and out by a few slow waves whose phases the
@@ -640,14 +661,24 @@ function drawContent(c, L, o, t) {
   if (L.type === 'text' && o.words) {
     setFont(c, o); c.textAlign = 'left'; c.textBaseline = 'middle';
     const q = wordLine(c, o, t), lh = lineH(o), base = c.globalAlpha;
-    const x0 = o.align === 'left' ? -q.full / 2 : o.align === 'right' ? q.full / 2 - q.W : -q.W / 2, xw = x0 + q.wl + q.sp;
-    const ink = (s, x, y) => { if (o.strokeWidth > 0) c.strokeText(s, x, y); c.fillText(s, x, y); };
-    if (q.lead) { c.fillStyle = fillOf(c, o, q.W, lh); ink(q.lead, x0, 0); }
+    const s0 = o.align === 'left' ? -q.full / 2 : o.align === 'right' ? q.full / 2 - q.W : -q.W / 2, xw = s0 + q.leadW;
+    if (q.lead) { c.fillStyle = fillOf(c, o, q.W, lh); drawRun(c, o, q.lr, s0, 0); }
     // the words slide through a window the height of the line, so the old one is gone before the new one is read
     c.fillStyle = o.wordFill || o.fill; const rise = lh * .9;
-    c.save(); if (q.e < 1) { c.beginPath(); c.rect(xw - o.size, -lh / 2, q.W + o.size * 2, lh); c.clip(); }
-    if (q.e < 1 && q.i) { c.globalAlpha = base * (1 - q.e); ink(q.words[q.i - 1], xw, -rise * q.e); }
-    c.globalAlpha = base * (q.i ? Math.min(1, q.e * 1.5) : 1); ink(q.words[q.i], xw, rise * (1 - q.e)); c.restore(); c.globalAlpha = base;
+    c.save(); if (q.e < 1) { c.beginPath(); c.rect(s0 + q.leadW - o.size * .1, -lh / 2, o.size * 40, lh); c.clip(); }
+    if (q.e < 1 && q.i) { c.globalAlpha = base * (1 - q.e); drawRun(c, o, q.runs[q.i - 1], xw, -rise * q.e); }
+    c.globalAlpha = base * (q.i ? Math.min(1, q.e * 1.5) : 1); drawRun(c, o, q.runs[q.i], xw, rise * (1 - q.e)); c.restore(); c.globalAlpha = base;
+  } else if (L.type === 'text' && o.wordGap > 0) {
+    setFont(c, o); c.textAlign = 'left'; c.textBaseline = 'middle';
+    const full = caseText(o).split('\n'), n = textOf(o).length, lh = lineH(o), y0 = -(full.length - 1) * lh / 2, gap = gapOf(o);
+    const runs = full.map(l => inkRun(c, l, gap)), widest = Math.max(10, ...runs.map(r => r.w));
+    c.fillStyle = fillOf(c, o, widest, lh * full.length);
+    // as below, but by the ink: a typewriter reveal shows the first n letters, line after line
+    let at = 0;
+    runs.forEach((r, i) => { const upto = Math.max(0, n - at); at += full[i].length + 1; if (!upto) return;
+      const shownW = o.align === 'center' && upto < full[i].length ? inkRun(c, full[i].slice(0, upto).trimEnd(), gap).w : r.w;
+      const x = o.align === 'left' ? -widest / 2 : o.align === 'right' ? widest / 2 - r.w : -shownW / 2;
+      drawRun(c, o, r, x, y0 + i * lh, upto); });
   } else if (L.type === 'text') {
     setFont(c, o); c.textAlign = 'left'; c.textBaseline = 'middle';
     const full = caseText(o).split('\n'), shown = textOf(o).split('\n'), lh = lineH(o), y0 = -(full.length - 1) * lh / 2;
@@ -865,6 +896,8 @@ function bounds(L, t) {
   const o = state(L, t);
   if (L.type === 'camera') return { o, w: 0, h: 0 };
   if (L.type === 'text' && o.words) { setFont(ctx, o); return { o, w: Math.max(10, wordLine(ctx, o, t).W), h: lineH(o) }; }
+  if (L.type === 'text' && o.wordGap > 0) { setFont(ctx, o); const ls = caseText(o).split('\n');
+    return { o, w: Math.max(10, ...ls.map(l => inkRun(ctx, l, gapOf(o)).w)), h: lineH(o) * ls.length }; }
   if (L.type === 'text') { setFont(ctx, o); const ls = caseText(o).split('\n');
     return { o, w: Math.max(10, ...ls.map(s => ctx.measureText(s).width)), h: lineH(o) * ls.length }; }
   const lined = L.type === 'arc' || L.type === 'wave' || L.type === 'path';

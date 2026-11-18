@@ -721,11 +721,18 @@ material.sheenRoughness = mix( .75, .35, hairAmt );`)
     if (P.asset === 'mannequin') P = { ...P, asset: '', body: 'mannequin' };
     const g = new T.Group(), n = clamp(Math.round(+P.count || 20), 1, 200), [w, , d] = (P.size || [12, 1, 8]).map(Number), r = rng(+P.seed || 7), move = P.move || 'walk';
     for (let i = 0; i < n; i++) {
-      const x0 = (r() - .5) * w, z0 = (r() - .5) * d, a = r() * Math.PI * 2, speed = move === 'run' ? 3 + r() * 1.5 : move === 'walk' ? 1.1 + r() * .5 : 0;
-      const span = Math.max(w, d) * .9 + 2, h = 1.58 + r() * .35, ph = r();
+      const x0 = (r() - .5) * w, z0 = (r() - .5) * d, speed = move === 'run' ? 3 + r() * 1.5 : move === 'walk' ? 1.1 + r() * .5 : 0;
+      // which way they go: along a long, narrow area (a pavement), its length, either way, a little off straight; in a
+      // squarer one, any way
+      const long = Math.max(w, d) > Math.min(w, d) * 2.5, along0 = d >= w ? 0 : Math.PI / 2;
+      const a = long ? along0 + (r() < .5 ? 0 : Math.PI) + (r() - .5) * .12 : r() * Math.PI * 2;
+      const h = 1.58 + r() * .35, ph = r();
       const look = { shirt: SHIRTS[Math.floor(r() * SHIRTS.length)], pants: PANTS[Math.floor(r() * PANTS.length)], skin: SKINS[Math.floor(r() * SKINS.length)], hairColor: r() > .7 ? '#7a5a3a' : '#16100c' };
-      // each goes back and forth along a line of their own, turning at its ends
-      const s = speed * t + ph * span * 2, leg = ((s % (span * 2)) + span * 2) % (span * 2), back = leg > span, along = (back ? span * 2 - leg : leg) - span / 2;
+      // each goes back and forth along the part of their line that lies inside the area, turning at its ends: never
+      // stopped at an edge with their legs still walking
+      const dx = Math.sin(a), dz = Math.cos(a), lim = (p0, dd, half) => Math.abs(dd) < 1e-6 ? [-1e9, 1e9] : [(-half - p0) / dd, (half - p0) / dd].sort((p, q) => p - q);
+      const [ax0, ax1] = lim(x0, dx, w / 2), [az0, az1] = lim(z0, dz, d / 2), lo = Math.max(ax0, az0), hi = Math.min(ax1, az1), span = Math.max(.01, hi - lo);
+      const s = speed * t + ph * span * 2, leg = ((s % (span * 2)) + span * 2) % (span * 2), back = leg > span, along = lo + (back ? span * 2 - leg : leg);
       // real-looking men and women, mixed (the mannequin only while their bodies load, or if asked for)
       const who = { ...look, body: r() < .5 ? 'woman' : 'man', move, phase: ph * 4, dist: speed ? s : null };
       who.height = who.body === 'woman' ? 1.55 + (h - 1.58) * .6 : 1.66 + (h - 1.58) * .6;
@@ -733,8 +740,7 @@ material.sheenRoughness = mix( .75, .35, hairAmt );`)
         : (P.body !== 'mannequin' && realPerson(who, t)) || person({ ...look, height: h, move, phase: ph * 4, dist: speed ? s : null }, t);
       if (!node) continue;
       const holder = new T.Group(); holder.add(node);
-      let x = x0 + Math.sin(a) * along, z = z0 + Math.cos(a) * along;
-      x = clamp(x, -w / 2, w / 2); z = clamp(z, -d / 2, d / 2);
+      const x = x0 + dx * along, z = z0 + dz * along;
       holder.position.set(x * M, 0, z * M); holder.rotation.y = a + (back ? Math.PI : 0); if (!P.asset) holder.scale.setScalar(M);
       g.add(holder);
     }

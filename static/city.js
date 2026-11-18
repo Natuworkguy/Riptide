@@ -96,12 +96,12 @@ const City = (() => {
   // little, the way slabs settle. The dirt is painted by where a spot is on the pavement, not by slab, so a stain
   // runs on across the joints as a real one does.
   function slabs(x0, w, len, top, seed) {
-    const S = .6, gap = .006, r = rng(seed), pos = [], uv = [], z0 = -len / 2, sides = [];
+    const S = .6, gap = .006, BED = .03, r = rng(seed), pos = [], uv = [], z0 = -len / 2, sides = [];
     const quad = (a, b, c, d) => { for (const p of [a, b, c, a, c, d]) { pos.push(p[0], p[1], p[2]); uv.push((p[0] - x0) / PAVE[0], (p[2] - z0) / PAVE[1]); } };
     for (let x = x0; x < x0 + w - .05; x += S) for (let z = z0; z < z0 + len - .05; z += S) {
       const ax = x + gap / 2, bx = Math.min(x + S, x0 + w) - gap / 2, az = z + gap / 2, bz = Math.min(z + S, z0 + len) - gap / 2;
       const lift = (r() - .5) * .006 - (r() < .03 ? .006 : 0), tx = (r() - .5) * .004, tz = (r() - .5) * .004, h = (px, pz) => top + lift + tx * (px - ax) / S + tz * (pz - az) / S;
-      const A = [ax, h(ax, az), az], B = [bx, h(bx, az), az], C = [bx, h(bx, bz), bz], D = [ax, h(ax, bz), bz], lo = top - .008;
+      const A = [ax, h(ax, az), az], B = [bx, h(bx, az), az], C = [bx, h(bx, bz), bz], D = [ax, h(ax, bz), bz], lo = top - BED;
       quad(A, D, C, B);                                                       // the top
       sides.push([[ax, lo, az], A, B, [bx, lo, az]], [[bx, lo, az], B, C, [bx, lo, bz]], [[bx, lo, bz], C, D, [ax, lo, bz]], [[ax, lo, bz], D, A, [ax, lo, az]]);
     }
@@ -120,7 +120,7 @@ const City = (() => {
       const pv = pavingTiles(), pave = new T.MeshStandardMaterial({ map: pv.map.clone(), normalMap: pv.normal.clone(), roughnessMap: pv.rough.clone(), roughness: .9, normalScale: new T.Vector2(.25, .25) });
       for (const t of [pave.map, pave.normalMap, pave.roughnessMap]) { t.repeat.set((side - .3) / PAVE[0], len / PAVE[1]); t.needsUpdate = true; }
       for (const t of [pave.map, pave.normalMap, pave.roughnessMap]) { t.repeat.set(1, 1); t.needsUpdate = true; }
-      const grout = new T.MeshBasicMaterial({ color: new T.Color('#0b0a09') });  // the joints: deep and narrow, no light gets in
+      const grout = new T.MeshBasicMaterial({ color: new T.Color('#1a1714') });  // the joints: deep and narrow, no light gets in
       const stone = new T.MeshStandardMaterial({ color: new T.Color('#8a8781'), roughness: .5 });
       for (const m of [pave, stone, road]) m.userData.wets = true;
       const rg = new T.PlaneGeometry(width, len); rg.rotateX(-Math.PI / 2); rg.translate(0, .02, 0);
@@ -128,7 +128,9 @@ const City = (() => {
       if (side > 0) for (const s of [-1, 1]) {
         // the bed the slabs are laid on, dark in the joints, then the slabs themselves
         const x0 = width / 2 + .3, pw = side - .3;
-        const pg = new T.BoxGeometry(pw, kerb - .007, len); pg.translate(s * (x0 + pw / 2), (kerb - .007) / 2, 0); parts.push({ g: pg, m: grout });
+        // the bed sits 3 cm under the slabs' tops: deeper than the lowest settled slab, and far enough below them that
+        // the depth buffer never mixes the two at a distance (it did at 7 mm, and slabs flickered black)
+        const pg = new T.BoxGeometry(pw, kerb - .03, len); pg.translate(s * (x0 + pw / 2), (kerb - .03) / 2, 0); parts.push({ g: pg, m: grout });
         parts.push({ g: slabs(s > 0 ? x0 : -x0 - pw, pw, len, kerb, 7 + (s > 0)), m: [pave, grout] });
         const kg = new T.BoxGeometry(.3, kerb, len); kg.translate(s * (width / 2 + .15), kerb / 2, 0); parts.push({ g: kg, m: stone });
       }

@@ -289,8 +289,11 @@ const FX = (() => {
       for (let i = 0; i < 8; i++) for (const side of [-1, 1]) {
         const z = -4 - i * 13, w = 10 + (i * 7 + (side > 0 ? 3 : 0)) % 6, k = side > 0 ? 1 : 0;
         out.push({ type: 'building', name: `Building ${out.length}`, at: [side * (10 + w / 2), 0, z], size: [w, 16 + ((i * 13 + side * 5 + 20) % 30), 12], seed: i * 2 + k, lit: 50 });
-        out.push({ type: 'sign', name: 'Sign', text: words[(i + k * 3) % 8], color: colors[(i + side + 5) % 5], at: [side * 9.3, 4.2, z + 2.5], size: [.7, 2.8, .22], glow: 5, flicker: i === 3 && side > 0 ? '1' : '' });
+        out.push({ type: 'sign', name: 'Sign', text: words[(i + k * 3) % 8], color: colors[(i + side + 5) % 5], at: [side * 9.3, 4.2, z + 2.5], size: [.7, 2.8, .22], wallSide: side, wallGap: .35, glow: 5, flicker: i === 3 && side > 0 ? '1' : '' });
         if (i < 6) out.push({ type: 'lamppost', name: 'Lamp post', at: [side * 6.6, .14, z - 5], turn: [0, 90 + side * 90, 0], reach: 1.6, power: 260 });
+        // against the walls: bins, bags, newspaper boxes; at the kerb: hydrants, bollards, meters
+        out.push({ type: 'clutter', name: 'By the wall', kinds: 'bin,bags,bags,paperbox', every: 4, seed: i * 2 + k + 1, side: side > 0 ? 'right' : 'left', at: [side * 9.45, .14, z], size: [1, 1, 12] });
+        if (i % 2) out.push({ type: 'clutter', name: 'At the kerb', kinds: 'hydrant,bollard,meter,bollard', every: 5, seed: i * 7 + k + 3, at: [side * 6.55, .14, z + 1], size: [1, 1, 10] });
         if (i % 2 === 0) out.push({ type: 'car', name: 'Parked car', model: kinds[(i + k) % 4], color: paint[(i * 2 + k) % 6], lights: false, at: [side * 4.9, 0, z - 2], turn: [0, side > 0 ? 0 : 180, 0] });
       }
       out.push({ type: 'car', name: 'Car', model: 'sedan', color: '#101114', beams: '1', face: 'travel', keys: { at: [{ t: 0, v: [1.9, 0, -40] }, { t: d, v: [1.9, 0, -2] }] } });

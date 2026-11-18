@@ -728,6 +728,15 @@ const World = (() => {
       const render = new T.RenderPass(scene, cam), ao = new T.GTAOPass(scene, cam, W, H),
         bokeh = new T.BokehPass(scene, cam, { focus: 1000, aperture: 0, maxblur: .01 }),
         bloom = new T.UnrealBloomPass(new T.Vector2(W, H), .3, .6, .82), out = new T.OutputPass(), film = new T.ShaderPass(FILM), rays = new T.ShaderPass(RAYS);
+      // glows (halos, light pools, flares: sprites and see-through, additive things) are not surfaces: the contact
+      // shade must not see them, or it draws each one as a dark square
+      const drawAo = ao.render.bind(ao);
+      ao.render = (...a) => {
+        const hidden = [];
+        ao.scene?.traverse(n => { if (!n.visible) return; const m = n.material, ms = Array.isArray(m) ? m : [m];
+          if (n.isSprite || n.isPoints || ((n.isMesh || n.isLine) && ms.some(x => x && (x.blending === T.AdditiveBlending || (x.transparent && !x.depthWrite))))) { n.visible = false; hidden.push(n); } });
+        try { drawAo(...a); } finally { for (const n of hidden) n.visible = true; }
+      };
       const haze = new T.ShaderPass(HAZE), drawHaze = haze.render.bind(haze);
       haze.render = (rr, w, r, dt, m) => { haze.uniforms.tDepth.value = r.depthTexture; drawHaze(rr, w, r, dt, m); };
       for (const p of [render, haze, ao, bokeh, rays, bloom, out, film]) composer.addPass(p);

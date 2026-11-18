@@ -167,7 +167,7 @@ const City = (() => {
       const dirt = g.createLinearGradient(0, H - 4 * PX, 0, H); dirt.addColorStop(0, 'rgba(0,0,0,0)'); dirt.addColorStop(1, 'rgba(0,0,0,.35)'); g.fillStyle = dirt; g.fillRect(0, 0, W, H);
       const storey = 3.1, ground = 4.4, floors = Math.max(0, Math.floor((h - ground) / storey));
       const bays = Math.max(1, Math.round(w / (1.7 + r() * .7))), bay = w / bays, ww = Math.min(bay - .45, 1 + r() * .5), wh = 1.45 + r() * .3;
-      const lit = clamp((P.lit ?? 45) / 100, 0, 1);
+      const lit = clamp((P.lit ?? 45) / 100, 0, 1), rooms = [];
       // upper floors: each window a room
       for (let f = 0; f < floors; f++) {
         const yTop = H - (ground + (f + 1) * storey) * PX, sill = yTop + (storey - wh - .55) * PX;
@@ -179,7 +179,8 @@ const City = (() => {
           // the opening: set back from the wall, a stone sill under it
           b.fillStyle = '#303030'; b.fillRect(x - 3, y - 3, pw + 6, ph + 6); g.fillStyle = 'rgba(0,0,0,.5)'; g.fillRect(x - 3, y - 3, pw + 6, ph + 6);
           g.fillStyle = '#7d7a73'; g.fillRect(x - 6, y + ph + 2, pw + 12, 6); b.fillStyle = '#ffffff'; b.fillRect(x - 6, y + ph + 2, pw + 12, 6);
-          const on = roomOn && r() < lit;
+          const on = roomOn && r() < lit, room = { x, y, pw, ph, covers: [] };
+          if (on) rooms.push(room);
           if (on) {
             const [tone, power] = ROOMS[Math.floor(r() * ROOMS.length)], tv = r() < .08;
             // the room: brighter at the ceiling where its lamp is, a back wall, maybe a curtain, blinds or a silhouette
@@ -188,8 +189,9 @@ const City = (() => {
             if (r() < .4) { e.fillStyle = 'rgba(30,20,12,.55)'; e.fillRect(x + pw * (.55 + r() * .3), y + ph * .45, pw * .3, ph * .55); }        // furniture
             const cover = r();
             if (cover < .3) { const cw = pw * (.25 + r() * .3), cc = ['#b03a2e', '#e8d8b8', '#5a7a4a', '#c99a3a', '#7a5a8a'][Math.floor(r() * 5)];
-              e.globalAlpha = .9; e.fillStyle = cc; e.fillRect(x, y, cw, ph); e.fillRect(x + pw - cw * .8, y, cw * .8, ph); }                            // curtains, lit through
-            else if (cover < .5) { e.globalAlpha = .55; e.fillStyle = '#1a140c'; for (let k = 0; k < ph; k += 5) e.fillRect(x, y + k, pw, 2); }  // blinds
+              e.globalAlpha = .9; e.fillStyle = cc; e.fillRect(x, y, cw, ph); e.fillRect(x + pw - cw * .8, y, cw * .8, ph);                              // curtains, lit through
+              room.covers.push([x, cw], [x + pw - cw * .8, cw * .8]); }
+            else if (cover < .5) { e.globalAlpha = .55; e.fillStyle = '#1a140c'; for (let k = 0; k < ph; k += 5) e.fillRect(x, y + k, pw, 2); room.covers.push([x, pw]); }  // blinds
             e.globalAlpha = 1;
             g.fillStyle = '#151210'; g.fillRect(x, y, pw, ph);
             q.fillStyle = '#101010'; q.fillRect(x, y, pw, ph);
@@ -242,8 +244,74 @@ const City = (() => {
       }
       // a cornice at the top
       g.fillStyle = 'rgba(255,255,255,.08)'; g.fillRect(0, 0, W, .5 * PX); b.fillStyle = '#ffffff'; b.fillRect(0, 0, W, .45 * PX);
-      return { map: texOf(col), emissive: texOf(em), normal: normalFrom(ht, 2.2), rough: texOf(ro, false), shops };
+      // where each lit room is: for each pixel of its glass, how far across (red) and down (green) the window it is,
+      // and blue where the room shows (not behind a curtain or blind), so the shader can look into it
+      const cell = canvas(W, H), cg = cell.getContext('2d'), cd = cg.createImageData(W, H);
+      for (const rm of rooms) {
+        const x0 = Math.max(0, Math.round(rm.x)), y0 = Math.max(0, Math.round(rm.y)), x1 = Math.min(W, Math.round(rm.x + rm.pw)), y1 = Math.min(H, Math.round(rm.y + rm.ph));
+        for (let yy = y0; yy < y1; yy++) for (let xx = x0; xx < x1; xx++) {
+          const covered = rm.covers.some(([cx, cw]) => xx >= cx && xx < cx + cw), i = (yy * W + xx) * 4;
+          cd.data[i] = (xx - rm.x) / rm.pw * 255; cd.data[i + 1] = (yy - rm.y) / rm.ph * 255; cd.data[i + 2] = covered ? 0 : 255; cd.data[i + 3] = 255;
+        }
+      }
+      cg.putImageData(cd, 0, 0);
+      const cellTex = new T.CanvasTexture(cell); cellTex.magFilter = cellTex.minFilter = T.NearestFilter; cellTex.generateMipmaps = false;
+      return { map: texOf(col), emissive: texOf(em), normal: normalFrom(ht, 2.2), rough: texOf(ro, false), shops, cell: cellTex, ww: rooms[0] ? rooms[0].pw / PX : 1.2, wh: rooms[0] ? rooms[0].ph / PX : 1.5 };
     });
+  }
+  // ----- rooms behind the glass -----
+  // Each lit window is a room of its own: the ray from the eye is followed in through the glass to the wall, floor or
+  // ceiling of a box 3.6 m wide, 2.7 m high and 4 m deep, which is lit by a lamp at the middle of its ceiling and
+  // coloured by the room's light. So the rooms have depth, and shift as the camera passes, as real ones do.
+  function rooms(m, fx) {
+    m.onBeforeCompile = sh => {
+      sh.uniforms.cellMap = { value: fx.cell }; sh.uniforms.winSize = { value: new T.Vector2(fx.ww, fx.wh) };
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', `#include <common>
+uniform sampler2D cellMap; uniform vec2 winSize;
+float rh( vec2 p ) { return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453 ); }`)
+        .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+{
+  vec4 cl = texture2D( cellMap, vMapUv );
+  if ( cl.b > .5 ) {
+    vec3 N = normalize( vNormal ), up = normalize( ( viewMatrix * vec4( 0., 1., 0., 0. ) ).xyz );
+    vec3 Tg = normalize( cross( up, N ) ), Bt = cross( N, Tg );
+    vec3 dir = normalize( -vViewPosition );
+    dir = -dir;
+    vec3 d = vec3( dot( dir, Tg ), dot( dir, Bt ), -dot( dir, N ) );
+    d.z = max( d.z, .05 );
+    // in metres: across from the window's left edge, up from its sill, in from the glass
+    vec3 p = vec3( cl.r * winSize.x, ( 1. - cl.g ) * winSize.y, 0. );
+    vec3 lo = vec3( winSize.x * .5 - 1.8, -.9, 0. ), hi = vec3( winSize.x * .5 + 1.8, 1.8, 4. );
+    vec3 tt = ( mix( lo, hi, step( 0., d ) ) - p ) / d;
+    float t = min( tt.x, min( tt.y, tt.z ) );
+    vec3 h = p + d * t;
+    vec3 tone = totalEmissiveRadiance;
+    float seed = rh( floor( vMapUv * 400. ) * .0 + floor( ( vMapUv - vec2( cl.r, -cl.g ) * .0 ) * 1. ) );
+    vec3 col;
+    vec2 lamp = vec2( winSize.x * .5, 2. );
+    if ( t == tt.z ) {
+      // the back wall: lit from the lamp above, a doorway or a picture on it
+      float l = 1.2 / ( 1. + .25 * dot( h.xy - vec2( lamp.x, 1.8 ), h.xy - vec2( lamp.x, 1.8 ) ) );
+      col = tone * ( .55 + .6 * l );
+      vec2 q = h.xy - vec2( winSize.x * .5 + .9, .2 );
+      if ( abs( q.x ) < .45 && q.y < 1.9 && q.y > -1.1 ) col *= .35;
+      vec2 pic = h.xy - vec2( winSize.x * .5 - .7, 1.1 );
+      if ( abs( pic.x ) < .3 && abs( pic.y ) < .22 ) col *= vec3( .6, .5, .45 );
+    } else if ( t == tt.y ) {
+      if ( d.y > 0. ) { float l = 1. / ( 1. + 1.2 * dot( h.xz - vec2( lamp.x, 2. ), h.xz - vec2( lamp.x, 2. ) ) ); col = tone * ( .35 + 1.6 * l ); }
+      else { col = tone * vec3( .42, .32, .24 ) * ( .5 + .5 * smoothstep( 4., 0., distance( h.xz, vec2( lamp.x, 2. ) ) ) ); col *= .85 + .15 * step( .5, fract( h.x * 6. ) ); }
+    } else {
+      col = tone * ( .45 + .35 * smoothstep( 4., .5, h.z ) );
+    }
+    // darker the deeper in, and a touch of the glass's own reflection kept by the surface above
+    col *= mix( 1., .65, h.z / 4. );
+    totalEmissiveRadiance = col;
+  }
+}`);
+    };
+    m.customProgramCacheKey = () => 'riptide-rooms';
+    return m;
   }
   const spillTex = () => once('spill', () => { const cv = canvas(64, 128), g = cv.getContext('2d');
     // across: soft at both ends; along (away from the glass, which is at the top of the picture): fading fast
@@ -260,7 +328,7 @@ const City = (() => {
       const f = facade(P, w, h), side = facade({ ...P, seed: (+P.seed || 1) + 101, shops: 'open' }, d, h);
       const make = (fx, rep) => new T.MeshStandardMaterial({ map: fx.map, emissive: 0xffffff, emissiveMap: fx.emissive, emissiveIntensity: clamp(+P.glow || 1.4, 0, 20),
         normalMap: fx.normal, roughnessMap: fx.rough, roughness: .85, metalness: 0, normalScale: new T.Vector2(1.2, 1.2) });
-      const front = make(f), sideM = make(side), roof = new T.MeshStandardMaterial({ color: '#2a2a2c', roughness: .9 });
+      const front = rooms(make(f), f), sideM = rooms(make(side), side), roof = new T.MeshStandardMaterial({ color: '#2a2a2c', roughness: .9 });
       const geo = new T.BoxGeometry(w, h, d); geo.translate(0, h / 2, 0);
       // a cornice that juts out, and the odd air-conditioning box on the wall
       const extra = [];
@@ -313,13 +381,25 @@ const City = (() => {
     const [w, h, d] = (P.size || [.7, 2.6, .22]).map(Number), color = P.color || '#ff3b6b', kind = P.kind === 'box' ? 'box' : 'neon';
     const on = P.flicker ? (Math.sin(t * 29.7) * Math.sin(t * 9.3 + 2) > -.4 ? 1 : .1) : 1;
     const f = signFace(P.text || 'BAR', color, kind, w, h);
-    const key = ['signm', P.text, color, kind, w, h, d, P.glow].join('|');
+    const wallSide = +P.wallSide < 0 ? -1 : 1, wallGap = clamp(P.wallGap != null && P.wallGap !== '' ? +P.wallGap : .35, 0, 4);
+    const key = ['signm', P.text, color, kind, w, h, d, P.glow, wallSide, wallGap].join('|');
     const c = once(key, () => {
       const face = new T.MeshStandardMaterial({ map: f.map, emissive: 0xffffff, emissiveMap: f.emissive, emissiveIntensity: clamp(+P.glow || 4, 0, 30), roughness: .3, metalness: 0 });
       const edge = new T.MeshStandardMaterial({ color: '#141416', roughness: .4, metalness: .5 });
-      const box = new T.BoxGeometry(d, h, w); // facing along x: it hangs out from a wall that faces +x or -x
-      const bracket = new T.BoxGeometry(.6, .05, .05); bracket.translate(0, h / 2 + .05, 0);
-      return { box, bracket, mats: [face, face, edge, edge, edge, edge], edge, face };
+      // a blade: out from the wall in x, its two faces along the street (+z and -z), read by anyone walking or driving down it
+      const box = new T.BoxGeometry(w, h, d);
+      // a frame standing proud of each face, the arm it hangs from running back to a plate on the wall, a brace under
+      // the arm, two hanger rods
+      const ws = wallSide, gap = wallGap, parts = [];
+      for (const sz of [-1, 1]) for (const [fw, fh, fx, fy] of [[w + .04, .035, 0, h / 2], [w + .04, .035, 0, -h / 2], [.035, h, w / 2, 0], [.035, h, -w / 2, 0]]) {
+        const b = new T.BoxGeometry(fw, fh, .03); b.translate(fx, fy, sz * (d / 2 + .01)); parts.push(b); }
+      const span = w + gap, arm = new T.BoxGeometry(span, .05, .05); arm.translate(ws * (span / 2 - w / 2), h / 2 + .16, 0);
+      const bl = Math.hypot(span * .55, .45), brace = new T.BoxGeometry(bl, .035, .035);
+      brace.rotateZ(ws * Math.atan2(.45, span * .55)); brace.translate(ws * (w / 2 + gap - span * .275), h / 2 + .16 + .225, 0);
+      const plate = new T.BoxGeometry(.03, .7, .2); plate.translate(ws * (w / 2 + gap), h / 2 + .35, 0);
+      for (const x of [-w / 2 + .06, w / 2 - .06]) { const rod = new T.CylinderGeometry(.008, .008, .14, 6); rod.translate(x, h / 2 + .08, 0); parts.push(rod); }
+      const bracket = T.BufferGeometryUtils.mergeGeometries([...parts, arm, brace, plate].map(g => g.toNonIndexed()));
+      return { box, bracket, mats: [edge, edge, edge, edge, face, face], edge, face };
     });
     c.face.emissiveIntensity = clamp(+P.glow || 4, 0, 30) * on;
     const g = new T.Group(), m = new T.Mesh(c.box, c.mats); g.add(m, new T.Mesh(c.bracket, c.edge));
@@ -342,21 +422,31 @@ const City = (() => {
   // ----- a lamp post: a pole, an arm out over the road, a head that lights the street -----
   World.custom.lamppost = (P, t = 0) => {
     const hgt = clamp(+P.size?.[1] || 7, 2, 20), reach = clamp(P.reach != null && P.reach !== '' ? +P.reach : 1.6, 0, 6), color = P.color || '#ffc98a';
-    const c = once('lamp' + hgt + '|' + reach, () => {
-      const metal = new T.MeshStandardMaterial({ color: '#2a2c2e', roughness: .45, metalness: .7 });
-      const pole = new T.CylinderGeometry(.06, .1, hgt, 16); pole.translate(0, hgt / 2, 0);
-      const base = new T.CylinderGeometry(.16, .18, .5, 16); base.translate(0, .25, 0);
-      const arm = new T.CylinderGeometry(.04, .04, reach, 10); arm.rotateZ(Math.PI / 2); arm.translate(reach / 2, hgt - .1, 0);
-      const head = new T.BoxGeometry(.6, .12, .28); head.translate(reach, hgt - .14, 0);
-      const geo = T.BufferGeometryUtils.mergeGeometries([pole, base, arm, head].map(g => g.toNonIndexed()));
-      const lens = new T.PlaneGeometry(.5, .2); lens.rotateX(Math.PI / 2); lens.translate(reach, hgt - .205, 0);
+    const c = once('lamp2|' + hgt + '|' + reach, () => {
+      const metal = new T.MeshPhysicalMaterial({ color: '#25272a', roughness: .42, metalness: .75, clearcoat: .4, clearcoatRoughness: .4 });
+      metal.userData.wets = true;
+      // a tapered pole on a flared, bolted base
+      const pole = new T.CylinderGeometry(.055, .095, hgt - .6, 20); pole.translate(0, (hgt - .6) / 2 + .6, 0);
+      const base = new T.LatheGeometry([[0, 0], [.2, 0], [.2, .04], [.15, .08], [.13, .5], [.1, .6], [0, .6]].map(([x, y]) => new T.Vector2(x, y)), 24);
+      const bolts = [0, 1, 2, 3].map(k => { const b = new T.CylinderGeometry(.018, .018, .04, 6); b.translate(Math.cos(k * Math.PI / 2 + .78) * .17, .05, Math.sin(k * Math.PI / 2 + .78) * .17); return b; });
+      const door = new T.BoxGeometry(.012, .2, .08); door.translate(.135, .3, 0);
+      // the arm: up and out in a long curve to the head
+      const pts = []; for (let k = 0; k <= 16; k++) { const u = k / 16; pts.push(new T.Vector3(u * reach, hgt - .55 + Math.sin(u * Math.PI * .5) * .45, 0)); }
+      const arm = new T.TubeGeometry(new T.CatmullRomCurve3(pts), 24, .035, 10, false);
+      // the head: a slim luminaire, rounded over the top, flat glass underneath
+      const sh = new T.Shape(); sh.moveTo(-.38, 0); sh.lineTo(.36, 0); sh.quadraticCurveTo(.42, .02, .38, .07); sh.quadraticCurveTo(.1, .16, -.3, .12); sh.quadraticCurveTo(-.4, .1, -.38, 0);
+      const head = new T.ExtrudeGeometry(sh, { depth: .24, bevelEnabled: true, bevelSize: .012, bevelThickness: .012, bevelSegments: 3, curveSegments: 10 });
+      head.translate(0, 0, -.12); head.translate(reach + .1, hgt - .17, 0);
+      const geo = T.BufferGeometryUtils.mergeGeometries([pole, base, ...bolts, door, arm, head].map(g => g.index ? g.toNonIndexed() : g));
+      geo.computeVertexNormals();
+      const lens = new T.PlaneGeometry(.62, .2); lens.rotateX(Math.PI / 2); lens.translate(reach + .1, hgt - .175, 0);
       return { geo, metal, lens };
     });
     const g = new T.Group(); const m = new T.Mesh(c.geo, c.metal); m.castShadow = true; g.add(m);
-    const lens = new T.Mesh(c.lens, once('lampLens' + color, () => new T.MeshBasicMaterial({ color: new T.Color(color).multiplyScalar(6), side: T.DoubleSide }))); g.add(lens);
+    const lens = new T.Mesh(c.lens, once('lampLens' + color, () => new T.MeshBasicMaterial({ color: new T.Color(color).multiplyScalar(6), side: T.DoubleSide }))); lens.position.x = 0; g.add(lens);
     const s = new T.SpotLight(new T.Color(color), clamp(+P.power || 220, 0, 5000) / 100 * 8, 30 * M, 1.05, .6, 2);
-    s.position.set(reach * M, (hgt - .25) * M, 0); s.target.position.set(reach * M, 0, 0); s.castShadow = !!P.shadows;
-    const h = halo(color, 2.6, .35); h.position.set(reach, hgt - .3, 0); g.add(h);
+    s.position.set((reach + .1) * M, (hgt - .25) * M, 0); s.target.position.set((reach + .1) * M, 0, 0); s.castShadow = !!P.shadows;
+    const h = halo(color, 2.6, .35); h.position.set(reach + .1, hgt - .3, 0); g.add(h);
     const out = new T.Group(); g.scale.setScalar(M); out.add(g, s, s.target); return out;
   };
 

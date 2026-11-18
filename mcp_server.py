@@ -298,7 +298,7 @@ async def export_scene(path: str, layer: str | None = None, at_time: float | str
 
 
 @mcp.tool()
-async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "mountain", "neon", "oculus", "blocks", "blockisle", ""] = "", name: str | None = None,
+async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "mountain", "neon", "golden", "oculus", "blocks", "blockisle", ""] = "", name: str | None = None,
                     props: dict | None = None) -> dict:
     """Add a 3D world at the bottom of the layers: a whole place to film, with a sky, a sun that casts shadows,
     the ground, the air, props, and a lens. 3D shapes and models above it stand inside it, lit and shadowed by

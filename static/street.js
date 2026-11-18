@@ -199,6 +199,27 @@ const Street = (() => {
     return g;
   };
 
+
+  // ----- a scene to start from: a quiet street at golden hour -----
+  // The sun low at the far end of the street, so everything stands against it: hair and shoulders rimmed with light,
+  // long shadows coming down the pavement, the haze glowing, the wires across the road black against the sky.
+  World.PRESETS.golden = { label: 'Golden hour street', hint: 'A quiet street at sunset: low sun down the road, long shadows, warm haze',
+    p: { sky: 'sunset', sunEl: 5, sunAz: 180, sunPower: 120, clouds: 25, wind: 1, ground: 'floor', groundColor: '#2a2622', floorFinish: '', fog: 5, haze: 10, hazeFall: 90, hazeGlow: 70,
+      dust: 10, rain: 0, wet: 0, eye: 1.6, heading: 0, pitch: 1, travel: 0, lens: 40, focus: 12, dof: 20, exposure: 0, bloom: 28, grain: 14, fringe: 8, ao: 35,
+      streaks: 0, flare: 18, godrays: 35, letterbox: '2.39', shutter: 180, render: 'preview' },
+    objects: () => {
+      const out = [{ type: 'street', name: 'Street', roadWidth: 10, pavement: 4.5, size: [1, 1, 260], at: [0, 0, -80] }];
+      const paint = ['#e8e6e0', '#22334a', '#8c9096', '#5a0f12', '#1b1d22', '#3a4a3a'], kinds = ['sedan', 'hatch', 'suv', 'hatch'];
+      for (let i = 0; i < 10; i++) for (const side of [-1, 1]) {
+        const z = 6 - i * 13, w = 9 + (i * 5 + (side > 0 ? 2 : 0)) % 6, k = side > 0 ? 1 : 0;
+        out.push({ type: 'building', name: `Building ${out.length}`, at: [side * (9.8 + w / 2), 0, z], size: [w, 12 + ((i * 11 + side * 7 + 30) % 22), 12], seed: 40 + i * 2 + k, lit: 18 });
+        if (i % 2 === 0) out.push({ type: 'lamppost', name: 'Lamp post', at: [side * 5.65, .14, z - 4], turn: [0, 90 + side * 90, 0], reach: 1.4, power: 0 });
+        if (i % 3 !== 1) out.push({ type: 'car', name: 'Parked car', model: kinds[(i + k) % 4], color: paint[(i * 3 + k) % 6], lights: false, at: [side * 3.9, 0, z - 7], turn: [0, side > 0 ? 0 : 180, 0] });
+        out.push({ type: 'clutter', name: 'By the wall', kinds: 'bin,bags,paperbox', every: 5, seed: 70 + i * 2 + k, side: side > 0 ? 'right' : 'left', at: [side * 9.3, .14, z], size: [1, 1, 12] });
+        if (i % 2) out.push({ type: 'wires', name: 'Wires', count: 3, sag: .9, at: [0, 9 + (i % 3), z], size: [20, 1, 1] });
+      }
+      return out;
+    } };
   World.PARTS.push('clutter');
   SceneEd.add('clutter', { type: 'clutter', size: [1, 1, 40], seed: 3, every: 3.5 }, 'Street clutter');
   SceneEd.extras.push({

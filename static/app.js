@@ -4941,15 +4941,16 @@ const Sessions = (() => {
     // each session can be deleted, after asking; one open in another window is that window's to close first
     n?.querySelectorAll('.mitem[data-value]').forEach(b => {
       const x = all.find(y => y.id === b.dataset.value); if (!x || (x.live && !x.current)) return;
-      const del = document.createElement('i'); del.className = 'sess-del'; del.title = 'Delete this session';
+      const del = document.createElement('i'); del.className = 'sess-del'; del.title = 'Delete this session (Shift-click: no question)';
       del.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-      del.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); remove(x); });
+      del.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); remove(x, e.shiftKey); });
       b.appendChild(del);
     });
   }
-  async function remove(x) {
+  // with Shift held, at once: no question
+  async function remove(x, now = false) {
     UI.close();
-    const ok = await UI.dialog({ title: `Delete “${x.name || 'Untitled'}”?`,
+    const ok = now || await UI.dialog({ title: `Delete “${x.name || 'Untitled'}”?`,
       body: x.current ? 'Its work in this window is gone for good, and the window starts a new session. Files you saved to disk stay.'
         : 'Its work is gone for good. Files you saved to disk stay.', ok: 'Delete' });
     if (!ok) return;

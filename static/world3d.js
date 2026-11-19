@@ -12,7 +12,8 @@ const World = (() => {
   const LETTERBOXES = [['none', 'None'], ['2.39', '2.39 : 1 (scope)'], ['2', '2 : 1'], ['1.85', '1.85 : 1']];
   const RENDERS = [['preview', 'Preview: fast'], ['path', 'Path traced: real light'], ['native', 'Photoreal: rendered natively']];
   const SKIES = [['sunset', 'Golden hour'], ['day', 'Clear day'], ['dusk', 'Dusk'], ['haze', 'Hazy'], ['overcast', 'Overcast'],
-    ['night', 'Night'], ['city', 'City night (no stars, cloud lit by the streets)'], ['studio', 'Studio']];
+    ['night', 'Night'], ['city', 'City night (no stars, cloud lit by the streets)'], ['studio', 'Studio'],
+    ['violet', 'Violet night (a pink glow low down)'], ['ember', 'Ember (a red glow, as underground fire)'], ['torch', 'Torchlit dark (warm, almost black)'], ['sulfur', 'Sulfur haze (yellow-green)']];
   const GROUNDS = [['ocean', 'Ocean'], ['field', 'Wheat field'], ['desert', 'Desert'], ['mountains', 'Mountain road'], ['floor', 'Studio floor'], ['none', 'None']];
   // sky palettes: the zenith, the horizon, the sun, clouds where the sun reaches them and where it does not
   const PALETTE = {
@@ -25,6 +26,11 @@ const World = (() => {
     // a city's night: no stars, low cloud glowing a dull orange-brown from the street lights below it
     city: { zen: '#0a0a0d', hor: '#3a2b24', sun: '#ffcf9a', lit: '#3a3030', shade: '#0e0c0d', disk: 0, power: .3 },
     studio: { zen: '#25272d', hor: '#5b5d66', sun: '#ffffff', lit: '#000000', shade: '#000000', disk: 0, power: 1.8 },
+    // moody worlds: dark overhead, a strong colour low down that the haze and fog take on
+    violet: { zen: '#12061a', hor: '#b83c8a', sun: '#ff9ad5', lit: '#7a2a66', shade: '#1a0820', disk: 0, power: .45 },
+    ember: { zen: '#140303', hor: '#a3170d', sun: '#ff6a3a', lit: '#5a120c', shade: '#120202', disk: 0, power: .5 },
+    torch: { zen: '#050302', hor: '#3a220f', sun: '#ffb060', lit: '#2a1a0c', shade: '#060403', disk: 0, power: .3 },
+    sulfur: { zen: '#121103', hor: '#8a861c', sun: '#f5e66a', lit: '#4a4510', shade: '#141203', disk: 0, power: .6 },
   };
   const FIELDS = ['sky', 'hdri', 'hdriTurn', 'hdriPower', 'sunEl', 'sunAz', 'sunPower', 'clouds', 'wind',
     'ground', 'groundColor', 'floorFinish', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH', 'sway', 'swayLoop',

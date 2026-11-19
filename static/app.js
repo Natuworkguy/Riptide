@@ -97,6 +97,9 @@ const FLUTE = ['flute', 'fluteDir', 'fluteBend', 'fluteStreak', 'fluteLines', 'f
 const COMMON = ['x', 'y', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'blur', 'shadow', 'rgb', 'boil', 'vapor', ...ECHO, 'zblur', ...SMEAR, ...FLUTE, ...ADJUST, ...FINISH];
 // cutting a person out of a picture or video with no green screen (cutout.js)
 const CUTP = ['cutout', 'cutEdge', 'cutGrow'];
+// Blurred fill: the layer drawn again behind itself, zoomed to fill the frame, blurred and darker, as vertical
+// shorts fill the space round a wide clip
+const FILLP = ['fillBehind', 'fillBlur', 'fillDim'];
 // turned on X and Y and pushed back in depth: any layer with 3D on, and the 3D layers themselves
 const DEPTH = ['rotX', 'rotY', 'z'];
 const FLAT = [...COMMON, 'three', ...DEPTH];
@@ -114,8 +117,8 @@ const PROPS = {
   // an organic shape: a soft polygon of points sides, pushed out of true by wobble, its outline changing as morph moves
   blob:    [...FLAT, 'w', 'h', 'points', 'wobble', 'morph', 'seed', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
   text:    [...FLAT, 'text', 'font', 'size', 'weight', 'italic', 'align', 'tcase', 'lineh', 'spacing', 'wordGap', 'reveal', 'retype', 'words', 'wordTimes', 'wordStart', 'wordEvery', 'wordMove', 'wordFill', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
-  image:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...CUTP, ...KEYP, ...PHYS],
-  video:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...CLIP, ...CUTP, ...KEYP, ...PHYS],
+  image:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...FILLP, ...CUTP, ...KEYP, ...PHYS],
+  video:   [...FLAT, 'w', 'h', 'radius', 'stroke', 'strokeWidth', ...CLIP, ...FILLP, ...CUTP, ...KEYP, ...PHYS],
   // speed lines: streaks rushing out from the middle of the box to its edge, as a dash forward or a hit
   speedlines: [...FLAT, 'w', 'h', 'count', 'lineLen', 'thick', 'hole', 'rush', 'seed', 'fill'],
   // shoot through: something out of focus right in front of the lens (fabric, leaves, a light leak), a clear spot to
@@ -128,16 +131,16 @@ const PROPS = {
   figure:  [...COMMON, 'w', 'h', 'fill', 'stroke', 'strokeWidth', 'side', 'limb', 'caps', ...Figure.JOINTS, ...PHYS],
   camera:  ['follow', 'followMix', 'x', 'y', 'orbit', 'tilt', 'dolly', 'zoom', 'rotation'],
   // a whole place to film (world3d.js): the 3D shapes and models above it stand in it
-  world:   ['opacity', ...ADJUST, ...FINISH, ...World.FIELDS],
+  world:   ['opacity', ...FILLP, ...ADJUST, ...FINISH, ...World.FIELDS],
   // a group (see groupOf): draws nothing itself, and moves, turns, scales and fades its layers with its box
   group:   ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy', 'opacity'],
 };
-ANIM.push(...World.NUMBERS, ...World.COLORS, 'fitPad', 'followMix', 'wordGap');
+ANIM.push(...World.NUMBERS, ...World.COLORS, 'fitPad', 'followMix', 'wordGap', 'fillBlur', 'fillDim');
 const GROUPS = [['Transform', ['x', 'y', 'w', 'h', 'd', 'rotation', 'scale', 'sx', 'sy']],
   ['3D', ['three', 'shape', 'rotX', 'rotY', 'z', 'material', 'lightAngle']], ['Camera', ['follow', 'followMix', 'orbit', 'tilt', 'dolly', 'zoom']], ['Fit around', ['fit', 'fitPad']],
   ['Drawing', ['pathd', 'vb', 'pfill']], ['Style', ['fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', 'radius', 'points', 'wobble', 'morph', 'seed', 'sweep', 'opacity']],
   ['Text', ['text', 'font', 'weight', 'size', 'lineh', 'italic', 'align', 'tcase', 'spacing', 'wordGap', 'reveal', 'retype']], ['Changing words', ['words', 'wordTimes', 'wordStart', 'wordEvery', 'wordMove', 'wordFill']], ['Pose', ['side', 'limb', 'caps', ...Figure.JOINTS]], ['Physics', PHYS],
-  ['Clip', CLIP], ['Speed lines', ['count', 'lineLen', 'thick', 'hole', 'rush']], ['Shoot through', ['thing', 'cover', 'holeX', 'holeY', 'soft', 'drift', 'glints']], ['Effects', ['blur', 'zblur', 'shadow', 'rgb', 'boil', 'vapor']], ['Echo', ECHO], ['Pixel smear', SMEAR], ['Fluted glass', FLUTE], ['Cut out', CUTP], ['Adjust', ADJUST], ['Green screen', KEYP], ['Mask', MASK],
+  ['Clip', CLIP], ['Vertical short', FILLP], ['Speed lines', ['count', 'lineLen', 'thick', 'hole', 'rush']], ['Shoot through', ['thing', 'cover', 'holeX', 'holeY', 'soft', 'drift', 'glints']], ['Effects', ['blur', 'zblur', 'shadow', 'rgb', 'boil', 'vapor']], ['Echo', ECHO], ['Pixel smear', SMEAR], ['Fluted glass', FLUTE], ['Cut out', CUTP], ['Adjust', ADJUST], ['Green screen', KEYP], ['Mask', MASK],
   ['Grade', Grade.GRADE], ['Curves', ['curves']], ['Vignette and LUT', LOOKP]];
 GROUPS.splice(1, 0, ...World.GROUPS);
 const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', scale: 'Scale', sx: 'Stretch X', sy: 'Stretch Y',
@@ -150,7 +153,7 @@ const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', sca
   smear: 'Smear px', smearDir: 'Smear to°', smearAt: 'Brighter than %',
   flute: 'Rib width px', fluteDir: 'Ribs run', fluteBend: 'Bend %', fluteStreak: 'Streak px', fluteLines: 'Fine lines %', fluteShine: 'Shine %', fluteChroma: 'Colour split px', fluteShift: 'Slide px',
   echo: 'Echoes', echoGap: 'Echo gap s', echoFade: 'Echo fade %', echoScale: 'Echo grow %', zblur: 'Zoom blur',
-  cutout: 'Cut out person', cutEdge: 'Edge soft', cutGrow: 'Grow', count: 'Lines', lineLen: 'Length %', thick: 'Thickness', hole: 'Clear middle %', rush: 'Rush %', thing: 'In front', cover: 'Covers %', holeX: 'Clear spot x %', holeY: 'Clear spot y %', soft: 'Out of focus %', drift: 'Drift', glints: 'Glints',
+  fillBehind: 'Blurred fill', fillBlur: 'Fill blur', fillDim: 'Fill brightness %', cutout: 'Cut out person', cutEdge: 'Edge soft', cutGrow: 'Grow', count: 'Lines', lineLen: 'Length %', thick: 'Thickness', hole: 'Clear middle %', rush: 'Rush %', thing: 'In front', cover: 'Covers %', holeX: 'Clear spot x %', holeY: 'Clear spot y %', soft: 'Out of focus %', drift: 'Drift', glints: 'Glints',
   minv: 'Invert', chroma: 'Key out', keyColor: 'Key colour', keyTol: 'Tolerance', keySoft: 'Softness', spill: 'Spill %',
   temp: 'Warmth', tint: 'Tint', expo: 'Exposure', lvBlack: 'In black', gamma: 'Gamma', lvWhite: 'In white', outBlack: 'Out black',
   outWhite: 'Out white', vig: 'Vignette', vigSize: 'Size %', lut: 'LUT', lutMix: 'LUT mix %',
@@ -165,7 +168,7 @@ const CAMERA_LABEL = { x: 'Look at X', y: 'Look at Y', rotation: 'Roll°' };
 Object.assign(LABEL, World.LABELS);
 const STEP = { echoGap: .01, gradMorph: 1, opacity: .05, scale: .05, sx: .05, sy: .05, reveal: .05, erase: .05, zoom: .05, expo: .05, gamma: .05, ...World.STEP };
 const PALETTE = ['#7c5cff', '#ff5c8a', '#20c997', '#ffb020', '#3fa9ff', '#ff7a45'];
-const DEFAULTS = { smear: 0, smearDir: 0, smearAt: 55, flute: 0, fluteDir: 'down', fluteBend: 40, fluteStreak: 30, fluteLines: 55, fluteShine: 40, fluteChroma: 3, fluteShift: 0, echo: 0, echoGap: .05, echoFade: 80, echoScale: 0, zblur: 0, cutout: false, cutEdge: 2, cutGrow: 0,
+const DEFAULTS = { fillBehind: false, fillBlur: 40, fillDim: 55, smear: 0, smearDir: 0, smearAt: 55, flute: 0, fluteDir: 'down', fluteBend: 40, fluteStreak: 30, fluteLines: 55, fluteShine: 40, fluteChroma: 3, fluteShift: 0, echo: 0, echoGap: .05, echoFade: 80, echoScale: 0, zblur: 0, cutout: false, cutEdge: 2, cutGrow: 0,
   count: 90, lineLen: 30, thick: 3, hole: 35, rush: 100, thing: 'ribbon', cover: 60, holeX: 56, holeY: 55, soft: 60, drift: 25, glints: 5, pathd: '', vb: '0 0 100 100', pfill: false, boil: 0, vapor: 0, morph: 0, wobble: 40, seed: 1, rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0, rgb: 0,
   words: '', wordGap: 0, wordTimes: '', wordStart: 1, wordEvery: .5, wordMove: .25, wordFill: '', fit: '', fitPad: 30, follow: '', followMix: 100,
   size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, erase: 0, retype: '', font: 'Inter', italic: false, align: 'center', tcase: 'none', lineh: 110,
@@ -565,12 +568,31 @@ function filterOf(o, k = 1) {
 }
 // while an echo is drawn: how see-through it is, and how much bigger
 let echoing = null;
+// while a layer is drawn on its own, for its blurred fill
+let filling = false, fillCanvas = null;
+function drawFilled(c, L, o, t) {
+  const M = c.getTransform(), k = Math.max(.25, Math.min(4, Math.hypot(M.a, M.b) || 1));
+  const W = Math.max(2, Math.round(S.w * k)), H = Math.max(2, Math.round(S.h * k));
+  if (!fillCanvas) fillCanvas = document.createElement('canvas');
+  const off = fillCanvas; if (off.width !== W || off.height !== H) { off.width = W; off.height = H; }
+  const oc = off.getContext('2d'); oc.setTransform(1, 0, 0, 1, 0, 0); oc.clearRect(0, 0, W, H); oc.setTransform(k, 0, 0, k, 0, 0);
+  filling = true; try { drawLayer(oc, L, t); } finally { filling = false; }
+  // the layer's own box, zoomed until it covers the frame, behind it
+  const w = Math.abs((o.w ?? S.w) * o.scale * o.sx), h = Math.abs((o.h ?? S.h) * o.scale * o.sy);
+  if (w > 1 && h > 1) {
+    const z = Math.max(S.w / w, S.h / h) * 1.08, dw = w * z, dh = h * z;
+    c.save(); c.filter = `blur(${Math.max(0, +o.fillBlur || 0) * k}px) brightness(${Math.max(0, +o.fillDim || 0)}%)`;
+    c.drawImage(off, (o.x - w / 2) * k, (o.y - h / 2) * k, w * k, h * k, (S.w - dw) / 2, (S.h - dh) / 2, dw, dh); c.restore();
+  }
+  c.drawImage(off, 0, 0, W, H, 0, 0, S.w, S.h);
+}
 function drawLayer(c, L, t) {
   if (L.type === 'camera') return;
   // a 3D shape or model standing in a 3D world is drawn by the world
   if (World.worldOf(L, t)) return;
   const o = state(L, t);
   o._t = t;
+  if (o.fillBehind && !filling && !echoing && (L.type === 'video' || L.type === 'image' || L.type === 'world')) return drawFilled(c, L, o, t);
   // its echoes first, the oldest furthest back, then the layer itself over them
   if (o.echo >= 1 && !echoing && L.type !== 'world' && L.type !== 'adjust') {
     const n = Math.min(16, Math.round(o.echo)), gap = Math.max(1 / 120, +o.echoGap || .05), fade = Math.max(0, Math.min(100, o.echoFade)) / 100;
@@ -1652,6 +1674,7 @@ function renderProps() {
     for (const [g, keys] of GROUPS) {
       const ks = keys.filter(k => list.includes(k)); if (!ks.length) continue;
       h += `<div class="sec"><div class="sech">${g}</div><div class="grid">`;
+      if (g === 'Vertical short') h += `<div class="btnrow wide"><button class="tb small" data-cmd="makeshort" title="A 9:16 frame, black behind, this across the middle and a caption above it">Make a vertical short with this</button></div>`;
       if (g === 'Adjust') h += `<div class="row wide"><label>Look</label><button class="selectbtn" data-menu="look"><span>Apply a look…</span>${ICON.chev}</button></div>`;
       if (g === 'World' && L.type === 'world') { const n = Array.isArray(L.p.objects) ? L.p.objects.length : 0;
         h += `<div class="row wide"><label>Scene</label><button class="selectbtn" data-menu="worldscene"><span>${n ? `${n} prop${n > 1 ? 's' : ''} · start from…` : 'Start from a scene…'}</span>${ICON.chev}</button></div>`;
@@ -1696,7 +1719,7 @@ function renderProps() {
         else if (k === 'weight') field = `<button class="selectbtn" data-menu="weight"><span>${WEIGHTS.find(w => w[0] == v)?.[1] || v}</span>${ICON.chev}</button>`;
         else if (k === 'font') field = `<button class="selectbtn" data-menu="font"><span style="font-family:${esc(Fonts.stack(v))}">${esc(v || 'Inter')}</span>${ICON.chev}</button>`;
         else if (k === 'mask' || k === 'matte' || k === 'lut') field = `<button class="selectbtn" data-menu="${k}"><span>${esc(k === 'lut' ? v || 'None' : ((k === 'mask' ? MASK_KINDS : TRACK_MATTES).find(x => x[0] === (v || 'none')) || ['', 'None'])[1])}</span>${ICON.chev}</button>`;
-        else if (k === 'minv' || k === 'chroma' || k === 'cutout') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="${k}"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
+        else if (k === 'minv' || k === 'chroma' || k === 'cutout' || k === 'fillBehind') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="${k}"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
         else if (k === 'reverse' || k === 'mute' || k === 'swayLoop' || k === 'rainPools') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="${k}"${k === 'swayLoop' ? ' title="Fit the sway to the video, so its last frame meets its first"' : k === 'rainPools' ? ' title="The rain gathers in the low places into puddles that grow while it rains"' : ''}><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
         else if (k === 'italic') field = `<button class="switch ${v ? 'on' : ''}" data-cmd="italic"><span>${v ? 'On' : 'Off'}</span><i></i></button>`;
         else if (k === 'align') field = `<button class="selectbtn" data-menu="align"><span>${(TEXT_ALIGNS.find(a => a[0] === v) || TEXT_ALIGNS[1])[1]}</span>${ICON.chev}</button>`;
@@ -1904,7 +1927,8 @@ Pn.addEventListener('click', e => {
   else if (t.dataset.cmd === 'flipx' || t.dataset.cmd === 'flipy') { const k = t.dataset.cmd === 'flipx' ? 'sx' : 'sy'; setProp(L, k, -state(L, time)[k]); refresh(); }
   else if (t.dataset.cmd === 'fitcanvas') fitCanvasToImage(L);
   else if (t.dataset.cmd === 'italic') { L.p.italic = !L.p.italic; refresh(); }
-  else if (t.dataset.cmd === 'minv' || t.dataset.cmd === 'chroma' || t.dataset.cmd === 'pfill' || t.dataset.cmd === 'cutout') {
+  else if (t.dataset.cmd === 'makeshort') makeShort(L);
+  else if (t.dataset.cmd === 'minv' || t.dataset.cmd === 'chroma' || t.dataset.cmd === 'pfill' || t.dataset.cmd === 'cutout' || t.dataset.cmd === 'fillBehind') {
     L.p[t.dataset.cmd] = !L.p[t.dataset.cmd];
     if (t.dataset.cmd === 'cutout' && L.p.cutout) status('Cutting out the person: the first time, Riptide sets it up and downloads its model (about 170 MB)');
     refresh(); }
@@ -4140,6 +4164,25 @@ const LOOKS = {
   Noir: { gray: 100, contrast: 135, bright: 95 }, Mono: { gray: 100 }, Punch: { contrast: 130, sat: 125, bright: 98 }, Negative: { invert: 100 },
   'Hard B&W': { gray: 100, contrast: 175, bright: 92 }, 'Night drive': { sat: 55, contrast: 145, bright: 88, sepia: 18, hue: -12 },
 };
+// A vertical short made from a wide clip, picture or 3D world: the frame 1080 x 1920, black behind, the layer
+// across the middle at its own shape, and a caption in two lines above it (as the vertical "what if" shorts do).
+// Its blurred fill (in the same section) fills the black with the clip itself instead.
+function makeShort(L) {
+  const W = 1080, H = 1920;
+  if (S.w !== W || S.h !== H) resizeComp(W, H, 'fit');
+  const ar = L.type === 'world' ? 16 / 9 : Math.max(.5, Math.abs((L.p.w || 16) / (L.p.h || 9))), h = Math.round(W / ar);
+  Object.assign(L.p, { x: W / 2, y: H / 2, w: W, h, rotation: 0, scale: 1, sx: 1, sy: 1 });
+  for (const k of ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy']) delete L.keys[k];
+  if (!S.layers.some(l => l.p.short === 'back')) {
+    const back = makeLayer('rect', { x: W / 2, y: H / 2, w: W, h: H, radius: 0, fill: '#000000', short: 'back' }, 'Black behind');
+    S.layers.splice(S.layers.indexOf(back), 1); S.layers.unshift(back);
+  }
+  const top = H / 2 - h / 2;
+  if (!S.layers.some(l => l.p.short === 'caption'))
+    makeLayer('text', { x: W / 2, y: Math.max(140, top - 110), text: 'Your caption\nin two lines', size: 46, weight: 600, font: 'Inter', fill: '#ffffff', lineh: 120, short: 'caption' }, 'Caption');
+  sel = S.layers.find(l => l.p.short === 'caption')?.id ?? L.id;
+  refresh(); status('A vertical short: write your caption, and turn on Blurred fill for the clip behind instead of black');
+}
 function fitCanvasToImage(L) {
   const a = S.assets[L.p.asset]; if (!a) return;
   S.w = a.w; S.h = a.h; Object.assign(L.p, { x: a.w / 2, y: a.h / 2, w: a.w, h: a.h, rotation: 0, scale: 1 });

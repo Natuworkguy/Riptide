@@ -411,6 +411,7 @@ const Blocks = (() => {
   function demo(kind) {
     if (demos.has(kind)) return demos.get(kind);
     if (kind === 'jungle') { const st = jungle(); demos.set(kind, st); return st; }
+    if (MOODY[kind]) { const st = MOODY[kind](); demos.set(kind, st); return st; }
     const X = 26, Y = 26, Z = 26, grid = new Uint16Array(X * Y * Z), palette = [], ids = new Map();
     const id = (name, props = {}) => { const k = name + JSON.stringify(props); if (!ids.has(k)) { ids.set(k, palette.length); palette.push({ name, props }); } return ids.get(k) + 1; };
     const set = (x, y, z, name, props) => { if (x >= 0 && y >= 0 && z >= 0 && x < X && y < Y && z < Z) grid[(y * Z + z) * X + x] = id(name, props); };
@@ -539,6 +540,116 @@ const Blocks = (() => {
     set(dx1, deck + 1, 76, 'barrel'); set(dx1, deck + 1, 77, 'oak_planks'); set(dx1, deck + 2, 77, 'barrel');
     return { size: [X, Y, Z], palette, grid };
   }
+
+  // ----- dark, moody block worlds, made in code: a graveyard, a lava sea and a torchlit dungeon -----
+  function grid(X, Y, Z, seed) {
+    const g = new Uint16Array(X * Y * Z), palette = [], ids = new Map();
+    const id = (name, props = {}) => { const k = name + JSON.stringify(props); if (!ids.has(k)) { ids.set(k, palette.length); palette.push({ name, props }); } return ids.get(k) + 1; };
+    const inb = (x, y, z) => x >= 0 && y >= 0 && z >= 0 && x < X && y < Y && z < Z;
+    const set = (x, y, z, name, props) => { if (inb(x, y, z)) g[(y * Z + z) * X + x] = name ? id(name, props) : 0; };
+    const get = (x, y, z) => inb(x, y, z) ? g[(y * Z + z) * X + x] : 0;
+    let s = seed; const rnd = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+    const pick = list => list[Math.floor(rnd() * list.length)];
+    // smooth rolling ground: a few waves of different sizes
+    const wave = (x, z, k = 1) => Math.sin(x * .13 * k + seed) * 1.2 + Math.cos(z * .11 * k - seed) * 1.1 + Math.sin((x + z) * .07 * k) * 1.4 + Math.sin(x * .31 + z * .23) * .5;
+    return { set, get, rnd, pick, wave, done: () => ({ size: [X, Y, Z], palette, grid: g }) };
+  }
+  const MOODY = {
+    // a graveyard on a low hill at night: rows of worn headstones, dead trees, a gravel path lit by candles and
+    // lanterns on posts, a small stone tomb at the back, a fence round it all
+    graveyard() {
+      const X = 64, Y = 24, Z = 64, B = grid(X, Y, Z, 7), { set, get, rnd, pick, wave } = B, top = [];
+      for (let z = 0; z < Z; z++) for (let x = 0; x < X; x++) {
+        const h = Math.round(6 + wave(x, z) * .7 - Math.hypot(x - 32, z - 30) * .03); top[z * X + x] = h;
+        for (let y = 0; y <= h; y++) set(x, y, z, y === h ? pick(['podzol', 'podzol', 'coarse_dirt', 'podzol', 'mycelium']) : y > h - 3 ? 'dirt' : 'stone');
+      }
+      const H = (x, z) => top[z * X + x];
+      for (let z = 4; z < Z - 4; z++) { const x = 32 + Math.round(Math.sin(z * .15) * 2); for (const d of [0, 1]) set(x + d, H(x + d, z), z, 'gravel'); }
+      for (let z = 8; z < 52; z += 5) for (let x = 8; x < 58; x += 4) {
+        if (Math.abs(x - 32) < 4 || rnd() < .15) continue;
+        const gx = x + (rnd() < .5 ? 0 : 1), gz = z + (rnd() < .4 ? 1 : 0), h = H(gx, gz), tall = rnd() < .3;
+        const stone = pick(['polished_andesite', 'andesite', 'mossy_cobblestone', 'cobblestone', 'polished_andesite', 'stone_bricks', 'cracked_stone_bricks']);
+        set(gx, h + 1, gz, stone); if (tall) set(gx, h + 2, gz, stone);
+        set(gx, h + (tall ? 3 : 2), gz, rnd() < .5 ? 'stone_slab' : 'andesite_slab', { type: 'bottom' });
+        set(gx, h, gz + 1, 'coarse_dirt');  // the grave in front of its stone
+        if (rnd() < .35) set(gx + (rnd() < .5 ? -1 : 1), H(gx, gz + 1) + 1, gz + 1, 'candle', { lit: 'true', candles: String(1 + Math.floor(rnd() * 3)) });
+        if (rnd() < .25) set(gx, H(gx, gz + 2) + 1, gz + 2, pick(['dead_bush', 'short_grass', 'dead_bush', 'wither_rose']));
+      }
+      // lanterns on posts along the path
+      for (let z = 8; z < 58; z += 9) for (const side of [-2, 3]) { const x = 32 + Math.round(Math.sin(z * .15) * 2) + side, h = H(x, z);
+        for (let y = 1; y <= 3; y++) set(x, h + y, z, 'dark_oak_fence'); set(x, h + 4, z, 'lantern'); }
+      // dead trees: bare twisting trunks with a few branches
+      for (const [tx, tz] of [[12, 14], [52, 20], [10, 46], [55, 50], [20, 58]]) { let x = tx, z = tz; const h0 = H(tx, tz), n = 7 + Math.floor(rnd() * 4);
+        for (let y = 1; y <= n; y++) { set(x, h0 + y, z, 'dark_oak_log', { axis: 'y' }); if (y > 3 && rnd() < .35) { const dx = pick([-1, 1, 0]), dz = dx ? 0 : pick([-1, 1]);
+          for (let k = 1; k <= 2 + Math.floor(rnd() * 2); k++) set(x + dx * k, h0 + y + (k > 1 ? 1 : 0), z + dz * k, 'dark_oak_log', { axis: dx ? 'x' : 'z' }); }
+          if (y > 2 && rnd() < .3) { x += pick([-1, 1, 0]); z += pick([-1, 1, 0]); } } }
+      // a small tomb at the far end of the path, its dark door facing down it
+      const tx = 28, tz = 4, th = H(32, 7);
+      for (let y = th; y <= th + 5; y++) for (let x = tx; x <= tx + 8; x++) for (let z = tz; z <= tz + 6; z++) {
+        const edge = x === tx || x === tx + 8 || z === tz || z === tz + 6;
+        if (y === th) set(x, y, z, 'stone_bricks'); else if (y < th + 5 && edge) set(x, y, z, pick(['stone_bricks', 'mossy_stone_bricks', 'cracked_stone_bricks']));
+        else if (y === th + 5) set(x, y, z, 'deepslate_tiles'); }
+      for (let y = th + 1; y <= th + 3; y++) set(tx + 4, y, tz + 6, null);
+      set(tx + 3, th + 2, tz + 7, 'wall_torch', { facing: 'south' }); set(tx + 5, th + 2, tz + 7, 'wall_torch', { facing: 'south' });
+      // the fence round it
+      for (let i = 2; i < 62; i++) for (const [x, z] of [[i, 2], [i, 61], [2, i], [61, i]]) if (!(z === 61 && Math.abs(x - 32) < 3)) set(x, H(x, z) + 1, z, 'iron_bars');
+      return B.done();
+    },
+    // a sea of lava under a red sky: black rock islands and tall basalt columns, glowing magma at the shores, a
+    // dark brick bridge with posts running out across it
+    lava() {
+      const X = 80, Y = 34, Z = 80, B = grid(X, Y, Z, 23), { set, rnd, pick, wave } = B, SEA = 6;
+      for (let z = 0; z < Z; z++) for (let x = 0; x < X; x++) {
+        for (let y = 0; y < SEA; y++) set(x, y, z, 'netherrack');
+        set(x, SEA, z, 'lava');
+        const n = wave(x, z, 1.6) + wave(z, x, .7) * .8, rise = n * 2.2 - 2;
+        if (rise > 0) { const h = SEA + Math.round(rise);
+          for (let y = SEA; y <= h; y++) set(x, y, z, y === h ? pick(['blackstone', 'basalt', 'blackstone', 'netherrack']) : pick(['blackstone', 'basalt', 'netherrack']));
+          if (rise < 1.2) set(x, SEA, z, 'magma_block'); }
+      }
+      // basalt columns standing out of the lava
+      for (let i = 0; i < 26; i++) { const x = 4 + Math.floor(rnd() * 72), z = 4 + Math.floor(rnd() * 72), h = 4 + Math.floor(rnd() * 20), w = rnd() < .4 ? 2 : 1;
+        if (Math.abs(x - 39.5) < 5 || (z > 52 && x > 30)) continue;  // clear of the bridge, and of the view down it from the near end
+        for (let y = SEA; y < SEA + h; y++) for (let dx = 0; dx < w; dx++) for (let dz = 0; dz < w; dz++) set(x + dx, y, z + dz, y > SEA + h - 3 && rnd() < .3 ? 'blackstone' : 'basalt', { axis: 'y' }); }
+      // the bridge, low over the lava along z, its posts every few blocks
+      for (let z = 6; z < 74; z++) for (let x = 38; x <= 41; x++) { set(x, SEA + 3, z, 'nether_bricks');
+        if ((x === 38 || x === 41)) { set(x, SEA + 4, z, 'nether_brick_fence'); if (z % 6 === 0) { set(x, SEA + 5, z, 'nether_brick_fence'); set(x, SEA + 6, z, 'lantern'); } }
+        if (z % 12 === 0 && (x === 38 || x === 41)) for (let y = 0; y < SEA + 3; y++) set(x, y, z, 'nether_bricks'); }
+      for (let z = 6; z < 74; z++) for (const x of [39, 40]) { set(x, SEA + 4, z, null); }
+      return B.done();
+    },
+    // a long dungeon hall: worn stone brick walls and floor, pillars, torches on the walls, a fire burning at the
+    // far end, barred cells along the sides, hanging lanterns and cobwebs high up
+    dungeon() {
+      const X = 21, Y = 12, Z = 64, B = grid(X, Y, Z, 41), { set, rnd, pick } = B, x0 = 3, x1 = 17, F = 1, CEIL = 9;
+      const brick = () => pick(['stone_bricks', 'stone_bricks', 'mossy_stone_bricks', 'cracked_stone_bricks', 'stone_bricks', 'cobblestone']);
+      for (let z = 0; z < Z; z++) for (let x = 0; x < X; x++) {
+        set(x, 0, z, 'stone'); set(x, F, z, x >= x0 && x <= x1 ? brick() : 'stone');
+        for (let y = F + 1; y <= CEIL + 1; y++) {
+          const inside = x > x0 && x < x1, arch = y >= CEIL - 1 && (x - x0 <= CEIL - y + 1 || x1 - x <= CEIL - y + 1);
+          if (!inside || y > CEIL || arch) set(x, y, z, brick());
+        }
+      }
+      // pillars, and a torch on the wall between each pair
+      for (let z = 4; z < Z - 4; z += 6) {
+        for (const x of [x0 + 1, x1 - 1]) for (let y = F + 1; y <= CEIL; y++) set(x, y, z, pick(['stone_bricks', 'chiseled_stone_bricks', 'stone_bricks']));
+        set(x0 + 1, F + 4, z + 3, 'wall_torch', { facing: 'east' }); set(x1 - 1, F + 4, z + 3, 'wall_torch', { facing: 'west' });
+        // lanterns hanging on chains from the middle of the roof
+        if (z % 12 === 4) { set(10, CEIL, z + 3, 'chain'); set(10, CEIL - 1, z + 3, 'chain'); set(10, CEIL - 2, z + 3, 'lantern', { hanging: 'true' }); }
+      }
+      // cells behind bars on both sides, every other bay
+      for (let z = 10; z < Z - 10; z += 12) for (const [xw, dir] of [[x0, -1], [x1, 1]]) {
+        for (let dz = 1; dz <= 4; dz++) for (let y = F + 1; y <= F + 4; y++) { set(xw, y, z + dz, 'iron_bars'); for (let k = 1; k <= 2; k++) set(xw + dir * k, y, z + dz, null); }
+      }
+      // cobwebs in the arches, rubble and bones on the floor
+      for (let i = 0; i < 40; i++) { const z = Math.floor(rnd() * Z), x = x0 + 2 + Math.floor(rnd() * (x1 - x0 - 3)), up = rnd() < .5;
+        if (up) set(rnd() < .5 ? x0 + 2 : x1 - 2, CEIL - 2, z, 'cobweb'); else if (rnd() < .4) set(x, F + 1, z, pick(['cobblestone_slab', 'bone_block', 'cobweb', 'cobblestone_slab'])); }
+      // the fire at the far end, on a raised hearth
+      for (let x = 8; x <= 12; x++) for (let z = 2; z <= 4; z++) set(x, F + 1, z, 'stone_bricks');
+      set(10, F + 2, 3, 'campfire', { lit: 'true' }); set(9, F + 2, 3, 'campfire', { lit: 'true' }); set(11, F + 2, 3, 'campfire', { lit: 'true' });
+      return B.done();
+    },
+  };
 
   // ----- the parts -----
   const built = new Map();
@@ -994,7 +1105,7 @@ const Blocks = (() => {
         const Q = resolve(P), cur = Q.asset ? Q.asset : 'demo:' + Q.demo;
         const a = Q.asset ? S.assets[Q.asset] : null;
         return `<div class="hd">Block build</div>
-          <label class="f wide"><span>Build</span><select data-k="build">${[['demo:cottage', 'The cottage (built in)'], ['demo:jungle', 'Jungle island and dock (built in)'], ...builds.map(([id, b]) => [id, b.name])].map(([v, l]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+          <label class="f wide"><span>Build</span><select data-k="build">${[['demo:cottage', 'The cottage (built in)'], ['demo:jungle', 'Jungle island and dock (built in)'], ['demo:graveyard', 'Graveyard at night (built in)'], ['demo:lava', 'Lava sea and bridge (built in)'], ['demo:dungeon', 'Torchlit dungeon (built in)'], ...builds.map(([id, b]) => [id, b.name])].map(([v, l]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
           ${n('block', 'Block size m', num(P.block, 1), .1)}${n('sink', 'Sink blocks', num(P.sink, 0), 1)}
           <p class="note">${a ? `${a.size.join(' × ')} blocks, ${a.blocks.toLocaleString()} placed, ${a.kinds} kinds. ` : ''}Import a structure block's .nbt file (or a .schem) under Import, or drop it on the viewport, and pick it here. Blocks are drawn with Riptide's own pixel pictures, by what each is made of.</p>
           ${moversPanel(P, Q)}`;
@@ -1079,6 +1190,29 @@ const Blocks = (() => {
       { type: 'camera', id: 'cam', name: 'Camera', at: [.2, DECK + 1.5, 4.2], turn: [-6, -8, 0], lens: 32 },
     ],
     shots: [{ t: 0, cam: 'cam' }] };
+
+  // ----- moody block scenes to start from: each a built-in build, its sky and haze in one strong colour, a lens -----
+  const MOODS = {
+    blockgrave: { label: 'Block graveyard', hint: 'A graveyard at night in a pink haze: rows of headstones, dead trees, candles and lanterns',
+      p: { sky: 'violet', sunEl: 25, sunAz: 160, sunPower: 70, clouds: 0, wind: 1, ground: 'none', fog: 14, haze: 55, hazeFall: 30, hazeGlow: 80, dust: 20,
+        eye: 0, lens: 30, focus: 0, dof: 0, exposure: 1, bloom: 55, grain: 14, fringe: 6, ao: 45, godrays: 20, letterbox: 'none' },
+      objects: () => [{ type: 'structure', name: 'Graveyard', at: [0, -8, -30], build: 'demo:graveyard', block: 1 },
+        { type: 'camera', id: 'cam', name: 'Camera', at: [0, 3.2, 0], turn: [-10, 0, 0], lens: 30 }] },
+    blocklava: { label: 'Lava sea', hint: 'A sea of lava under a red sky: black rock, basalt columns and a dark bridge out across it',
+      p: { sky: 'ember', sunEl: 6, sunAz: 0, sunPower: 30, clouds: 0, wind: 2, ground: 'none', fog: 18, haze: 75, hazeFall: 25, hazeGlow: 90, dust: 35,
+        eye: 0, lens: 28, focus: 0, dof: 10, exposure: .1, bloom: 70, grain: 12, fringe: 8, ao: 40, godrays: 0, letterbox: 'none' },
+      objects: () => [{ type: 'structure', name: 'Lava sea', at: [0, -10, -40], build: 'demo:lava', block: 1 },
+        { type: 'fx', name: 'Embers', kind: 'sparks', amount: 18, scale: 2, at: [6, -3, -30] },
+        { type: 'camera', id: 'cam', name: 'Camera', at: [9, 5, 2], turn: [-12, 18, 0], lens: 28 }] },
+    blockdungeon: { label: 'Torchlit dungeon', hint: 'A long stone hall lit by wall torches, barred cells on both sides, a fire at the far end',
+      p: { sky: 'torch', sunEl: 30, sunAz: 0, sunPower: 10, clouds: 0, wind: 0, ground: 'none', fog: 30, haze: 45, hazeFall: 15, hazeGlow: 70, dust: 30,
+        eye: 0, lens: 26, focus: 0, dof: 15, exposure: .5, bloom: 60, grain: 16, fringe: 6, ao: 55, godrays: 0, letterbox: 'none' },
+      objects: () => [{ type: 'structure', name: 'Dungeon', at: [0, -2.5, -32], build: 'demo:dungeon', block: 1 },
+        { type: 'fx', name: 'Fire', kind: 'fire', amount: 70, scale: 1.4, at: [-.5, .6, -60.5] },
+        { type: 'blocky', name: 'Figure', at: [.1, -.5, -14], turn: [0, 180, 0], move: 'idle', height: 1.8, shirt: '#3a3a40', pants: '#26262c', shoes: '#151515', hair: '#1a1410' },
+        { type: 'camera', id: 'cam', name: 'Camera', at: [-.5, 1.1, -3], turn: [-2, 0, 0], lens: 26 }] },
+  };
+  for (const [k, v] of Object.entries(MOODS)) World.PRESETS[k] = { ...v, shots: [{ t: 0, cam: 'cam' }] };
 
   return { readNBT, read, importFile, lookOf, build, demo, pack, unpack, fromStructure, fromSchem, gunzip };
 })();

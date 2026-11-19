@@ -275,17 +275,95 @@ const Blocks = (() => {
     { n: [0, 0, -1], u: [-1, 0, 0], v: [0, 1, 0], o: (a, b) => [b[0], a[1], a[2]], tile: 'side' },
   ];
   const AOK = [.5, .68, .84, 1];
+  // ----- light, baked into a build: from what glows, and from the open sky -----
+  // Light spreads from each glowing block (a torch, a lantern, lava, candles, a fire) into the open cells round it,
+  // a level (of 15) fainter with each step, in its own colour, and round corners as light does. Sky light comes
+  // straight down every open column and spreads sideways under overhangs the same way, so the inside of a room, a
+  // cave or a dungeon is dark but for its own lights. Worked out once per build, on the build's grid.
+  const EMIT = [[/^lava$/, 15, '#ff7a2a'], [/magma/, 6, '#ff5a1a'], [/soul_(torch|lantern|campfire|fire)/, 10, '#5ad8ff'],
+    [/redstone_torch|redstone_wall_torch/, 7, '#ff4030'], [/campfire|^fire$/, 15, '#ffa040'], [/glowstone/, 15, '#ffd890'],
+    [/sea_lantern|beacon/, 15, '#d8f0ff'], [/froglight/, 15, '#f2e8c4'], [/shroomlight/, 15, '#ffb070'], [/jack_o_lantern/, 15, '#ffb050'],
+    [/lantern/, 15, '#ffc070'], [/torch/, 14, '#ffb45a'], [/end_rod/, 14, '#f6eaff'], [/redstone_lamp/, 15, '#ffcf80'],
+    [/amethyst/, 5, '#b07aff'], [/candle/, 3, '#ffb870']];
+  function emitOf(l) {
+    const hit = EMIT.find(([re]) => re.test(l.name));
+    let lev = hit ? hit[1] : Math.round(clamp(l.glow, 0, 1.2) * 12);
+    if (/candle/.test(l.name)) lev = l.props?.lit === 'false' ? 0 : 3 * clamp(+l.props?.candles || 1, 1, 4);
+    if (/redstone_lamp/.test(l.name) && /off/.test(l.name)) lev = 0;
+    return [lev, new T.Color(hit ? hit[2] : '#ffc080')];
+  }
+  function bake(st, lk) {
+    const [X, Y, Z] = st.size, grid = st.grid, N = X * Y * Z, I = (x, y, z) => (y * Z + z) * X + x;
+    const stops = new Uint8Array(N), R = new Float32Array(N), G = new Float32Array(N), B = new Float32Array(N), S = new Float32Array(N);
+    const q = [];
+    for (let i = 0; i < N; i++) {
+      const v = grid[i], l = v ? lk[v - 1] : null; if (!l) continue;
+      if (l.glow) { const [lev, c] = emitOf(l); if (lev > 0) { R[i] = lev * c.r; G[i] = lev * c.g; B[i] = lev * c.b; q.push(i); } }
+      else if (l.shape === 'cube' && l.pass === 'solid') stops[i] = 1;
+    }
+    const SIX = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+    for (let h = 0; h < q.length; h++) {
+      const i = q[h], x = i % X, z = Math.floor(i / X) % Z, y = Math.floor(i / (X * Z));
+      const r = R[i] - 1, g = G[i] - 1, b = B[i] - 1; if (r <= 0 && g <= 0 && b <= 0) continue;
+      for (const [dx, dy, dz] of SIX) {
+        const nx = x + dx, ny = y + dy, nz = z + dz; if (nx < 0 || ny < 0 || nz < 0 || nx >= X || ny >= Y || nz >= Z) continue;
+        const n = I(nx, ny, nz); if (stops[n]) continue;
+        let more = false;
+        if (r > R[n] + .05) { R[n] = r; more = true; } if (g > G[n] + .05) { G[n] = g; more = true; } if (b > B[n] + .05) { B[n] = b; more = true; }
+        if (more) q.push(n);
+      }
+    }
+    // sky: straight down each open column, then sideways and down a level fainter each step
+    const sq = [];
+    for (let z = 0; z < Z; z++) for (let x = 0; x < X; x++) for (let y = Y - 1; y >= 0; y--) { const i = I(x, y, z); if (stops[i]) break; S[i] = 15; sq.push(i); }
+    for (let h = 0; h < sq.length; h++) {
+      const i = sq[h], x = i % X, z = Math.floor(i / X) % Z, y = Math.floor(i / (X * Z)), s = S[i] - 1; if (s <= 0) continue;
+      for (const [dx, dy, dz] of SIX) {
+        const nx = x + dx, ny = y + dy, nz = z + dz; if (nx < 0 || ny < 0 || nz < 0 || nx >= X || ny >= Y || nz >= Z) continue;
+        const n = I(nx, ny, nz); if (!stops[n] && s > S[n]) { S[n] = s; sq.push(n); }
+      }
+    }
+    // a cell's light: [r, g, b, sky], or null where light can't be (inside a solid block). Past the build's edges,
+    // the open sky.
+    return { at: (x, y, z) => { if (x < 0 || y < 0 || z < 0 || x >= X || y >= Y || z >= Z) return [0, 0, 0, 15];
+      const i = I(x, y, z); return stops[i] ? null : [R[i], G[i], B[i], S[i]]; } };
+  }
+  // A material that adds the baked light of glowing blocks to what the sun and sky light (as the texture's own
+  // colour, lit by it), so a build's torches light their walls whatever else lights the scene.
+  function blockLit(m) {
+    m.onBeforeCompile = sh => {
+      sh.vertexShader = 'attribute vec3 aBlock;\nvarying vec3 vBlock;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vBlock = aBlock;');
+      sh.fragmentShader = 'varying vec3 vBlock;\n' + sh.fragmentShader
+        .replace('#include <map_fragment>', '#include <map_fragment>\n  vec3 rtAlbedo = diffuseColor.rgb;')
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += rtAlbedo * vBlock;');
+    };
+    m.customProgramCacheKey = () => 'riptide-blocklight';
+    return m;
+  }
+
   function build(st, skip = null) {
     const [X, Y, Z] = st.size, grid = st.grid, lk = st.palette.map(p => (AIR.test(p.name) ? null : lookOf(p)));
     const at = (x, y, z) => (x < 0 || y < 0 || z < 0 || x >= X || y >= Y || z >= Z ? 0 : grid[(y * Z + z) * X + x]);
     const look = (x, y, z) => { const v = at(x, y, z); return v ? lk[v - 1] : null; };
     const solid = (x, y, z) => { const l = look(x, y, z); return !!l && l.shape === 'cube' && l.pass === 'solid'; };
+    const light = bake(st, lk);
     const used = new Set(); for (let i = 0; i < grid.length; i++) if (grid[i] && lk[grid[i] - 1]) used.add(lk[grid[i] - 1]);
     const atlas = atlasFor([...used]);
-    const buckets = {}; const bucket = k => (buckets[k] ||= { pos: [], nor: [], uv: [], col: [], idx: [] });
+    const buckets = {}; const bucket = k => (buckets[k] ||= { pos: [], nor: [], uv: [], col: [], blk: [], idx: [] });
+    // what each corner of a face is lit by: sky light darkens it (in the colour, with its corner shading) and the
+    // light from glowing blocks is added (blk, used by the materials below). Shapes that aren't whole blocks take
+    // the light of their own cell.
+    let own = null;
+    const lightOf = (L, k) => {
+      const sky = L ? L[3] / 15 : 1, s = .1 + .9 * Math.pow(sky, 1.4);
+      // the falloff on the light's strength, its colour kept (curving each channel alone turns orange red)
+      const top = L ? Math.max(L[0], L[1], L[2]) : 0, gain = top > 0 ? Math.pow(top / 15, 2.2) * 1.8 * k / top : 0;
+      const b = L ? [L[0] * gain, L[1] * gain, L[2] * gain] : [0, 0, 0];
+      return [k * s, b];
+    };
     const passOf = l => (l.glow ? 'glow' : l.pass);
     // one face of the box A..B (block-local, 0..1) of the block at X,Y,Z
-    function face(Bk, f, a, b, bx, by, bz, order, ao) {
+    function face(Bk, f, a, b, bx, by, bz, order, ao, lit = null) {
       const o = f.o(a, b), du = Math.abs(f.u[0]) * (b[0] - a[0]) + Math.abs(f.u[1]) * (b[1] - a[1]) + Math.abs(f.u[2]) * (b[2] - a[2]);
       const dv = Math.abs(f.v[0]) * (b[0] - a[0]) + Math.abs(f.v[1]) * (b[1] - a[1]) + Math.abs(f.v[2]) * (b[2] - a[2]);
       const [tx, ty] = atlas.at(order), base = Bk.pos.length / 3;
@@ -297,7 +375,7 @@ const Blocks = (() => {
         const s = [0, 1, 2].reduce((m, k) => m + f.u[k] * p[k], 0) + (f.u.some(c => c < 0) ? 1 : 0);
         const t = [0, 1, 2].reduce((m, k) => m + f.v[k] * p[k], 0) + (f.v.some(c => c < 0) ? 1 : 0);
         Bk.uv.push((tx + clamp(s, 0, 1)) / atlas.cols, 1 - (ty + 1 - clamp(t, 0, 1)) / atlas.rows);
-        const k = ao ? ao[i] : 1; Bk.col.push(k, k, k);
+        const [k, b] = lightOf(lit ? lit[i] : own, ao ? ao[i] : 1); Bk.col.push(k, k, k); Bk.blk.push(b[0], b[1], b[2]);
       });
       // turn the quad so the shading runs smoothly across it
       if (ao && ao[0] + ao[2] < ao[1] + ao[3]) Bk.idx.push(base + 1, base + 2, base + 3, base + 1, base + 3, base);
@@ -309,7 +387,8 @@ const Blocks = (() => {
       for (const [p0, p1] of [[[e, e], [1 - e, 1 - e]], [[e, 1 - e], [1 - e, e]]]) {
         const b0 = Bk.pos.length / 3;
         for (const [px, pz, py, s, t] of [[p0[0], p0[1], 0, 0, 0], [p1[0], p1[1], 0, 1, 0], [p1[0], p1[1], h, 1, 1], [p0[0], p0[1], h, 0, 1]]) {
-          Bk.pos.push(x + px, y + py, z + pz); Bk.nor.push(0, 1, 0); Bk.uv.push((tx + s) / atlas.cols, 1 - (ty + 1 - t) / atlas.rows); Bk.col.push(1, 1, 1); }
+          const [k, bl] = lightOf(own, 1);
+          Bk.pos.push(x + px, y + py, z + pz); Bk.nor.push(0, 1, 0); Bk.uv.push((tx + s) / atlas.cols, 1 - (ty + 1 - t) / atlas.rows); Bk.col.push(k, k, k); Bk.blk.push(...bl); }
         Bk.idx.push(b0, b0 + 1, b0 + 2, b0, b0 + 2, b0 + 3);
       }
       void base;
@@ -319,6 +398,7 @@ const Blocks = (() => {
     for (let y = 0; y < Y; y++) for (let z = 0; z < Z; z++) for (let x = 0; x < X; x++) {
       const gi = (y * Z + z) * X + x, v = grid[gi]; if (!v || (skip && skip.has(gi))) continue; const l = lk[v - 1]; if (!l || l.shape === 'none') continue;
       const Bk = bucket(passOf(l)), p = l.props;
+      own = light.at(x, y, z) || light.at(x, y + 1, z);
       if (l.shape === 'cube') {
         for (const f of FACES) {
           const nx = x + f.n[0], ny = y + f.n[1], nz = z + f.n[2], o = look(nx, ny, nz);
@@ -331,8 +411,17 @@ const Blocks = (() => {
             const corner = solid(nx + f.u[0] * su + f.v[0] * sv, ny + f.u[1] * su + f.v[1] * sv, nz + f.u[2] * su + f.v[2] * sv); void d;
             return AOK[side1 && side2 ? 0 : 3 - (side1 + side2 + corner)];
           });
+          // each corner's light: the open cells round it in front of the face, as the shading above
+          const lit = [[0, 0], [1, 0], [1, 1], [0, 1]].map(([cu, cv]) => {
+            const su = cu ? 1 : -1, sv = cv ? 1 : -1, cells = [[nx, ny, nz],
+              [nx + f.u[0] * su, ny + f.u[1] * su, nz + f.u[2] * su], [nx + f.v[0] * sv, ny + f.v[1] * sv, nz + f.v[2] * sv],
+              [nx + f.u[0] * su + f.v[0] * sv, ny + f.u[1] * su + f.v[1] * sv, nz + f.u[2] * su + f.v[2] * sv]];
+            const got = cells.map(([cx, cy, cz]) => light.at(cx, cy, cz)).filter(Boolean);
+            if (!got.length) return own;
+            return [0, 1, 2, 3].map(c => got.reduce((m, L) => m + L[c], 0) / got.length);
+          });
           const top = l.pass === 'water' && !look(x, y + 1, z) ? .875 : 1;
-          face(Bk, f, [0, 0, 0], [1, top, 1], x, y, z, l.tiles[f.tile], l.pass === 'solid' || l.pass === 'cut' ? ao : null);
+          face(Bk, f, [0, 0, 0], [1, top, 1], x, y, z, l.tiles[f.tile], l.pass === 'solid' || l.pass === 'cut' ? ao : null, lit);
         }
         continue;
       }
@@ -381,10 +470,10 @@ const Blocks = (() => {
     }
     // the materials: solid, cut-out (leaves, plants), glass, water, and what glows
     const mats = {
-      solid: new T.MeshStandardMaterial({ map: atlas.tex, vertexColors: true, roughness: .92, metalness: 0 }),
-      cut: new T.MeshStandardMaterial({ map: atlas.tex, vertexColors: true, roughness: .9, alphaTest: .5, side: T.DoubleSide }),
+      solid: blockLit(new T.MeshStandardMaterial({ map: atlas.tex, vertexColors: true, roughness: .88, metalness: 0, bumpMap: atlas.tex, bumpScale: 1.4 })),
+      cut: blockLit(new T.MeshStandardMaterial({ map: atlas.tex, vertexColors: true, roughness: .9, alphaTest: .5, side: T.DoubleSide })),
       clear: new T.MeshPhysicalMaterial({ map: atlas.tex, vertexColors: true, roughness: .05, transparent: true, depthWrite: false, side: T.DoubleSide, envMapIntensity: 1.2 }),
-      water: new T.MeshPhysicalMaterial({ map: atlas.tex, vertexColors: true, roughness: .08, transparent: true, opacity: .78, depthWrite: false, side: T.DoubleSide }),
+      water: blockLit(new T.MeshPhysicalMaterial({ map: atlas.tex, vertexColors: true, roughness: .08, transparent: true, opacity: .78, depthWrite: false, side: T.DoubleSide })),
       glow: new T.MeshStandardMaterial({ map: atlas.tex, emissiveMap: atlas.tex, emissive: new T.Color('#ffffff'), emissiveIntensity: 1.6, vertexColors: true, roughness: .8, alphaTest: .5, side: T.DoubleSide }),
     };
     const g = new T.Group();
@@ -393,6 +482,7 @@ const Blocks = (() => {
       const geo = new T.BufferGeometry();
       geo.setAttribute('position', new T.Float32BufferAttribute(Bk.pos, 3)); geo.setAttribute('normal', new T.Float32BufferAttribute(Bk.nor, 3));
       geo.setAttribute('uv', new T.Float32BufferAttribute(Bk.uv, 2)); geo.setAttribute('color', new T.Float32BufferAttribute(Bk.col, 3));
+      geo.setAttribute('aBlock', new T.Float32BufferAttribute(Bk.blk, 3));
       geo.setIndex(Bk.pos.length / 3 > 65535 ? new T.Uint32BufferAttribute(Bk.idx, 1) : new T.Uint16BufferAttribute(Bk.idx, 1));
       geo.computeBoundingSphere();
       const m = new T.Mesh(geo, mats[k]); m.castShadow = k !== 'water' && k !== 'clear'; m.receiveShadow = true; if (k === 'clear' || k === 'water') m.renderOrder = 2;
@@ -401,7 +491,7 @@ const Blocks = (() => {
     // a few real lights from what glows, so a build at night lights itself (the brightest dozen, spread out)
     const lamps = []; for (let y = 0; y < Y; y++) for (let z = 0; z < Z; z++) for (let x = 0; x < X; x++) { const v = at(x, y, z); if (v && lk[v - 1]?.glow) lamps.push([x + .5, y + .6, z + .5, lk[v - 1]]); }
     const chosen = []; for (const L of lamps) if (chosen.length < 12 && chosen.every(c => Math.hypot(c[0] - L[0], c[1] - L[1], c[2] - L[2]) > 6)) chosen.push(L);
-    for (const [x, y, z, l] of chosen) { const c = new T.Color(l.tiles.side[2] || l.tiles.side[1] || '#ffcf7a'); const pl = new T.PointLight(c, 1.2 * l.glow, 12 * M, 2); pl.position.set(x, y, z); pl.userData.blockLamp = true; g.add(pl); }
+    for (const [x, y, z, l] of chosen) { const c = new T.Color(l.tiles.side[2] || l.tiles.side[1] || '#ffcf7a'); const pl = new T.PointLight(c, .7 * l.glow, 12 * M, 2); pl.position.set(x, y, z); pl.userData.blockLamp = true; g.add(pl); }
     g.userData.size = st.size;
     return g;
   }

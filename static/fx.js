@@ -57,9 +57,9 @@ const FX = (() => {
 
   // ----- effects: particles from a place, each from its own birth time -----
   const KINDS = [['smoke', 'Smoke'], ['fire', 'Fire'], ['explosion', 'Explosion'], ['sparks', 'Sparks'], ['dust', 'Dust from the ground'], ['steam', 'Steam'], ['tendril', 'Tendril (a twisting column of sparkles)'],
-    ['lightning', 'Lightning (a strike from the sky)'], ['blast', 'Blast (blocks thrown out, a scorched crater)']];
-  const KIND = { smoke: 0, fire: 1, sparks: 2, dust: 3, explosion: 4, steam: 5, tendril: 6 };
-  const LIFE = { smoke: 5, fire: 1.1, sparks: 1.4, dust: 2.6, explosion: 6, steam: 3, tendril: 6 };
+    ['lightning', 'Lightning (a strike from the sky)'], ['blast', 'Blast (blocks thrown out, a scorched crater)'], ['splash', 'Splash (water thrown up, once, then hanging spray)']];
+  const KIND = { smoke: 0, fire: 1, sparks: 2, dust: 3, explosion: 4, steam: 5, tendril: 6, splash: 7 };
+  const LIFE = { smoke: 5, fire: 1.1, sparks: 1.4, dust: 2.6, explosion: 6, steam: 3, tendril: 6, splash: 7 };
   const fxCache = new Map();
   function fxPoints(n) {
     const seed = new Float32Array(n * 4); let s = 3; const r = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
@@ -68,7 +68,7 @@ const FX = (() => {
     const idx = new Float32Array(n); for (let i = 0; i < n; i++) idx[i] = i / n; g.setAttribute('aIdx', new T.BufferAttribute(idx, 1));
     return g;
   }
-  const FX_VERT = `uniform float uTime, uLife, uSize, uStart, uWind, uPx, uTintOn; uniform vec3 uTint; uniform int uKind; attribute vec4 aSeed; attribute float aIdx;
+  const FX_VERT = `uniform float uTime, uLife, uSize, uStart, uWind, uPx, uTintOn, uRate; uniform vec3 uTint; uniform int uKind; attribute vec4 aSeed; attribute float aIdx;
     varying vec3 vCol; varying float vA, vSoft;
     vec3 fireCol0(float a) { return mix(mix(vec3(1., .92, .7) * 9., vec3(1., .42, .08) * 5., smoothstep(0., .35, a)), vec3(.25, .08, .02), smoothstep(.35, .9, a)); }
     // a colour of its own (a purple blast): the same light and dark, in that colour, white at the hottest
@@ -76,7 +76,20 @@ const FX = (() => {
       return mix(f, mix(uTint * l * 1.4, vec3(l), smoothstep(5., 9., l) * .5), uTintOn); }
     void main() {
       vec4 s = aSeed; float age, a; vec3 p = vec3(0.); float size = .3; vCol = vec3(.5); vA = 1.; vSoft = 1.;
-      if (uKind == 4) { age = uTime - uStart - s.w * .08; a = age / uLife;
+      if (uKind == 7) {
+        // a splash, once from uStart (uRate under 1 is slow motion): a sheet of water thrown up and out in drops
+        // that fall back, and the spray it leaves hanging in the air, drifting with the wind and thinning out
+        age = (uTime - uStart) * uRate - s.w * .06; a = age / uLife;
+        if (age < 0. || a > 1.) { gl_PointSize = 0.; gl_Position = vec4(2., 2., 2., 1.); return; }
+        float ang = s.x * 6.2832;
+        if (aIdx < .62) { float up = (6. + s.y * 9.) * uSize, reach = (1.2 + s.z * 3.4) * uSize;
+          float fall = 2. * up / 9.8, tt = min(age, fall);
+          p = vec3(cos(ang) * reach * tt, max(0., up * tt - 4.9 * tt * tt), sin(ang) * reach * tt);
+          size = (.03 + .06 * s.z) * uSize; vCol = vec3(.92, .95, .97) * 1.15; vA = (1. - smoothstep(.75, 1., age / fall)) * .85; vSoft = .6; }
+        else { float r = (.6 + s.z * 4.) * uSize * (.45 + age * .3), rise = (1.5 + s.y * 7.5) * (1.1 - s.z * .8) * uSize * (1. - exp(-age * 1.2));
+          p = vec3(cos(ang) * r + uWind * age * .5, rise, sin(ang) * r);
+          size = uSize * (.35 + age * .45) * (.5 + .6 * s.x); vCol = vec3(.9, .92, .94); vA = smoothstep(0., .3, age) * (1. - smoothstep(.3, 1., a)) * .085; vSoft = 2.; }
+      } else if (uKind == 4) { age = uTime - uStart - s.w * .08; a = age / uLife;
         if (age < 0. || a > 1.) { gl_PointSize = 0.; gl_Position = vec4(2., 2., 2., 1.); return; }
         vec3 dir = normalize(s.xyz - .5 + vec3(0., .25, 0.));
         if (aIdx < .55) { float r = uSize * 2.6 * (1. - exp(-age * 5.)) * (.4 + .6 * s.w); p = dir * r + vec3(uWind * age * .3, age * .9 * uSize, 0.);
@@ -177,10 +190,10 @@ const FX = (() => {
   World.custom.fx = (P, t = 0) => {
     if (P.kind === 'lightning') return lightning(P, t);
     if (P.kind === 'blast') return blast(P, t);
-    const kind = KIND[P.kind] != null ? P.kind : 'smoke', n = kind === 'explosion' ? 900 : Math.round(clamp(+P.amount || 60, 1, 100) * (kind === 'sparks' ? 6 : kind === 'tendril' ? 40 : 4));
+    const kind = KIND[P.kind] != null ? P.kind : 'smoke', n = kind === 'explosion' ? 900 : kind === 'splash' ? Math.round(clamp(+P.amount || 70, 1, 100) * 30) : Math.round(clamp(+P.amount || 60, 1, 100) * (kind === 'sparks' ? 6 : kind === 'tendril' ? 40 : 4));
     const key = `${P.id}|${kind}|${n}`; let c = fxCache.get(key);
     if (!c) { const m = new T.ShaderMaterial({ transparent: true, depthWrite: false, fog: false, blending: kind === 'fire' || kind === 'sparks' || kind === 'tendril' ? T.AdditiveBlending : T.NormalBlending,
-        uniforms: { uTime: { value: 0 }, uLife: { value: LIFE[kind] }, uSize: { value: 1 }, uStart: { value: 0 }, uWind: { value: 0 }, uPx: { value: 800 }, uKind: { value: KIND[kind] }, uTint: { value: new T.Color() }, uTintOn: { value: 0 } },
+        uniforms: { uTime: { value: 0 }, uLife: { value: LIFE[kind] }, uSize: { value: 1 }, uStart: { value: 0 }, uWind: { value: 0 }, uPx: { value: 800 }, uKind: { value: KIND[kind] }, uTint: { value: new T.Color() }, uTintOn: { value: 0 }, uRate: { value: 1 } },
         vertexShader: FX_VERT, fragmentShader: FX_FRAG });
       const pts = new T.Points(fxPoints(n), m); pts.frustumCulled = false; pts.userData.fxMat = m;
       const g = new T.Group(); g.add(pts);
@@ -188,6 +201,7 @@ const FX = (() => {
       fxCache.set(key, c); }
     const u = c.m.uniforms; u.uTime.value = t; u.uSize.value = clamp(+P.scale || 1, .05, 50) * (+P.size?.[0] || 1); u.uStart.value = +P.start || 0; u.uWind.value = (+P.wind || 0);
     u.uTintOn.value = P.color ? 1 : 0; if (P.color) u.uTint.value.set(P.color);
+    u.uRate.value = clamp(+P.rate || 1, .05, 4);
     c.g.children[0].scale.setScalar(M);
     if (c.l) { c.l.color.set(P.color || '#ff8a3a'); const age = t - (+P.start || 0); c.l.intensity = kind === 'explosion' ? (age > 0 && age < 2 ? 40 * Math.exp(-age * 2.5) : 0) : 6 + 2 * Math.sin(t * 17) * Math.sin(t * 7.3); c.l.distance = 0; }
     return c.g;

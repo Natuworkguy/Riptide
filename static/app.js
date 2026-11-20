@@ -74,7 +74,7 @@ function curveSVG(name, w = 34, h = 22, fn = null) {
 // ---------- model ----------
 const ANIM = ['x', 'y', 'w', 'h', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'radius', 'fill', 'fill2', 'mid1', 'mid2', 'mid3', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth',
   'blur', 'shadow', 'rgb', 'size', 'reveal', 'erase', 'sweep', 'spacing', 'bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert',
-  'boil', 'vapor', 'echo', 'echoGap', 'echoFade', 'echoScale', 'zblur', 'smear', 'smearAt', 'flute', 'fluteBend', 'fluteStreak', 'fluteLines', 'fluteShine', 'fluteChroma', 'fluteShift', 'cutEdge', 'cutGrow', 'count', 'lineLen', 'thick', 'hole', 'rush', 'cover', 'holeX', 'holeY', 'soft', 'drift', 'glints', 'morph', 'wobble', 'rotX', 'rotY', 'z', 'd', 'lightAngle', 'orbit', 'tilt', 'dolly', 'zoom', ...Figure.JOINTS, 'side', 'limb', 'caps', 'lineh', 'speed', 'vol',
+  'boil', 'vapor', 'echo', 'echoGap', 'echoFade', 'echoScale', 'zblur', 'film', 'filmGrain', 'filmHalo', 'filmWeave', 'filmFade', 'smear', 'smearAt', 'flute', 'fluteBend', 'fluteStreak', 'fluteLines', 'fluteShine', 'fluteChroma', 'fluteShift', 'cutEdge', 'cutGrow', 'count', 'lineLen', 'thick', 'hole', 'rush', 'cover', 'holeX', 'holeY', 'soft', 'drift', 'glints', 'morph', 'wobble', 'rotX', 'rotY', 'z', 'd', 'lightAngle', 'orbit', 'tilt', 'dolly', 'zoom', ...Figure.JOINTS, 'side', 'limb', 'caps', 'lineh', 'speed', 'vol',
   'mx', 'my', 'mw', 'mh', 'mround', 'feather', 'keyTol', 'keySoft', 'spill', ...Grade.GRADE, 'vig', 'vigSize', 'lutMix'];
 const ADJUST = ['bright', 'contrast', 'sat', 'hue', 'gray', 'sepia', 'invert'];
 // a video clip's own time and sound: its speed (keyframed, a ramp), playing backwards, and its volume and fades
@@ -93,6 +93,10 @@ const ECHO = ['echo', 'echoGap', 'echoFade', 'echoScale'];
 const SMEAR = ['smear', 'smearDir', 'smearAt'];
 // Fluted glass: the layer seen through a sheet of reeded glass, ribs side by side, each a little lens that squeezes and
 // mirrors what is behind it, streaks it along its length, shines down its middle and splits colour at its edges
+// 16 mm film, on an adjustment layer: what is under it as if shot on film and scanned: grain that moves every frame,
+// the frame weaving a little in the gate, red halation round the highlights, lifted blacks and a fade, warm highs
+// and teal shadows, a slow flicker. Film is how much of all of it; the rest tune one part each.
+const FILM = ['film', 'filmGrain', 'filmHalo', 'filmWeave', 'filmFade'];
 const FLUTE = ['flute', 'fluteDir', 'fluteBend', 'fluteStreak', 'fluteLines', 'fluteShine', 'fluteChroma', 'fluteShift'];
 const COMMON = ['x', 'y', 'rotation', 'scale', 'sx', 'sy', 'opacity', 'blur', 'shadow', 'rgb', 'boil', 'vapor', ...ECHO, 'zblur', ...SMEAR, ...FLUTE, ...ADJUST, ...FINISH];
 // cutting a person out of a picture or video with no green screen (cutout.js)
@@ -125,7 +129,7 @@ const PROPS = {
   // see the subject through, and glints of light blurred into soft discs
   through: [...FLAT, 'w', 'h', 'thing', 'fill', 'fill2', 'cover', 'hole', 'holeX', 'holeY', 'soft', 'drift', 'glints', 'seed'],
   // an adjustment layer: draws nothing itself, and grades, blurs and adjusts everything under it, within its box
-  adjust:  ['x', 'y', 'w', 'h', 'rotation', 'opacity', 'blur', 'zblur', 'rgb', ...SMEAR, ...FLUTE, ...ADJUST, ...FINISH.filter(k => k !== 'matte')],
+  adjust:  ['x', 'y', 'w', 'h', 'rotation', 'opacity', 'blur', 'zblur', 'rgb', ...FILM, ...SMEAR, ...FLUTE, ...ADJUST, ...FINISH.filter(k => k !== 'matte')],
   shape3d: [...COMMON, ...DEPTH, 'w', 'h', 'd', 'shape', 'text', 'radius', 'fill', 'material', 'lightAngle'],
   model:   [...COMMON, ...DEPTH, 'w', 'h', 'lightAngle'],
   figure:  [...COMMON, 'w', 'h', 'fill', 'stroke', 'strokeWidth', 'side', 'limb', 'caps', ...Figure.JOINTS, ...PHYS],
@@ -140,7 +144,7 @@ const GROUPS = [['Transform', ['x', 'y', 'w', 'h', 'd', 'rotation', 'scale', 'sx
   ['3D', ['three', 'shape', 'rotX', 'rotY', 'z', 'material', 'lightAngle']], ['Camera', ['follow', 'followMix', 'orbit', 'tilt', 'dolly', 'zoom']], ['Fit around', ['fit', 'fitPad']],
   ['Drawing', ['pathd', 'vb', 'pfill']], ['Style', ['fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', 'radius', 'points', 'wobble', 'morph', 'seed', 'sweep', 'opacity']],
   ['Text', ['text', 'font', 'weight', 'size', 'lineh', 'italic', 'align', 'tcase', 'spacing', 'wordGap', 'reveal', 'retype']], ['Changing words', ['words', 'wordTimes', 'wordStart', 'wordEvery', 'wordMove', 'wordFill']], ['Pose', ['side', 'limb', 'caps', ...Figure.JOINTS]], ['Physics', PHYS],
-  ['Clip', CLIP], ['Vertical short', FILLP], ['Speed lines', ['count', 'lineLen', 'thick', 'hole', 'rush']], ['Shoot through', ['thing', 'cover', 'holeX', 'holeY', 'soft', 'drift', 'glints']], ['Effects', ['blur', 'zblur', 'shadow', 'rgb', 'boil', 'vapor']], ['Echo', ECHO], ['Pixel smear', SMEAR], ['Fluted glass', FLUTE], ['Cut out', CUTP], ['Adjust', ADJUST], ['Green screen', KEYP], ['Mask', MASK],
+  ['Clip', CLIP], ['Vertical short', FILLP], ['Speed lines', ['count', 'lineLen', 'thick', 'hole', 'rush']], ['Shoot through', ['thing', 'cover', 'holeX', 'holeY', 'soft', 'drift', 'glints']], ['Effects', ['blur', 'zblur', 'shadow', 'rgb', 'boil', 'vapor']], ['Echo', ECHO], ['16 mm film', FILM], ['Pixel smear', SMEAR], ['Fluted glass', FLUTE], ['Cut out', CUTP], ['Adjust', ADJUST], ['Green screen', KEYP], ['Mask', MASK],
   ['Grade', Grade.GRADE], ['Curves', ['curves']], ['Vignette and LUT', LOOKP]];
 GROUPS.splice(1, 0, ...World.GROUPS);
 const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', scale: 'Scale', sx: 'Stretch X', sy: 'Stretch Y',
@@ -151,6 +155,7 @@ const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', sca
   fit: 'Fit around', fitPad: 'Padding', follow: 'Follow layer', followMix: 'Follow %',
   mask: 'Mask', matte: 'Track matte', mx: 'Mask X', my: 'Mask Y', mw: 'Mask W', mh: 'Mask H', mround: 'Corners', feather: 'Feather',
   smear: 'Smear px', smearDir: 'Smear to°', smearAt: 'Brighter than %',
+  film: 'Film %', filmGrain: 'Grain %', filmHalo: 'Halation %', filmWeave: 'Gate weave px', filmFade: 'Fade %',
   flute: 'Rib width px', fluteDir: 'Ribs run', fluteBend: 'Bend %', fluteStreak: 'Streak px', fluteLines: 'Fine lines %', fluteShine: 'Shine %', fluteChroma: 'Colour split px', fluteShift: 'Slide px',
   echo: 'Echoes', echoGap: 'Echo gap s', echoFade: 'Echo fade %', echoScale: 'Echo grow %', zblur: 'Zoom blur',
   fillBehind: 'Blurred fill', fillBlur: 'Fill blur', fillDim: 'Fill brightness %', cutout: 'Cut out person', cutEdge: 'Edge soft', cutGrow: 'Grow', count: 'Lines', lineLen: 'Length %', thick: 'Thickness', hole: 'Clear middle %', rush: 'Rush %', thing: 'In front', cover: 'Covers %', holeX: 'Clear spot x %', holeY: 'Clear spot y %', soft: 'Out of focus %', drift: 'Drift', glints: 'Glints',
@@ -168,7 +173,7 @@ const CAMERA_LABEL = { x: 'Look at X', y: 'Look at Y', rotation: 'Roll°' };
 Object.assign(LABEL, World.LABELS);
 const STEP = { echoGap: .01, gradMorph: 1, opacity: .05, scale: .05, sx: .05, sy: .05, reveal: .05, erase: .05, zoom: .05, expo: .05, gamma: .05, ...World.STEP };
 const PALETTE = ['#7c5cff', '#ff5c8a', '#20c997', '#ffb020', '#3fa9ff', '#ff7a45'];
-const DEFAULTS = { fillBehind: false, fillBlur: 40, fillDim: 55, smear: 0, smearDir: 0, smearAt: 55, flute: 0, fluteDir: 'down', fluteBend: 40, fluteStreak: 30, fluteLines: 55, fluteShine: 40, fluteChroma: 3, fluteShift: 0, echo: 0, echoGap: .05, echoFade: 80, echoScale: 0, zblur: 0, cutout: false, cutEdge: 2, cutGrow: 0,
+const DEFAULTS = { film: 0, filmGrain: 60, filmHalo: 50, filmWeave: 1.5, filmFade: 40, fillBehind: false, fillBlur: 40, fillDim: 55, smear: 0, smearDir: 0, smearAt: 55, flute: 0, fluteDir: 'down', fluteBend: 40, fluteStreak: 30, fluteLines: 55, fluteShine: 40, fluteChroma: 3, fluteShift: 0, echo: 0, echoGap: .05, echoFade: 80, echoScale: 0, zblur: 0, cutout: false, cutEdge: 2, cutGrow: 0,
   count: 90, lineLen: 30, thick: 3, hole: 35, rush: 100, thing: 'ribbon', cover: 60, holeX: 56, holeY: 55, soft: 60, drift: 25, glints: 5, pathd: '', vb: '0 0 100 100', pfill: false, boil: 0, vapor: 0, morph: 0, wobble: 40, seed: 1, rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0, rgb: 0,
   words: '', wordGap: 0, wordTimes: '', wordStart: 1, wordEvery: .5, wordMove: .25, wordFill: '', fit: '', fitPad: 30, follow: '', followMix: 100,
   size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, erase: 0, retype: '', font: 'Inter', italic: false, align: 'center', tcase: 'none', lineh: 110,
@@ -945,6 +950,63 @@ function renderScene(c, t, scale = 1, opt = {}) {
   c.restore(); c.setTransform(1, 0, 0, 1, 0, 0);
 }
 
+// ---------- 16 mm film ----------
+// The sheet A (what is under an adjustment layer) made to look shot on film. Every part moves with the frame number
+// (24 a second), so the same frame always comes out the same, in the preview and in an export.
+const FILM_SHEETS = {};
+function filmSheet(name, W, H) {
+  let s = FILM_SHEETS[name]; if (!s) { const cv = document.createElement('canvas'); s = FILM_SHEETS[name] = { cv, c: cv.getContext('2d', { willReadFrequently: true }) }; }
+  if (s.cv.width !== W || s.cv.height !== H) { s.cv.width = W; s.cv.height = H; }
+  s.c.setTransform(1, 0, 0, 1, 0, 0); s.c.filter = 'none'; s.c.globalCompositeOperation = 'source-over'; s.c.globalAlpha = 1; s.c.clearRect(0, 0, W, H); return s;
+}
+function filmLook(A, W, H, o, k, t) {
+  const amt = Math.min(1, o.film / 100), a = A.c, frame = Math.floor(t * 24);
+  const hash = n => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+  // the gate: the picture weaves a fraction of a pixel to a pixel or two, never quite still
+  const weave = (+o.filmWeave || 0) * k * amt;
+  if (weave > .05) {
+    const B = filmSheet('weave', W, H); B.c.drawImage(A.cv, 0, 0);
+    const dx = (hash(frame) - .5) * 2 * weave * .6, dy = (hash(frame + 99) - .5) * 2 * weave;
+    a.clearRect(0, 0, W, H); a.fillStyle = '#000'; a.fillRect(0, 0, W, H); a.drawImage(B.cv, dx, dy);
+  }
+  // halation: the brightest parts bleed red-orange into what is round them, as light does through the film's back
+  const halo = Math.min(1, (+o.filmHalo || 0) / 100) * amt;
+  if (halo > .01) {
+    const sW = Math.max(1, Math.round(W / 4)), sH = Math.max(1, Math.round(H / 4)), B = filmSheet('halo', sW, sH);
+    B.c.filter = 'brightness(1.6) contrast(3) saturate(0)'; B.c.drawImage(A.cv, 0, 0, sW, sH); B.c.filter = 'none';
+    const img = B.c.getImageData(0, 0, sW, sH), d = img.data;
+    for (let i = 0; i < d.length; i += 4) { const v = Math.max(0, d[i] - 150) / 105; d[i] = 255 * v; d[i + 1] = 95 * v; d[i + 2] = 40 * v; d[i + 3] = 255; }
+    B.c.putImageData(img, 0, 0);
+    const C = filmSheet('haloblur', W, H); C.c.filter = `blur(${Math.max(2, 9 * k)}px)`; C.c.drawImage(B.cv, 0, 0, W, H); C.c.filter = 'none';
+    a.save(); a.globalCompositeOperation = 'screen'; a.globalAlpha = halo; a.drawImage(C.cv, 0, 0); a.restore();
+  }
+  // the stock: lifted blacks and softer whites, warm highlights and teal shadows, a slow flicker, and grain
+  const fade = Math.min(1, (+o.filmFade || 0) / 100) * amt, grain = Math.min(1.5, (+o.filmGrain || 0) / 100) * amt;
+  const flicker = 1 + (hash(frame * 3.1) - .5) * .035 * amt;
+  const img = a.getImageData(0, 0, W, H), d = img.data;
+  const lift = 26 * fade, top = 255 - 18 * fade, span = (top - lift) / 255, g = 22 * grain;
+  // grain clumps: one random value per 2 x 2 at full size, so it reads as grain, not single-pixel noise
+  let seed = (frame * 2654435761) >>> 0; const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+  const gw = Math.ceil(W / 2), gh = Math.ceil(H / 2), field = new Float32Array(gw * gh);
+  for (let i = 0; i < field.length; i++) field[i] = (rnd() + rnd() + rnd() - 1.5) * 1.15;
+  for (let y = 0, i = 0; y < H; y++) {
+    const row = (y >> 1) * gw;
+    for (let x = 0; x < W; x++, i += 4) {
+      let r = d[i], gg = d[i + 1], b = d[i + 2];
+      const l = (r * .3 + gg * .59 + b * .11) / 255;
+      // split tone: teal into the shadows, a warm cast into the highlights
+      const sh = (1 - l) * (1 - l) * fade, hi = l * l * fade;
+      r += -10 * sh + 12 * hi; gg += 4 * sh + 5 * hi; b += 10 * sh - 10 * hi;
+      // a little less saturated, as a scan of an older stock is
+      const m = (r + gg + b) / 3; r = m + (r - m) * (1 - .18 * fade); gg = m + (gg - m) * (1 - .18 * fade); b = m + (b - m) * (1 - .18 * fade);
+      // grain: strongest in the mid-tones, as on film
+      const n = field[row + (x >> 1)] * g * (.45 + 2.2 * l * (1 - l));
+      d[i] = (lift + (r * flicker) * span) + n; d[i + 1] = (lift + (gg * flicker) * span) + n; d[i + 2] = (lift + (b * flicker) * span) + n;
+    }
+  }
+  a.putImageData(img, 0, 0);
+}
+
 // ---------- finishing: masks, mattes, keying, grading ----------
 // A layer that is masked, matted, keyed or graded is drawn on a sheet of its own first, its pixels worked on there,
 // then laid on the scene with its blend mode. Anything else is drawn straight onto the scene, as before.
@@ -1014,6 +1076,7 @@ function finishLayer(c, L, t, i, depth = 0) {
     flutedGlass(img, o, k, rg);
     a.putImageData(img, rg.x, rg.y);
   }
+  if (o.film > 0 && L.type === 'adjust') filmLook(A, W, H, o, k, t);
   if (o.smear > 0) {
     const img = a.getImageData(rg.x, rg.y, rg.w, rg.h);
     pixelSmear(img, o.smear * k, +o.smearDir || 0, +o.smearAt || 55, Math.floor(t * 12) + 1);

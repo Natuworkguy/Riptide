@@ -13,7 +13,7 @@ const Fonts = (() => {
     ['Nunito', 'sans'], ['Work Sans', 'sans'], ['DM Sans', 'sans'], ['Rubik', 'sans'], ['Space Grotesk', 'sans'], ['Manrope', 'sans'],
     ['Outfit', 'sans'], ['Sora', 'sans'], ['Syne', 'sans'], ['Unbounded', 'sans'], ['Archivo', 'sans'], ['Barlow Condensed', 'sans'],
     ['Playfair Display', 'serif'], ['Lora', 'serif'], ['Merriweather', 'serif'], ['Cormorant Garamond', 'serif'], ['Fraunces', 'serif'],
-    ['DM Serif Display', 'serif'], ['Libre Baskerville', 'serif'], ['Source Serif 4', 'serif'], ['EB Garamond', 'serif'],
+    ['DM Serif Display', 'serif'], ['Libre Baskerville', 'serif'], ['Source Serif 4', 'serif'], ['EB Garamond', 'serif'], ['Instrument Serif', 'serif'], ['Newsreader', 'serif'],
     ['Bebas Neue', 'display'], ['Anton', 'display'], ['Oswald', 'display'], ['Archivo Black', 'display'], ['Abril Fatface', 'display'],
     ['Righteous', 'display'], ['Bangers', 'display'], ['Luckiest Guy', 'display'], ['Monoton', 'display'], ['Black Ops One', 'display'],
     ['Orbitron', 'display'], ['Audiowide', 'display'], ['Bungee', 'display'], ['Shrikhand', 'display'], ['Rubik Mono One', 'display'],

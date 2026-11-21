@@ -299,7 +299,7 @@ async def export_scene(path: str, layer: str | None = None, at_time: float | str
 
 
 @mcp.tool()
-async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "mountain", "neon", "golden", "oculus", "blocks", "blockisle", "blockgrave", "blocklava", "blockdungeon", ""] = "", name: str | None = None,
+async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "mountain", "neon", "golden", "oculus", "blocks", "blockisle", "blockgrave", "blocklava", "blockdungeon", "orbits", ""] = "", name: str | None = None,
                     props: dict | None = None) -> dict:
     """Add a 3D world at the bottom of the layers: a whole place to film, with a sky, a sun that casts shadows,
     the ground, the air, props, and a lens. 3D shapes and models above it stand inside it, lit and shadowed by
@@ -314,12 +314,14 @@ async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "
     the dock, one talking, one holding a sword), "blockgrave" (a block graveyard at night in a pink haze: headstones, dead
     trees, candles and lanterns, a tomb at the end of the path), "blocklava" (a sea of lava under a red sky, black rock,
     basalt columns, a dark bridge with lanterns, embers), "blockdungeon" (a long torchlit stone hall, barred cells, a fire
-    at the far end, a block figure); "" is an empty
+    at the far end, a block figure), "orbits" (the Earth at night in space, satellites with tags on their orbits,
+    the whole system turning slowly: for explainers); "" is an empty
     world. `props` then changes any of its settings (all the numbers and colours animate, with update_layer or
     set_keyframes like any layer's):
 
     sky "sunset" | "day" | "dusk" | "haze" | "overcast" | "night" | "city" (a city at night: no stars, cloud lit orange by the streets) | "studio"
-    | "violet" | "ember" | "torch" | "sulfur" (dark overhead, one strong colour low down that the haze takes on: pink, red, warm, yellow-green); sunEl (degrees up), sunAz (degrees
+    | "violet" | "ember" | "torch" | "sulfur" (dark overhead, one strong colour low down that the haze takes on: pink, red, warm, yellow-green) | "space" (black, stars all
+    round, no horizon: use ground "none"); sunEl (degrees up), sunAz (degrees
     round: 0 is straight ahead of the camera, behind what it looks at), sunPower (%), clouds (%), wind (m/s:
     clouds, plants, dust and the sea move with it). ground "ocean" | "field" | "desert" | "mountains" | "floor" |
     "none", groundColor. Mountains: peaks (m), snow (snow line, % of the peaks), trees (pines, %), road (its width,
@@ -345,7 +347,17 @@ async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "
     "concrete" | "rust" | "gold" | "glow" | "holo" (rainbow foil shards, faceted: a glitch skin), "color", "glow" (brightness), "spin": [x, y, z] degrees a second,
     "bob" (m), "children": [...] placed from it}. A cylinder or cone's size is [diameter, height]; a box takes
     "round" (corner radius, m); a truss (a lattice tower or beam) takes "bays", "rod" (m) and "taper" (0 to 1);
-    a label is a flat screen with "text" (lines split by \n), "color" and "background". A "sketch" is a flat
+    a label is a flat screen with "text" (lines split by \n), "color" and "background". Space, for explainers set in orbit
+    (the "orbits" scene is one): a "globe" is the Earth at night (city lights, a faint grid, a thin blue atmosphere;
+    "size" [diameter], "atmosphere" colour, "pin": {"lat", "lon", "label", "color"} marks a place with a point and a
+    tag; give it "spin" [0, 2, 0] to turn it). An "orbit" is a fine glowing line round its middle: "radius" (m),
+    "ecc" (0 round to 0.9 long), "tilt" (degrees; "turn" [0, y, 0] turns its plane round), "color", "opacity",
+    "draw" (0 to 1, how much is drawn; key it to draw the orbit on), and satellites moving along it: "count",
+    "period" (seconds a lap), "phase" (degrees), "satellite" (colour), "dot" (size, m), "labels" (one tag each,
+    e.g. ["PRN 9"], joined by a dashed line, always facing the camera) and "tagSize" (m). A "reach" is how far a
+    signal goes: a see-through sphere, bright at its edge ("size" [diameter], "color", "strength"); put several
+    so they cross where the answer is, and key their "scale" to grow them out. "stars" adds stars all round
+    ("amount") to a world whose sky is not "space". A "sketch" is a flat
     outline made solid: "shape" "rect" (with "w", "d"), "circle" ("r") or "poly" ("loop": [[x, z], ...] round its
     middle), "depth" (m: extruded up its Y, negative down) or "revolve" (degrees round its left edge, for turned
     parts like a vase or a wheel). A "person" is a real-looking built-in person (photographed skin, clothes and hair):

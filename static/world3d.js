@@ -13,7 +13,7 @@ const World = (() => {
   const RENDERS = [['preview', 'Preview: fast'], ['path', 'Path traced: real light'], ['native', 'Photoreal: rendered natively']];
   const SKIES = [['sunset', 'Golden hour'], ['day', 'Clear day'], ['dusk', 'Dusk'], ['haze', 'Hazy'], ['overcast', 'Overcast'],
     ['night', 'Night'], ['city', 'City night (no stars, cloud lit by the streets)'], ['studio', 'Studio'],
-    ['violet', 'Violet night (a pink glow low down)'], ['ember', 'Ember (a red glow, as underground fire)'], ['torch', 'Torchlit dark (warm, almost black)'], ['sulfur', 'Sulfur haze (yellow-green)']];
+    ['violet', 'Violet night (a pink glow low down)'], ['ember', 'Ember (a red glow, as underground fire)'], ['torch', 'Torchlit dark (warm, almost black)'], ['sulfur', 'Sulfur haze (yellow-green)'], ['space', 'Space (stars all round, no horizon)']];
   const GROUNDS = [['ocean', 'Ocean'], ['field', 'Wheat field'], ['desert', 'Desert'], ['mountains', 'Mountain road'], ['floor', 'Studio floor'], ['none', 'None']];
   // sky palettes: the zenith, the horizon, the sun, clouds where the sun reaches them and where it does not
   const PALETTE = {
@@ -31,6 +31,8 @@ const World = (() => {
     ember: { zen: '#140303', hor: '#a3170d', sun: '#ff6a3a', lit: '#5a120c', shade: '#120202', disk: 0, power: .5 },
     torch: { zen: '#050302', hor: '#3a220f', sun: '#ffb060', lit: '#2a1a0c', shade: '#060403', disk: 0, power: .3 },
     sulfur: { zen: '#121103', hor: '#8a861c', sun: '#f5e66a', lit: '#4a4510', shade: '#141203', disk: 0, power: .6 },
+    // space: black all round, lit by a far sun that shows no disk
+    space: { zen: '#010103', hor: '#04050b', sun: '#ffffff', lit: '#000000', shade: '#000000', disk: 0, power: 1.2 },
   };
   const FIELDS = ['sky', 'hdri', 'hdriTurn', 'hdriPower', 'sunEl', 'sunAz', 'sunPower', 'clouds', 'wind',
     'ground', 'groundColor', 'floorFinish', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH', 'sway', 'swayLoop',
@@ -110,11 +112,11 @@ const World = (() => {
       }
       // stars: cells on the sky's sphere itself (not a plane projected to the horizon, which stretched them into
       // dashes), each a soft round point around a jittered centre, so they stay round at any aspect and camera move
-      if (uStars > 0. && d.y > 0.) { vec3 q = normalize(d) * 160., g = floor(q), f = q - g;
+      if (uStars > 0. && (d.y > 0. || uStars > 1.5)) { vec3 q = normalize(d) * 160., g = floor(q), f = q - g;
         vec2 k = g.xy + g.z * vec2(37.1, 17.3); float on = step(.94, h21(k));
         vec3 ctr = .3 + .4 * vec3(h21(k + 3.), h21(k + 5.), h21(k + 9.));
         float r = length(f - ctr), s = on * smoothstep(.16, .02, r) * (.35 + .65 * h21(k + 7.));
-        c += vec3(s) * uStars * smoothstep(0., .3, d.y); }
+        c += vec3(s) * (uStars > 1.5 ? 1. : uStars * smoothstep(0., .3, d.y)); }
       return c;
     }
     // the colour of the air at the horizon in direction d: what fog fades to
@@ -492,7 +494,7 @@ const World = (() => {
         mat = labelMats.get(key) || new T.MeshBasicMaterial({ map: labelTexture(P.text, P.color, P.background) }); labelMats.set(key, mat); }
       else mat = finish(P.finish, P.color, P.glow, P);
       const g = custom[P.type] ? custom[P.type](P, t) : partGeometry(P);
-      if (g?.isObject3D) { g.traverse(x => { if (x.isMesh) { x.castShadow = x.receiveShadow = true; x.userData.partId = P.id; } }); node.add(g); }
+      if (g?.isObject3D) { g.traverse(x => { if (x.isMesh) { x.castShadow = x.receiveShadow = !x.userData.noShadow; x.userData.partId = P.id; } }); node.add(g); }
       else if (g) { const mesh = new T.Mesh(g, mat); mesh.scale.setScalar(M); mesh.castShadow = mesh.receiveShadow = P.type !== 'label'; mesh.userData.partId = P.id; node.add(mesh); }
     }
     for (const C of Array.isArray(P.children) ? P.children : []) { const k = buildPart(C, t); if (k) node.add(k); }
@@ -512,7 +514,7 @@ const World = (() => {
     return null;
   }
   // props that move by themselves: keyed, spinning, bobbing, playing a clip, or alive (cars, people, crowds, effects)
-  const animated = list => JSON.stringify(list || []).match(/"(keys|spin|bob|clip|poseKeys|actions)"|"type":"(car|person|crowd|fx|rain|blockclouds|blocky|whale)"/);
+  const animated = list => JSON.stringify(list || []).match(/"(keys|spin|bob|clip|poseKeys|actions)"|"type":"(car|person|crowd|fx|rain|blockclouds|blocky|whale|orbit)"/);
   function buildProps(list, t) {
     const root = new T.Group();
     for (const P of Array.isArray(list) ? list : []) { const n = buildPart(P, t); if (n) root.add(n); }
@@ -794,8 +796,8 @@ const World = (() => {
     const sun = sunDir(o), elev = clamp(sun.y * 4 + .15, 0, 1);
     // the sky
     U.uSunDir.value.copy(sun); U.uZen.value.copy(lin(pal.zen)); U.uHor.value.copy(lin(pal.hor)); U.uSun.value.copy(lin(pal.sun)).multiplyScalar(pal.power * (o.sunPower ?? 100) / 100);
-    U.uLit.value.copy(lin(pal.lit)); U.uShade.value.copy(lin(pal.shade)); U.uClouds.value = o.sky === 'studio' ? 0 : clamp((o.sky === 'overcast' ? Math.max(80, o.clouds) : +o.clouds) / 100, 0, 1);
-    U.uTime.value = t; U.uWind.value = +o.wind || 0; U.uStars.value = o.sky === 'night' ? 1 : 0; U.uDisk.value = pal.disk; U.uFog.value = Math.max(0, +o.fog || 0) / 100 * .02;
+    U.uLit.value.copy(lin(pal.lit)); U.uShade.value.copy(lin(pal.shade)); U.uClouds.value = o.sky === 'studio' || o.sky === 'space' ? 0 : clamp((o.sky === 'overcast' ? Math.max(80, o.clouds) : +o.clouds) / 100, 0, 1);
+    U.uTime.value = t; U.uWind.value = +o.wind || 0; U.uStars.value = o.sky === 'night' ? 1 : o.sky === 'space' ? 2 : 0; U.uDisk.value = pal.disk; U.uFog.value = Math.max(0, +o.fog || 0) / 100 * .02;
     U.uGround.value = ground; U.uWaves.value = Math.max(0, +o.waves || 0); U.uChop.value = clamp((+o.chop || 0) / 100, 0, 1.5);
     U.uWater.value.copy(lin(o.water)); U.uLight.value = .35 + .9 * elev * pal.power;
     B.sky.position.copy(cam.position);
@@ -991,6 +993,20 @@ const World = (() => {
       p: { sky: 'night', sunEl: 14, sunAz: 5, sunPower: 100, clouds: 25, wind: 3, ground: 'ocean', water: '#041a24', waves: .8, chop: 40,
         swell: 0, fog: 3, dust: 0, eye: 2.2, heading: 0, pitch: 3, travel: 0, lens: 35, focus: 0, dof: 0, exposure: .4, bloom: 60, grain: 25, fringe: 10, ao: 0, objects: [] },
       keys: d => ({ heading: [[0, -4, 'sineInOut'], [d, 4]] }) },
+    orbits: { label: 'Orbits', hint: 'The Earth at night, satellites on their orbits, the reach of their signals',
+      p: { sky: 'space', sunEl: 20, sunAz: 140, sunPower: 60, clouds: 0, wind: 0, ground: 'none', fog: 0, dust: 0,
+        eye: 1.7, heading: 0, pitch: 0, travel: 0, lens: 40, focus: 0, dof: 0, exposure: .2, bloom: 55, grain: 6, fringe: 0, ao: 0,
+        // the camera stays still: the whole system turns slowly, which reads as the camera going round it
+        objects: [{ type: 'group', name: 'Earth and orbits', at: [0, 1.7, -6.6], turn: [14, 0, 0], children: [{ type: 'group', name: 'Turning', spin: [0, -4, 0], children: [
+          { type: 'globe', name: 'Earth', turn: [0, 200, 0], spin: [0, 1.5, 0], size: [2.4, 2.4, 2.4], pin: { lat: 40.7, lon: -74, label: 'New York' } },
+          { type: 'orbit', name: 'Orbit A', radius: 2.6, tilt: 62, turn: [0, 10, 0], count: 2, period: 30, labels: ['PRN 9', 'PRN 26'] },
+          { type: 'orbit', name: 'Orbit B', radius: 2.65, tilt: 58, turn: [0, 70, 0], count: 2, period: 30, phase: 75, labels: ['PRN 3'] },
+          { type: 'orbit', name: 'Orbit C', radius: 2.7, tilt: 55, turn: [0, 130, 0], count: 2, period: 30, phase: 150, labels: ['PRN 14'] },
+          { type: 'orbit', name: 'Orbit D', radius: 2.6, tilt: 64, turn: [0, 190, 0], count: 1, period: 30, phase: 220 },
+          { type: 'orbit', name: 'Orbit E', radius: 2.65, tilt: 52, turn: [0, 250, 0], count: 1, period: 30, phase: 290 },
+          { type: 'orbit', name: 'Orbit F', radius: 2.7, tilt: 60, turn: [0, 310, 0], count: 1, period: 30, phase: 330 },
+          { type: 'orbit', name: 'Far ring', radius: 4.6, tilt: 8, opacity: .14, color: '#c8c2b4' }] }] }] },
+      keys: d => ({ heading: [[0, -3, 'sineInOut'], [d, 3]] }) },
   };
 
   const World = { LETTERBOXES, RENDERS, SKIES, GROUNDS, tex,

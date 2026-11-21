@@ -10,6 +10,7 @@ Two ways to connect:
   * stdio: {"command": "/path/to/riptide/.venv/bin/python", "args": ["/path/to/riptide/mcp_server.py"]}
 Set RIPTIDE_URL if the editor runs somewhere other than http://127.0.0.1:5173.
 """
+import asyncio
 import base64
 import sys
 import json
@@ -644,6 +645,28 @@ async def add_image(path: str, name: str | None = None, x: float | None = None, 
     with open(p, "rb") as f:
         src = f"data:{IMAGE_TYPES[ext]};base64," + base64.b64encode(f.read()).decode()
     return await acall("add_image", {"src": src, "file": os.path.basename(p), "name": name, "x": x, "y": y}, timeout=120)
+
+
+@mcp.tool()
+async def find_footage(query: str, source: Literal["all", "commons", "nasa"] = "all", limit: int = 12) -> dict:
+    """Find real video footage (nature, places, people at work, space, science) free to use in any film, ads
+    included: from Wikimedia Commons and NASA, only clips in the public domain, under CC0 or CC BY. Use it
+    whenever a film should look real: a real whale beats a 3D one. Each clip has its title, size, length,
+    licence and credit (put the credit in the end credits when the licence is CC BY); add one with add_footage."""
+    import footage
+    return await asyncio.to_thread(footage.search, query, source, max(1, min(30, limit)))
+
+
+@mcp.tool()
+async def add_footage(url: str = "", manifest: str = "", name: str | None = None, credit: str = "",
+                      at_time: float | None = None, cover: bool = True) -> dict:
+    """Add a clip found with find_footage as a video layer: pass its url (Wikimedia Commons) or manifest (NASA),
+    and its credit. It starts at at_time (the playhead if not given) and, with cover, fills the frame. Grade it to
+    match the film (an adjust layer), and trim, slow or speed it like any video layer."""
+    if not url and not manifest:
+        raise RiptideError("Give the clip's url or manifest, from find_footage")
+    return await acall("add_footage", {"url": url, "manifest": manifest, "name": name, "credit": credit,
+                                       "at": at_time, "cover": cover}, timeout=600)
 
 
 MODEL_TYPES = {".glb": "model/gltf-binary", ".gltf": "model/gltf+json", ".obj": "model/obj", ".fbx": "application/octet-stream"}

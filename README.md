@@ -56,6 +56,13 @@ A browser motion-graphics and image editor with a small Flask backend for video 
 - Gradients: linear or radial, through up to five colours (Fill, up to three Via stops, Fill 2), and morphing from one kind to the other with To radial %; colours can be linked to the project's colour constants (Composition, Colours), like CSS's --accent
 - Export: MP4 (H.264/AAC), WebM (VP9/Opus), MOV (ProRes 422 HQ), GIF, PNG sequence (zip), or a still frame; 24/25/30/60 fps; sizes up to 8K; whole timeline or between markers. Presets set it all in one pick: YouTube 1080p and 4K, Shorts, Reels and TikTok (9:16), Instagram square and portrait, transparent ProRes 4444 and WebM, a small web version and GIF, plus your own saved settings. Frame exports to 16:9, 9:16, 1:1 or 4:5 whatever the canvas, filled (cropped to the middle) or fitted with bars; Transparent leaves out the background for WebM, MOV, PNG and still PNG or WebP, to lay over other footage
 
+## Real footage
+
+Riptide finds real video clips that are free to use in any film, ads included, on Wikimedia Commons and from NASA:
+only public domain, CC0 and CC BY clips, never share-alike, non-commercial or no-derivatives ones. Each comes with
+its licence and the credit to show. Agents use `find_footage` and `add_footage`; a clip is downloaded once into
+`~/.riptide/footage` and added as a video layer filling the frame, its credit kept with it.
+
 ## Music on real instruments
 
 `tools/sampler.py` plays a score written as notes on recordings of real instruments: an upright piano, string

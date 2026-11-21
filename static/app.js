@@ -4705,6 +4705,22 @@ const LIVE = (() => {
       addImageLayer(ids[0], a.x ?? undefined, a.y ?? undefined); const L = cur(); if (a.name) L.name = String(a.name);
       return done(`added the image "${L.name}"`, { id: L.id });
     },
+    // real footage (Riptide's footage search): downloaded through Riptide, added as a video layer filling the frame,
+    // its credit kept with it for the end credits
+    add_footage: async a => {
+      const q = a.manifest ? `manifest=${encodeURIComponent(a.manifest)}` : `url=${encodeURIComponent(a.url || '')}`;
+      const r = await fetch(`/api/footage/file?${q}`);
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `couldn't get that clip (${r.status})`);
+      const blob = await r.blob(), type = blob.type.startsWith('video/') ? blob.type : 'video/mp4';
+      const ids = await addAssets([new File([blob], a.file || 'footage', { type })]);
+      if (!ids.length) throw new Error('that clip would not open');
+      const A = S.assets[ids[0]]; if (a.credit) A.credit = String(a.credit).slice(0, 300);
+      if (a.at !== undefined && a.at !== null) time = frame(Math.max(0, +a.at || 0));
+      addImageLayer(ids[0]); const L = cur(); if (a.name) L.name = String(a.name);
+      if (a.cover !== false) { const k = Math.max(S.w / A.w, S.h / A.h); Object.assign(L.p, { x: S.w / 2, y: S.h / 2, w: Math.round(A.w * k), h: Math.round(A.h * k) }); }
+      refresh();
+      return done(`added the clip "${L.name}" (${fmtTime(A.dur || 0)})`, { id: L.id, asset: ids[0], seconds: A.dur, credit: A.credit || '' });
+    },
     // a Flash file: played, recorded and added as a video layer (with open true, it becomes the whole project)
     add_structure: async a => {
       const blob = await (await fetch(a.src)).blob(), f = new File([blob], a.file || 'build.nbt');

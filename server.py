@@ -21,6 +21,7 @@ from pathlib import Path
 from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory
 
 import cutout
+import footage
 import ruffle
 import native
 from launch import open_link
@@ -380,6 +381,28 @@ def ruffle_file(name):
     if not f:
         abort(404)
     return send_file(f, mimetype="application/wasm" if name.endswith(".wasm") else "text/javascript", max_age=86400)
+
+
+@app.get("/api/footage/search")
+def footage_search():
+    # real clips that may be used in anything (footage.py): public domain, CC0 or CC BY, each with its credit
+    try:
+        return jsonify(footage.search(request.args.get("q", ""), request.args.get("source", "all"),
+                                      min(30, int(request.args.get("limit", 12) or 12))))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@app.get("/api/footage/file")
+def footage_file():
+    # a clip, downloaded once and then served from this computer, so the editor can use it as its own
+    try:
+        path = footage.fetch(request.args.get("url", ""), request.args.get("manifest", ""))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except OSError as exc:
+        return jsonify({"error": f"couldn't download it: {exc}"}), 502
+    return send_file(path, mimetype=footage.MIME.get(path.suffix, "video/mp4"), conditional=True, max_age=86400)
 
 
 @app.get("/<path:p>")

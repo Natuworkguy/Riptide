@@ -2114,6 +2114,14 @@ const PRESETS = {
     if (L.type === 'path') { a('reveal', 0, 0, 'sineInOut'); a('reveal', 1.4, 1); return; }
     if (L.type !== 'arc') return 'Arc, wave and line layers only'; a('sweep', 0, 0, 'expoInOut'); a('sweep', 1.1, o.sweep); },
   },
+  // Editorial: calm, exact motion for explainers and essays. Things set in, lines are ruled, nothing bounces.
+  Editorial: {
+    'Set in': (a, o) => { a('y', 0, o.y + 22, 'expoOut'); a('y', .9, o.y); a('opacity', 0, 0, 'sineOut'); a('opacity', .6, o.opacity); a('blur', 0, 6, 'quartOut'); a('blur', .6, o.blur); },
+    'Tracking settle': (a, o, L) => { if (L.type !== 'text') return 'Text layers only'; a('spacing', 0, o.spacing + Math.max(8, o.size * .12), 'expoOut'); a('spacing', 1.4, o.spacing); a('opacity', 0, 0, 'sineOut'); a('opacity', .7, o.opacity); },
+    'Hairline': (a, o, L) => { if (!['wave', 'path', 'arc'].includes(L.type)) return 'Lines only'; a('reveal', 0, 0, 'quartInOut'); a('reveal', 1.4, 1); },
+    'Slow push': (a, o) => { a('scale', 0, o.scale, 'linear'); a('scale', 8, o.scale * 1.035); },
+    'Quiet out': (a, o) => { a('y', 0, o.y, 'sineIn'); a('y', .5, o.y - 12); a('opacity', 0, o.opacity, 'sineIn'); a('opacity', .5, 0); a('blur', 0, o.blur, 'sineIn'); a('blur', .5, 4); },
+  },
   Emphasis: {
     'Pulse': (a, o) => { a('scale', 0, o.scale, 'sineInOut'); a('scale', .25, o.scale * 1.15, 'sineInOut'); a('scale', .5, o.scale); },
     'Heartbeat': (a, o) => { [[0, 1], [.14, 1.2], [.28, 1], [.42, 1.14], [.7, 1]].forEach(([t, s]) => a('scale', t, o.scale * s, 'sineInOut')); },

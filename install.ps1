@@ -93,15 +93,40 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
     Remove-Item -Recurse -Force $Zip, $Out -ErrorAction SilentlyContinue
 }
 
+# ---------- the setup window, from here on ----------
+# While it is open, the steps show there and the terminal stays quiet.
+$Quiet = $false
+function Set-Step([int]$Index, [string]$State, [string]$Note = "") { if ($Quiet) { Set-SetupStep $Index $State $Note } }
+function Say([string]$Text) { if (-not $Quiet) { Write-Host $Text } }
+function Stop-Here([string]$Text) {
+    if ($Quiet) { Stop-SetupWindow $Text }
+    Write-Host $Text
+    exit 1
+}
+$WindowKit = Join-Path $App "installer\window\window.ps1"
+if ((-not [Console]::IsOutputRedirected) -and (Test-Path $WindowKit)) {
+    . $WindowKit
+    $exe = (Get-Command $SystemPython[0]).Source
+    if ($SystemPython[0] -eq "py") { $exe = (& py -3 -c "import sys; print(sys.executable)").Trim() }
+    if (Open-SetupWindow "Riptide" "#6aa8ff" $exe @("Getting Riptide", "Riptide's Python packages", "The riptide command", "The Start menu", "riptide:// links")) {
+        Set-SetupStep 0 "ok" $Branch
+        $Quiet = $true
+        Write-Host "Riptide is setting up in its own window. Leave this terminal open until it's done."
+    }
+}
+
 # ---------- its Python environment ----------
-Write-Host "Setting up Riptide's Python environment..."
+Set-Step 1 "run"
+Say "Setting up Riptide's Python environment..."
 if (-not (Test-Path $Python)) {
     $exe = $SystemPython[0]; $rest = @($SystemPython | Select-Object -Skip 1)
     & $exe @rest -m venv $Venv
 }
 & $Python -m pip install -q --upgrade pip
 & $Python -m pip install -q -r (Join-Path $App "requirements.txt")
-if ($LASTEXITCODE -ne 0) { Write-Host "Could not install Riptide's Python packages."; exit 1 }
+if ($LASTEXITCODE -ne 0) { Stop-Here "Could not install Riptide's Python packages." }
+Set-Step 1 "ok"
+Set-Step 2 "run"
 
 # ---------- the riptide command ----------
 New-Item -ItemType Directory -Force -Path $Bin | Out-Null
@@ -111,7 +136,10 @@ if (-not (($UserPath -split ";") -contains $Bin)) {
     [Environment]::SetEnvironmentVariable("Path", (($UserPath, $Bin) | Where-Object { $_ }) -join ";", "User")
 }
 
+Set-Step 2 "ok"
+
 # ---------- the Start menu ----------
+Set-Step 3 "run"
 $Shell = New-Object -ComObject WScript.Shell
 $Link = $Shell.CreateShortcut($Shortcut)
 $Link.TargetPath = $PythonW
@@ -129,6 +157,8 @@ try {
     $Link.IconLocation = "$Ico,0"
 } catch { }
 $Link.Save()
+Set-Step 3 "ok"
+Set-Step 4 "run"
 
 # ---------- riptide:// links ----------
 New-Item -Force -Path $SchemeKey | Out-Null
@@ -137,7 +167,16 @@ Set-ItemProperty -Path $SchemeKey -Name "URL Protocol" -Value ""
 New-Item -Force -Path "$SchemeKey\shell\open\command" | Out-Null
 Set-ItemProperty -Path "$SchemeKey\shell\open\command" -Name "(Default)" -Value "`"$PythonW`" `"$App\launch.py`" `"%1`""
 
+Set-Step 4 "ok"
+
 # ---------- what is still missing ----------
+if ($Quiet) {
+    $note = if (Get-Command ffmpeg -ErrorAction SilentlyContinue) { "Open it from the Start menu, or type riptide in a new terminal." } `
+            else { "Install ffmpeg for MP4, WebM and GIF export (winget install Gyan.FFmpeg). Open Riptide from the Start menu." }
+    Complete-SetupWindow $note @($PythonW, (Join-Path $App "launch.py"))
+    Write-Host "Riptide is installed ($Branch). Open it from the Start menu, or run: riptide"
+    exit 0
+}
 Write-Host ""
 Write-Host "Riptide is installed ($Branch)."
 if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {

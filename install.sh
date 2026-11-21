@@ -21,7 +21,12 @@ LAUNCHER="$BIN/riptide"
 DESKTOP="$DATA/applications/riptide.desktop"
 BRANCH="main"
 
-say() { printf '%s\n' "$*"; }
+# While the setup window is open (installer/window), the steps show there and the terminal stays quiet.
+QUIET=""
+WINDOW=""
+say() { [ -n "$QUIET" ] || printf '%s\n' "$*"; }
+# A step in the window: its index, then run, ok or warn, and a note.
+mark() { [ -z "$WINDOW" ] || window_set "$@"; }
 
 uninstall() {
     say "Uninstalling Riptide..."
@@ -80,17 +85,43 @@ else
     exit 1
 fi
 
+# ---------- the setup window, from here on ----------
+TITLES=("Getting Riptide" "Riptide's Python packages" "A browser for drawing 3D worlds" "The riptide command, links and menu")
+[ "$(uname -s)" = "Darwin" ] && TITLES+=("The Riptide app")
+if [ -t 1 ] && [ -f "$APP/installer/window/window.sh" ]; then
+    # shellcheck source=/dev/null
+    . "$APP/installer/window/window.sh"
+    if window_open "Riptide" "#6aa8ff" "$PYTHON" "${TITLES[@]}"; then
+        window_set 0 ok "$BRANCH"
+        printf '%s\n' "Riptide is setting up in its own window. Leave this terminal open until it's done."
+        QUIET=1
+        trap 'window_fail "Riptide could not finish setting up."' ERR
+    fi
+fi
+
 # ---------- its Python environment ----------
+mark 1 run
 say "Setting up Riptide's Python environment..."
 [ -x "$VENV/bin/python" ] || "$PYTHON" -m venv "$VENV"
 "$VENV/bin/python" -m pip install -q --upgrade pip
 "$VENV/bin/python" -m pip install -q -r "$APP/requirements.txt"
+mark 1 ok
+mark 2 run
+BROWSER_NOTE="Chrome or Edge, already here"
 # 3D worlds are drawn by the server's own windowless browser: Chrome or Edge when one is here, else Playwright's Chromium
 if [ ! -d "/Applications/Google Chrome.app" ] && [ ! -d "/Applications/Microsoft Edge.app" ] \
   && ! command -v google-chrome >/dev/null 2>&1 && ! command -v google-chrome-stable >/dev/null 2>&1 && ! command -v microsoft-edge >/dev/null 2>&1; then
   say "Fetching a browser for drawing 3D worlds..."
-  "$VENV/bin/python" -m playwright install chromium >/dev/null 2>&1 || say "  Could not fetch it: 3D worlds will be drawn in your browser tab instead."
+  if "$VENV/bin/python" -m playwright install chromium >/dev/null 2>&1; then
+    BROWSER_NOTE="downloaded"
+  else
+    BROWSER_NOTE=""
+    mark 2 warn "Could not fetch it: 3D worlds are drawn in your browser tab instead."
+    say "  Could not fetch it: 3D worlds will be drawn in your browser tab instead."
+  fi
 fi
+[ -n "$BROWSER_NOTE" ] && mark 2 ok "$BROWSER_NOTE"
+mark 3 run
 
 # ---------- the riptide command ----------
 mkdir -p "$BIN"
@@ -119,10 +150,13 @@ EOF
 command -v xdg-mime >/dev/null 2>&1 && xdg-mime default riptide.desktop x-scheme-handler/riptide || true
 command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$(dirname "$DESKTOP")" >/dev/null 2>&1 || true
 
+mark 3 ok
+
 # ---------- a Mac app: Riptide in Applications, Launchpad and the Dock ----------
 # A real app: a native window with Apple's WebKit (macos/Riptide.swift), built here with Xcode's command line tools,
 # which starts Riptide's server and stops it on quit. Without the tools, a small launcher instead.
 if [ "$(uname -s)" = "Darwin" ]; then
+    mark 4 run
     MACAPP="$HOME/Applications/Riptide.app"
     rm -rf "$MACAPP"
     mkdir -p "$MACAPP/Contents/MacOS" "$MACAPP/Contents/Resources"
@@ -135,10 +169,12 @@ if [ "$(uname -s)" = "Darwin" ]; then
             touch "$MACAPP/Contents/Resources/native"
         else
             say "  Could not build it: Riptide opens in a browser window instead."
+            mark 4 warn "Could not build it: Riptide opens in a browser window instead."
         fi
     else
         say "  Xcode's command line tools are not installed (xcode-select --install): Riptide opens in a browser window."
         say "  Install them and run this again for the Riptide app."
+        mark 4 warn "Xcode's command line tools are missing (xcode-select --install), so Riptide opens in a browser window."
     fi
     if [ -z "$NATIVE" ]; then
         printf '#!/bin/sh\nexec "%s" "$@"\n' "$LAUNCHER" > "$MACAPP/Contents/MacOS/Riptide"
@@ -177,9 +213,21 @@ PLIST
     touch "$MACAPP"
     command -v /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister >/dev/null 2>&1 \
         && /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$MACAPP" >/dev/null 2>&1 || true
+    [ -n "$NATIVE" ] && mark 4 ok "in Applications, Launchpad and Spotlight"
 fi
 
 # ---------- what is still missing ----------
+if [ -n "$QUIET" ]; then
+    trap - ERR
+    if command -v ffmpeg >/dev/null 2>&1; then
+        DONE_NOTE="Open it from your apps, or type riptide in a new terminal."
+    else
+        DONE_NOTE="Install ffmpeg for MP4, WebM and GIF export (stills work without it). Open Riptide from your apps."
+    fi
+    window_done "$DONE_NOTE" "$LAUNCHER"
+    printf '%s\n' "Riptide is installed ($BRANCH). Open it from your apps, or run: riptide"
+    exit 0
+fi
 say ""
 say "Riptide is installed ($BRANCH)."
 if ! command -v ffmpeg >/dev/null 2>&1; then

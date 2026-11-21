@@ -56,6 +56,20 @@ A browser motion-graphics and image editor with a small Flask backend for video 
 - Gradients: linear or radial, through up to five colours (Fill, up to three Via stops, Fill 2), and morphing from one kind to the other with To radial %; colours can be linked to the project's colour constants (Composition, Colours), like CSS's --accent
 - Export: MP4 (H.264/AAC), WebM (VP9/Opus), MOV (ProRes 422 HQ), GIF, PNG sequence (zip), or a still frame; 24/25/30/60 fps; sizes up to 8K; whole timeline or between markers. Presets set it all in one pick: YouTube 1080p and 4K, Shorts, Reels and TikTok (9:16), Instagram square and portrait, transparent ProRes 4444 and WebM, a small web version and GIF, plus your own saved settings. Frame exports to 16:9, 9:16, 1:1 or 4:5 whatever the canvas, filled (cropped to the middle) or fitted with bars; Transparent leaves out the background for WebM, MOV, PNG and still PNG or WebP, to lay over other footage
 
+## Music on real instruments
+
+`tools/sampler.py` plays a score written as notes on recordings of real instruments: an upright piano, string
+sections (violins, violas, cellos, basses), solo violin, pizzicato and tremolo, horn, flute, clarinet, oboe,
+organ and timpani, from the public domain [VSCO 2 Community Edition](https://github.com/sgossner/VSCO-2-CE).
+Only the instruments a score uses are downloaded, once, into `~/.riptide/samples` (needs git).
+
+```
+python tools/sampler.py score.json score.wav
+```
+
+A score is a list of notes (`{"i": "strings", "t": 0, "n": ["D2", "A2", "F3"], "d": 8, "v": 0.4}`), timed in
+beats with `bpm`; see the top of the file. Put the WAV on the timeline as an audio layer.
+
 ## Image mode
 Switch with Video / Image in the header. The timeline is hidden; importing an image into an empty canvas opens it at full resolution.
 Adjust colour, apply looks (Vivid, Warm, Cool, Faded, Vintage, Noir, Mono, Punch, Negative), flip, blend layers, add shapes and text, then export PNG, JPEG or WebP.

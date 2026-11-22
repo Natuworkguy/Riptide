@@ -3,11 +3,14 @@
 // Hand-drawn line layer, smoothed the way a steady hand would have drawn it. Its bar sets the pen: a line or a filled
 // shape, the colour, the width and how much the stroke is smoothed. Draw on keys the line to draw itself on at the
 // pace it was drawn; Join adds each stroke to the last drawing instead of making a layer of its own, so a doodle of
-// several strokes is one layer that draws on stroke by stroke. Esc, D or Done puts the pen down.
+// several strokes is one layer that draws on stroke by stroke. Ink makes each line a brush pen's: fine where it
+// touched down and lifted off, swelling between. Boil redraws its edges a little differently ten times a second, as
+// a line drawn again on every frame of a hand-made film is. Together, with Draw on, that is an ink-line animation.
+// Esc, D or Done puts the pen down.
 const Draw = (() => {
   const SWATCHES = ['#141413', '#faf9f5', '#d97757', '#ff5a36', '#2f6bff', '#d7ff3a', '#c9c2f0'];
   const saved = (() => { try { return JSON.parse(localStorage.getItem('riptide.draw') || '{}'); } catch { return {}; } })();
-  const opt = { mode: 'pen', color: '#141413', width: 10, smooth: 50, drawOn: true, join: false, ...saved };
+  const opt = { mode: 'pen', color: '#141413', width: 10, smooth: 50, drawOn: true, join: false, ink: true, boil: true, ...saved };
   const keep = () => { try { localStorage.setItem('riptide.draw', JSON.stringify(opt)); } catch {} };
   let on = false, stroke = null, joinTo = null;
 
@@ -26,6 +29,8 @@ const Draw = (() => {
       <label class="num" title="How much a shaky stroke is smoothed">Smooth <input type="range" min="0" max="100" value="${opt.smooth}" data-k="smooth"><b>${opt.smooth}</b></label>
       <button class="tog ${opt.drawOn ? 'on' : ''}" data-tog="drawOn" title="Key the line to draw itself on at the pace you drew it">Draw on</button>
       <button class="tog ${opt.join ? 'on' : ''}" data-tog="join" title="Add each stroke to the last drawing, as one layer">Join</button>
+      <button class="tog ${opt.ink ? 'on' : ''}" data-tog="ink" title="A brush pen's line: fine at the ends, swelling where it pressed">Ink</button>
+      <button class="tog ${opt.boil ? 'on' : ''}" data-tog="boil" title="The line trembles, redrawn by hand on every frame">Boil</button>
       <button class="tb small done">Done</button>`;
   }
   bar.addEventListener('click', e => {
@@ -131,7 +136,8 @@ const Draw = (() => {
       L.drawn.forEach(st => st.pts.forEach(p => { p[0] += dx; p[1] += dy; }));
       L.drawn.push(one);
     } else {
-      L = makeLayer('path', { stroke: opt.color, strokeWidth: closed ? 0 : opt.width, pfill: closed, fill: opt.color, reveal: 1 }, closed ? 'Drawn shape' : 'Drawing');
+      L = makeLayer('path', { stroke: opt.color, strokeWidth: closed ? 0 : opt.width, pfill: closed, fill: opt.color, reveal: 1,
+        ink: opt.ink && !closed ? 70 : 0, boil: opt.boil ? 1.5 : 0 }, closed ? 'Drawn shape' : opt.ink ? 'Ink line' : 'Drawing');
       L.drawn = [one];
     }
     const shape = shapeOf(L.drawn, opt.width);

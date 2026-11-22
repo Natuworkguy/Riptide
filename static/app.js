@@ -117,7 +117,7 @@ const PROPS = {
   arc:     [...FLAT, 'w', 'h', 'sweep', 'erase', 'stroke', 'strokeWidth', ...PHYS],
   wave:    [...FLAT, 'w', 'h', 'reveal', 'erase', 'stroke', 'strokeWidth', ...PHYS],
   // a line drawn by hand: SVG path data (pathd) in its own view box (vb), stretched to w × h, drawn on by reveal
-  path:    [...FLAT, 'w', 'h', 'pathd', 'vb', 'reveal', 'erase', 'stroke', 'strokeWidth', 'pfill', 'fill', ...PHYS],
+  path:    [...FLAT, 'w', 'h', 'pathd', 'vb', 'reveal', 'erase', 'stroke', 'strokeWidth', 'ink', 'pfill', 'fill', ...PHYS],
   // an organic shape: a soft polygon of points sides, pushed out of true by wobble, its outline changing as morph moves
   blob:    [...FLAT, 'w', 'h', 'points', 'wobble', 'morph', 'seed', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
   text:    [...FLAT, 'text', 'font', 'size', 'weight', 'italic', 'align', 'tcase', 'lineh', 'spacing', 'wordGap', 'reveal', 'retype', 'words', 'wordTimes', 'wordStart', 'wordEvery', 'wordMove', 'wordFill', 'fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', ...PHYS],
@@ -142,14 +142,14 @@ const PROPS = {
 ANIM.push(...World.NUMBERS, ...World.COLORS, 'fitPad', 'followMix', 'wordGap', 'fillBlur', 'fillDim');
 const GROUPS = [['Transform', ['x', 'y', 'w', 'h', 'd', 'rotation', 'scale', 'sx', 'sy']],
   ['3D', ['three', 'shape', 'rotX', 'rotY', 'z', 'material', 'lightAngle']], ['Camera', ['follow', 'followMix', 'orbit', 'tilt', 'dolly', 'zoom']], ['Fit around', ['fit', 'fitPad']],
-  ['Drawing', ['pathd', 'vb', 'pfill']], ['Style', ['fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', 'radius', 'points', 'wobble', 'morph', 'seed', 'sweep', 'opacity']],
+  ['Drawing', ['pathd', 'vb', 'ink', 'pfill']], ['Style', ['fill', 'grad', 'mid1', 'mid2', 'mid3', 'fill2', 'gradAngle', 'gradMorph', 'stroke', 'strokeWidth', 'radius', 'points', 'wobble', 'morph', 'seed', 'sweep', 'opacity']],
   ['Text', ['text', 'font', 'weight', 'size', 'lineh', 'italic', 'align', 'tcase', 'spacing', 'wordGap', 'reveal', 'retype']], ['Changing words', ['words', 'wordTimes', 'wordStart', 'wordEvery', 'wordMove', 'wordFill']], ['Pose', ['side', 'limb', 'caps', ...Figure.JOINTS]], ['Physics', PHYS],
   ['Clip', CLIP], ['Vertical short', FILLP], ['Speed lines', ['count', 'lineLen', 'thick', 'hole', 'rush']], ['Shoot through', ['thing', 'cover', 'holeX', 'holeY', 'soft', 'drift', 'glints']], ['Effects', ['blur', 'zblur', 'shadow', 'rgb', 'boil', 'vapor']], ['Echo', ECHO], ['16 mm film', FILM], ['Pixel smear', SMEAR], ['Fluted glass', FLUTE], ['Cut out', CUTP], ['Adjust', ADJUST], ['Green screen', KEYP], ['Mask', MASK],
   ['Grade', Grade.GRADE], ['Curves', ['curves']], ['Vignette and LUT', LOOKP]];
 GROUPS.splice(1, 0, ...World.GROUPS);
 const LABEL = { w: 'Width', h: 'Height', x: 'X', y: 'Y', rotation: 'Rotate', scale: 'Scale', sx: 'Stretch X', sy: 'Stretch Y',
   opacity: 'Opacity', radius: 'Corners', fill: 'Fill', grad: 'Gradient', fill2: 'Fill 2', mid1: 'Via', mid2: 'Via 2', mid3: 'Via 3', gradAngle: 'Angle°', gradMorph: 'To radial %', stroke: 'Stroke', strokeWidth: 'Stroke W', blur: 'Blur', shadow: 'Shadow', rgb: 'RGB split',
-  size: 'Font size', text: 'Text', points: 'Points', pathd: 'Path', vb: 'View box', pfill: 'Fill it', boil: 'Boil', vapor: 'Vaporize %', morph: 'Morph', wobble: 'Wobble', seed: 'Seed', weight: 'Weight', reveal: 'Reveal', erase: 'Erased', retype: 'Retype to', sweep: 'Sweep°', spacing: 'Tracking',
+  size: 'Font size', text: 'Text', points: 'Points', pathd: 'Path', vb: 'View box', pfill: 'Fill it', ink: 'Ink taper %', boil: 'Boil', vapor: 'Vaporize %', morph: 'Morph', wobble: 'Wobble', seed: 'Seed', weight: 'Weight', reveal: 'Reveal', erase: 'Erased', retype: 'Retype to', sweep: 'Sweep°', spacing: 'Tracking',
   font: 'Font', italic: 'Italic', align: 'Align', tcase: 'Case', lineh: 'Leading',
   words: 'Words', wordGap: 'Word gap %', wordTimes: 'Change at', wordStart: 'First change s', wordEvery: 'Then every s', wordMove: 'Change takes s', wordFill: 'Word colour',
   fit: 'Fit around', fitPad: 'Padding', follow: 'Follow layer', followMix: 'Follow %',
@@ -174,7 +174,7 @@ Object.assign(LABEL, World.LABELS);
 const STEP = { echoGap: .01, gradMorph: 1, opacity: .05, scale: .05, sx: .05, sy: .05, reveal: .05, erase: .05, zoom: .05, expo: .05, gamma: .05, ...World.STEP };
 const PALETTE = ['#7c5cff', '#ff5c8a', '#20c997', '#ffb020', '#3fa9ff', '#ff7a45'];
 const DEFAULTS = { film: 0, filmGrain: 60, filmHalo: 50, filmWeave: 1.5, filmFade: 40, fillBehind: false, fillBlur: 40, fillDim: 55, smear: 0, smearDir: 0, smearAt: 55, flute: 0, fluteDir: 'down', fluteBend: 40, fluteStreak: 30, fluteLines: 55, fluteShine: 40, fluteChroma: 3, fluteShift: 0, echo: 0, echoGap: .05, echoFade: 80, echoScale: 0, zblur: 0, cutout: false, cutEdge: 2, cutGrow: 0,
-  count: 90, lineLen: 30, thick: 3, hole: 35, rush: 100, thing: 'ribbon', cover: 60, holeX: 56, holeY: 55, soft: 60, drift: 25, glints: 5, pathd: '', vb: '0 0 100 100', pfill: false, boil: 0, vapor: 0, morph: 0, wobble: 40, seed: 1, rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0, rgb: 0,
+  count: 90, lineLen: 30, thick: 3, hole: 35, rush: 100, thing: 'ribbon', cover: 60, holeX: 56, holeY: 55, soft: 60, drift: 25, glints: 5, pathd: '', vb: '0 0 100 100', pfill: false, ink: 0, boil: 0, vapor: 0, morph: 0, wobble: 40, seed: 1, rotation: 0, scale: 1, sx: 1, sy: 1, opacity: 1, radius: 24, stroke: '#111111', strokeWidth: 0, blur: 0, shadow: 0, rgb: 0,
   words: '', wordGap: 0, wordTimes: '', wordStart: 1, wordEvery: .5, wordMove: .25, wordFill: '', fit: '', fitPad: 30, follow: '', followMix: 100,
   size: 120, text: 'Hello', weight: 800, spacing: 0, reveal: 1, erase: 0, retype: '', font: 'Inter', italic: false, align: 'center', tcase: 'none', lineh: 110,
   speed: 100, reverse: false, vol: 100, mute: false, afadeIn: 0, afadeOut: 0,
@@ -433,11 +433,42 @@ function strokesOf(d) {
     const parts = String(d).split(/(?=M)/).map(x => x.trim()).filter(Boolean);
     const list = parts.length > 1 && parts.every(x => x[0] === 'M') ? parts : [String(d)];
     let out = null;
-    try { out = list.map(x => ({ P: new Path2D(x), len: pathLength(x) })); } catch (_) { out = null; }
+    try { out = list.map(x => ({ P: new Path2D(x), len: pathLength(x), d: x })); } catch (_) { out = null; }
     if (strokeCache.size > 300) strokeCache.clear();
     strokeCache.set(d, out);
   }
   return strokeCache.get(d);
+}
+// An ink line: a stroke as a brush pen leaves it, fine where the pen touched down and lifted off, swelling where it
+// pressed, its weight wandering a little the way a hand's does. While it is drawn on, the end being drawn is the
+// pen's own fine point. The stroke's outline is filled, from E to R of its length.
+const inkSamples = new Map();
+function inkPoints(s) {
+  let pts = inkSamples.get(s);
+  if (!pts) {
+    pts = []; const el = document.createElementNS('http://www.w3.org/2000/svg', 'path'); el.setAttribute('d', s.d);
+    const n = Math.max(8, Math.min(700, Math.round(s.len / 1.2)));
+    for (let i = 0; i <= n; i++) { const q = el.getPointAtLength(s.len * i / n); pts.push([q.x, q.y]); }
+    if (inkSamples.size > 400) inkSamples.clear(); inkSamples.set(s, pts);
+  }
+  return pts;
+}
+function inkStroke(c, s, e, r, width, ink, seed) {
+  const pts = inkPoints(s), n = pts.length - 1, a = .06 + ink * .34, i0 = Math.floor(e * n), i1 = Math.ceil(r * n);
+  if (i1 - i0 < 1) return;
+  const L = [], R = [];
+  for (let i = i0; i <= i1; i++) {
+    const u = i / n, p = pts[i], q = pts[Math.min(n, i + 1)], b = pts[Math.max(0, i - 1)];
+    let dx = q[0] - b[0], dy = q[1] - b[1]; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d;
+    // touched down, lifted off, and the pen's point where it is drawing now
+    let w = Math.pow(Math.min(1, u / a, (1 - u) / a, r < 1 ? (r - u) / (a * .6) : 1), .7);
+    w *= 1 + ink * .22 * Math.sin(u * s.len * .045 + seed * 2.3) + ink * .1 * Math.sin(u * s.len * .13 + seed);
+    w = Math.max(.06, w) * width / 2;
+    L.push([p[0] - dy * w, p[1] + dx * w]); R.push([p[0] + dy * w, p[1] - dx * w]);
+  }
+  c.beginPath(); L.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y));
+  for (let i = R.length - 1; i >= 0; i--) c.lineTo(R[i][0], R[i][1]);
+  c.closePath(); c.fillStyle = c.strokeStyle; c.fill();
 }
 function drawPath(c, o) {
   if (!o.pathd) return;
@@ -456,6 +487,7 @@ function drawPath(c, o) {
       const from = at / total, to = (at + s.len) / total; at += s.len;
       const sr = Math.max(0, Math.min(1, (r - from) / (to - from || 1))), se = Math.max(0, Math.min(1, (e - from) / (to - from || 1)));
       if (sr <= se) continue;
+      if (o.ink > 0) { inkStroke(c, s, se, sr, c.lineWidth, o.ink / 100, strokes.indexOf(s)); continue; }
       if (sr < 1 || se > 0) strokeSpan(c, s.len, se, sr); else { c.setLineDash([]); c.lineDashOffset = 0; }
       c.stroke(s.P);
     }

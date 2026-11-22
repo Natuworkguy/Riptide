@@ -219,7 +219,8 @@ to the part both share, then type the rest of the new one (reveal 0-1 types, 1-2
     Hand-made shapes: a "path" is a line drawn by hand, SVG path data in "pathd" (e.g. "M10 80 C 30 10, 60 10, 90 80")
     drawn in its own view box "vb" ("minX minY width height", "0 0 100 100" by default) stretched to w x h, in
     "stroke" at "strokeWidth" pixels, with round ends. "reveal" 0 to 1 draws it on like a pen (key it 0 to 1 over a
-    second or so), and "erase" 0 to 1 takes it away the way an eraser would, from its start along the pen's own path
+    second or so; "ink" 0 to 100 makes it a brush pen's line, fine where it touched down and lifted off and
+    swelling between, the end being drawn on its fine point, and with "boil" about 1.5 it is an ink-line animation), and "erase" 0 to 1 takes it away the way an eraser would, from its start along the pen's own path
     (paths, waves and arcs; the Erase preset keys it); "pfill" true also fills it with "fill". A "blob" is an organic shape: a soft polygon of "points"
     sides (8 by default), pushed out of true by "wobble" (0 to 100), its outline changing smoothly as "morph" moves
     (key it 0 to 100 over a scene for a shape that breathes) and different for each "seed". Any layer takes "boil"

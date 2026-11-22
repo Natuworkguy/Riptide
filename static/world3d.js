@@ -14,6 +14,8 @@ const World = (() => {
   const SKIES = [['sunset', 'Golden hour'], ['day', 'Clear day'], ['dusk', 'Dusk'], ['haze', 'Hazy'], ['overcast', 'Overcast'],
     ['night', 'Night'], ['city', 'City night (no stars, cloud lit by the streets)'], ['studio', 'Studio'],
     ['violet', 'Violet night (a pink glow low down)'], ['ember', 'Ember (a red glow, as underground fire)'], ['torch', 'Torchlit dark (warm, almost black)'], ['sulfur', 'Sulfur haze (yellow-green)'], ['space', 'Space (stars all round, no horizon)']];
+  // first person: what the eye's own hands are doing
+  const HANDS = [['none', 'Out of sight'], ['relaxed', 'Relaxed, low'], ['reach', 'Reaching forward'], ['spread', 'Arms out (falling, flying)'], ['palms', 'Looking at the palms']];
   const GROUNDS = [['ocean', 'Ocean'], ['field', 'Wheat field'], ['desert', 'Desert'], ['mountains', 'Mountain road'], ['floor', 'Studio floor'], ['none', 'None']];
   // sky palettes: the zenith, the horizon, the sun, clouds where the sun reaches them and where it does not
   const PALETTE = {
@@ -37,22 +39,23 @@ const World = (() => {
   const FIELDS = ['sky', 'hdri', 'hdriTurn', 'hdriPower', 'sunEl', 'sunAz', 'sunPower', 'clouds', 'wind',
     'ground', 'groundColor', 'floorFinish', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH', 'sway', 'swayLoop',
     'peaks', 'snow', 'trees', 'road',
-    'fog', 'haze', 'hazeFall', 'hazeGlow', 'dust', 'eye', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao', 'render', 'samples', 'pace', 'shutter', 'letterbox', 'godrays', 'flare', 'streaks', 'rain', 'rainPools', 'wet', 'objects', 'shots'];
+    'fog', 'haze', 'hazeFall', 'hazeGlow', 'dust', 'eye', 'pov', 'hands', 'bob', 'sleeve', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao', 'render', 'samples', 'pace', 'shutter', 'letterbox', 'godrays', 'flare', 'streaks', 'rain', 'rainPools', 'wet', 'objects', 'shots'];
   const DEFAULTS = { hdri: '', hdriTurn: 0, hdriPower: 100, floorFinish: '', sky: 'sunset', sunEl: 8, sunAz: 10, sunPower: 100, clouds: 45, wind: 4, ground: 'ocean', groundColor: '#8a6a45',
     water: '#0b4a46', waves: .6, chop: 50, swell: 0, curl: .5, waveDist: 45, waveAngle: -20, plants: '#c09a48', grass: 60, grassH: .9, sway: 3, swayLoop: false,
     peaks: 900, snow: 62, trees: 70, road: 7,
-    fog: 8, haze: 0, hazeFall: 250, hazeGlow: 60, dust: 0, eye: 1.7, heading: 0, pitch: 0, travel: 0, lens: 35, focus: 0, dof: 0, exposure: 0, bloom: 30, grain: 15, fringe: 10, ao: 0, render: 'preview', samples: 128, pace: 100, shutter: 0, letterbox: 'none', godrays: 0, flare: 0, streaks: 0, rain: 0, rainPools: false, wet: 0 };
+    fog: 8, haze: 0, hazeFall: 250, hazeGlow: 60, dust: 0, eye: 1.7, pov: false, hands: 'reach', bob: 0, sleeve: '#1f2833', heading: 0, pitch: 0, travel: 0, lens: 35, focus: 0, dof: 0, exposure: 0, bloom: 30, grain: 15, fringe: 10, ao: 0, render: 'preview', samples: 128, pace: 100, shutter: 0, letterbox: 'none', godrays: 0, flare: 0, streaks: 0, rain: 0, rainPools: false, wet: 0 };
   const LABELS = { hdri: 'Sky photo', hdriTurn: 'Photo turn°', hdriPower: 'Photo light %', floorFinish: 'Ground finish', sky: 'Sky', sunEl: 'Sun height°', sunAz: 'Sun around°', sunPower: 'Sun %', clouds: 'Clouds %', wind: 'Wind m/s',
     ground: 'Ground', groundColor: 'Ground colour', water: 'Water', waves: 'Waves m', chop: 'Chop %', swell: 'Breaker m', curl: 'Curl',
     waveDist: 'Breaker at m', waveAngle: 'Breaker turn°', plants: 'Plants', grass: 'Plants %', grassH: 'Plant height m', sway: 'Sway m/s', swayLoop: 'Loop sway',
     peaks: 'Peaks m', snow: 'Snow line %', trees: 'Pines %', road: 'Road width m',
+    pov: 'First person', hands: 'Hands', bob: 'Head bob %', sleeve: 'Sleeves',
     fog: 'Fog', haze: 'Height fog', hazeFall: 'Fog thins over m', hazeGlow: 'Sun in fog %', dust: 'Dust', eye: 'Eye height m', heading: 'Look around°', pitch: 'Look up°', travel: 'Travel m', lens: 'Lens mm',
     focus: 'Focus m', dof: 'Depth of field', exposure: 'Exposure', bloom: 'Bloom', grain: 'Grain', fringe: 'Fringe', ao: 'Contact shade', render: 'Render', samples: 'Samples', pace: 'World speed %', shutter: 'Motion blur°', letterbox: 'Letterbox', godrays: 'Light shafts', flare: 'Lens flare', streaks: 'Light streaks', rain: 'Rain', rainPools: 'Rain pools', wet: 'Wet ground' };
-  const COLORS = ['groundColor', 'water', 'plants'];
-  const NUMBERS = FIELDS.filter(k => !['sky', 'ground', 'objects', 'shots', 'swayLoop', 'rainPools', 'hdri', 'floorFinish', 'render', 'letterbox', ...COLORS].includes(k));
+  const COLORS = ['groundColor', 'water', 'plants', 'sleeve'];
+  const NUMBERS = FIELDS.filter(k => !['sky', 'ground', 'objects', 'shots', 'swayLoop', 'rainPools', 'hdri', 'floorFinish', 'render', 'letterbox', 'pov', 'hands', ...COLORS].includes(k));
   const GROUPS = [['World', ['hdri', 'hdriTurn', 'hdriPower', 'sky', 'sunEl', 'sunAz', 'sunPower', 'clouds', 'wind', 'fog', 'haze', 'hazeFall', 'hazeGlow', 'dust', 'rain', 'rainPools', 'wet']],
     ['Ground', ['ground', 'groundColor', 'floorFinish', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH', 'sway', 'swayLoop', 'peaks', 'snow', 'trees', 'road']],
-    ['Lens', ['render', 'samples', 'pace', 'shutter', 'letterbox', 'godrays', 'flare', 'streaks', 'eye', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao']]];
+    ['Lens', ['render', 'samples', 'pace', 'shutter', 'letterbox', 'godrays', 'flare', 'streaks', 'eye', 'pov', 'hands', 'bob', 'sleeve', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao']]];
   const STEP = { waves: .05, curl: .01, grassH: .05, eye: .05, exposure: .05 };
   const deg = v => (+v || 0) * Math.PI / 180;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -72,6 +75,7 @@ const World = (() => {
     if (k === 'focus') return o.dof > 0 || keyed;
     if (k === 'hazeFall' || k === 'hazeGlow') return o.haze > 0 || keyed;
     if (k === 'samples') return o.render === 'path' || o.render === 'native';
+    if (k === 'hands' || k === 'bob' || k === 'sleeve') return o.pov === true || o.pov === 'true';
     return true;
   }
 
@@ -190,7 +194,7 @@ const World = (() => {
   // the whole sky above the horizon, as a picture: across, all the way round; up, from the horizon (where the colour
   // changes fastest, so it gets more of the rows) to straight up. And the light the world is lit by, all scaled by one
   // exposure, as a photographer would: a dusk sky is far darker than noon, but not black.
-  function airSky(el, az, haze) {
+  function airSky(el, az, haze, h = 2) {
     const e = el * Math.PI / 180, a = az * Math.PI / 180, s = [Math.sin(a) * Math.cos(e), Math.sin(e), -Math.cos(a) * Math.cos(e)];
     const px = new Float32Array(AIR_W * AIR_H * 4);
     let sum = 0, wsum = 0;
@@ -198,16 +202,16 @@ const World = (() => {
       const v = (j + .5) / AIR_H, up = v * v * Math.PI / 2, cu = Math.cos(up), su = Math.sin(up);
       for (let i = 0; i < AIR_W; i++) {
         const az2 = ((i + .5) / AIR_W - .5) * 2 * Math.PI, d = [Math.sin(az2) * cu, su, -Math.cos(az2) * cu];
-        const c = airLook(d, s, haze), o = (j * AIR_W + i) * 4;
+        const c = airLook(d, s, haze, h), o = (j * AIR_W + i) * 4;
         px[o] = c[0]; px[o + 1] = c[1]; px[o + 2] = c[2]; px[o + 3] = 1;
         const w = cu * v; sum += lum(c) * w; wsum += w;
       }
     }
     // a dark sky is shown brighter, as a photographer exposes for it, but not all the way: dusk stays dusk
-    const key = Math.max(1e-6, sum / wsum), expose = Math.min(12, Math.pow(.2 / key, .75));
+    const key = Math.max(1e-6, sum / wsum), expose = Math.min(h > 2e4 ? 3 : 12, Math.pow(.2 / key, .75));
     for (let i = 0; i < px.length; i += 4) { px[i] *= expose; px[i + 1] *= expose; px[i + 2] *= expose; }
-    const look = (up, az2) => airLook([Math.sin(az2) * Math.cos(up), Math.sin(up), -Math.cos(az2) * Math.cos(up)], s, haze).map(v => v * expose);
-    const sun = airSun(s, haze).map(v => v * expose), high = airSun(s, haze, 8000).map(v => v * expose);
+    const look = (up, az2) => airLook([Math.sin(az2) * Math.cos(up), Math.sin(up), -Math.cos(az2) * Math.cos(up)], s, haze, h).map(v => v * expose);
+    const sun = airSun(s, haze, h).map(v => v * expose), high = airSun(s, haze, Math.max(h, 8000)).map(v => v * expose);
     return { px, expose, key, sun, high, zen: look(Math.PI / 2, 0), hor: look(.02, a), anti: look(.02, a + Math.PI), side: look(.02, a + Math.PI / 2) };
   }
   // the skies worked out this way, and how hazy each one's air is; the others keep their painted colours
@@ -215,9 +219,11 @@ const World = (() => {
   const airMade = new Map();
   function airFor(o) {
     const haze = AIR_HAZE[o.sky]; if (!haze || o.hdri) return null;
-    const el = clamp(+o.sunEl || 0, -10, 90), az = +o.sunAz || 0, key = `${o.sky}|${el.toFixed(1)}|${az.toFixed(1)}`;
+    // seen from the eye's height, in steps (a third of a doubling) from 50 m up: the sky darkens towards space
+    const eye = Math.max(0, +o.eye || 0), step = eye < 50 ? 0 : Math.round(Math.log2(eye / 50) * 3) / 3, h = eye < 50 ? 2 : 50 * 2 ** step;
+    const el = clamp(+o.sunEl || 0, -10, 90), az = +o.sunAz || 0, key = `${o.sky}|${el.toFixed(1)}|${az.toFixed(1)}|${step}`;
     let a = airMade.get(key); if (a) return a;
-    a = airSky(el, az, haze);
+    a = airSky(el, az, haze, Math.min(h, 99e3));
     const half = new Uint16Array(a.px.length);
     for (let i = 0; i < half.length; i++) half[i] = T.DataUtils.toHalfFloat(Math.min(a.px[i], 6e4));
     a.tex = new T.DataTexture(half, AIR_W, AIR_H, T.RGBAFormat, T.HalfFloatType);
@@ -755,7 +761,10 @@ const World = (() => {
     const shot = shotAt(o, t); if (shot) { const c = propCamera(o, shot, worldTime(L, t)); if (c) return c; }
     const C = R().cameraState(t), lens = clamp(+o.lens || 35, 6, 400), zoom = Math.max(.05, +C.zoom || 1);
     const half = Math.atan(12 / lens), d0 = (S.h / 2) / Math.tan(half);
-    const cam = new T.PerspectiveCamera(2 * Math.atan(Math.tan(half) / zoom) * 180 / Math.PI, S.w / S.h, 5, 4e6);
+    // high up the ground is far off: what the camera can see stretches with the eye's height (the eye's own arms are
+    // drawn apart, so the near limit can grow too)
+    const up = Math.max(0, +o.eye || 0) * M;
+    const cam = new T.PerspectiveCamera(2 * Math.atan(Math.tan(half) / zoom) * 180 / Math.PI, S.w / S.h, clamp(up * 2e-5, 5, 2000), Math.max(4e6, up * 40));
     const a = deg((+C.orbit || 0) + (+o.heading || 0)), b = deg(C.tilt), d = Math.max(1, d0 - (+C.dolly || 0)), tr = (+o.travel || 0) * M;
     const tx = C.x - S.w / 2 - Math.sin(a) * tr, ty = -(C.y - S.h / 2), tz = -Math.cos(a) * tr;
     cam.position.set(tx + d * Math.sin(a) * Math.cos(b), ty + d * Math.sin(b), tz + d * Math.cos(a) * Math.cos(b));
@@ -861,8 +870,11 @@ const World = (() => {
       };
       const haze = new T.ShaderPass(HAZE), drawHaze = haze.render.bind(haze);
       haze.render = (rr, w, r, dt, m) => { haze.uniforms.tDepth.value = r.depthTexture; drawHaze(rr, w, r, dt, m); };
-      for (const p of [render, haze, ao, bokeh, rays, bloom, out, film]) composer.addPass(p);
-      passes = { render, haze, ao, bokeh, rays, bloom, out, film };
+      // what is right in front of the eye, drawn over the world with its own camera and depth: first person's
+      // own arms and body (pov.js), sharp at a few centimetres however far off the ground below is
+      const view = new T.RenderPass(new T.Scene(), new T.PerspectiveCamera()); view.clear = false; view.clearDepth = true; view.enabled = false;
+      for (const p of [render, haze, ao, view, bokeh, rays, bloom, out, film]) composer.addPass(p);
+      passes = { render, haze, ao, view, bokeh, rays, bloom, out, film };
     }
     composer.setSize(W, H);
     for (const p of [passes.render, passes.ao, passes.bokeh]) { p.scene = scene; p.camera = cam; }
@@ -1020,6 +1032,7 @@ const World = (() => {
     const Rr = renderer;
     Rr.toneMappingExposure = Math.pow(2, +o.exposure || 0);
     const P = lens(W, H, B.scene, cam);
+    const V = World.viewModel?.(B, cam, o, t); P.view.enabled = !!V; if (V) { P.view.scene = V.scene; P.view.camera = V.camera; }
     P.ao.enabled = o.ao > 0; if (P.ao.enabled) { P.ao.blendIntensity = clamp(o.ao / 100, 0, 1); P.ao.updateGtaoMaterial?.({ radius: 60, distanceExponent: 1, thickness: 40, scale: 1 }); }
     // a camera prop's own focus and depth of field, else the world's
     const dof = cam.userData.dof ?? o.dof, focus = cam.userData.focus ?? (o.focus > 0 ? o.focus * M : cam.userData.d);
@@ -1143,7 +1156,8 @@ const World = (() => {
   };
 
   const World = { LETTERBOXES, RENDERS, SKIES, GROUNDS, tex,
-    CHOICES: { sky: SKIES, ground: GROUNDS, render: RENDERS, letterbox: LETTERBOXES }, FIELDS, DEFAULTS, LABELS, COLORS, NUMBERS, GROUPS, STEP, PRESETS, PARTS, FINISHES: Object.keys(FINISHES), FINISH_LOOKS: FINISHES,
+    CHOICES: { sky: SKIES, ground: GROUNDS, render: RENDERS, letterbox: LETTERBOXES, hands: HANDS, pov: [['false', 'Off'], ['true', 'On']] }, FIELDS, DEFAULTS, LABELS, COLORS, NUMBERS, GROUPS, STEP, PRESETS, PARTS, FINISHES: Object.keys(FINISHES), FINISH_LOOKS: FINISHES,
+    GLSL: { NOISE, SKY }, airFor, look, sunDir,
     shows, draw, stage, shoot, worldOf, camera, gl, ensureIds, findPart, finish, custom, M, lin, deg, partGeometry, keyed, heading, placeOf, rng, rebuild,
     get renderer() { return renderer; }, get available() { return !!T; }, prepareFrame, bars, worldTime, propCamera, shotAt, partMatrix,
     // bumped when something props are built from finishes loading (a model, a texture), so they are built again

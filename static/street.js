@@ -195,7 +195,8 @@ const Street = (() => {
     });
     const holder = new T.Group();
     for (const [geo, m] of c) { const mesh = new T.Mesh(geo, m); mesh.castShadow = mesh.receiveShadow = true; holder.add(mesh); }
-    holder.scale.setScalar(M); g.add(holder);
+    // in metres, inside a building that may already be scaled to metres itself
+    holder.scale.setScalar(M / (g.scale.x || 1)); g.add(holder);
     return g;
   };
 

@@ -344,6 +344,12 @@ async def add_world(scene: Literal["wave", "bigsun", "afterglow", "goldfield", "
     render: preview, path (path traced in the browser) or native (photoreal: path traced by Riptide's server with
     Cycles, natively, no browser 3D; samples sets the light samples of an exported frame). The camera: eye (its height above the ground, m), heading (degrees looked round), pitch (degrees up),
     travel (m moved forwards), lens (mm). A camera layer also moves it: orbit, tilt, dolly (pixels) and zoom.
+    First person: pov true films through someone's own eyes: their arms and hands at the bottom of the picture
+    (hands "reach" | "relaxed" | "spread" | "palms" | "none"), their sleeves (sleeve colour), and bob (0 to 100) the sway
+    of a walk. eye then goes from the street to space: key it (1.7 m standing, a few hundred metres over the
+    rooftops, 2000 over the town, 25000 with the land and clouds far below, 90000 at the edge of space, the
+    planet's curve and a black sky) and the ground below becomes the Earth seen from that height, a town round the
+    world's place, fields, forest, lakes and cloud. Look down with pitch (about -30) to see the ground go.
     The lens: dof (depth of field, 0 off), focus (m from the camera; 0 is the point it looks at), exposure
     (stops), bloom, grain, fringe (colour fringing at the edges) and ao (contact shadows), 0 to 100. The layer's
     own grade, vignette and LUT then finish it.

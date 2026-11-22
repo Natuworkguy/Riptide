@@ -510,6 +510,25 @@ async def delete_layer(layer: str) -> dict:
 
 
 @mcp.tool()
+async def remove_pauses(layer: str, below_db: float | None = None, longer_than: float = 0.45, keep: float = 0.12,
+                        ripple: bool = True) -> dict:
+    """Take the pauses out of a video clip that has someone talking: the stretches where its own sound is quiet
+    (under below_db, by default well under the take's own speaking level) for longer than longer_than seconds,
+    keeping `keep` seconds of each next to the words. The clip becomes back-to-back pieces from where it started,
+    and with ripple, everything after it moves up to close the gap. The clip must be at 100% and forwards."""
+    return await acall("remove_pauses", {"id": layer, "below_db": below_db, "longer_than": longer_than, "keep": keep,
+                                         "ripple": ripple})
+
+
+@mcp.tool()
+async def split_at_cuts(layer: str, sensitivity: float = 1.0) -> dict:
+    """Find where a video clip that came already edited cuts from one shot to the next, and split it there, so each
+    shot is a layer of its own ("<name> shot 1", "shot 2"...) to move, trim, reorder or drop. Higher sensitivity
+    finds softer cuts."""
+    return await acall("split_at_cuts", {"id": layer, "sensitivity": sensitivity})
+
+
+@mcp.tool()
 async def reorder_layer(layer: str, to: str) -> dict:
     """Change stacking: "front", "back", "up", "down", or an index from the bottom (0 = back)."""
     return await acall("reorder_layer", {"id": layer, "to": to})

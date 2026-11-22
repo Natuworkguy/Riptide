@@ -889,7 +889,8 @@ const World = (() => {
                 vec3 q = texture2D(tDiffuse, vUv + vec2(cos(a), sin(a)) * uPx * r).rgb; if (!bad(q)) { s += q; n += 1.; break; } } }
               c.rgb = n > 0. ? s / n : vec3(0.); }
             gl_FragColor = vec4(min(c.rgb, vec3(3e4)), c.a); }` });
-      for (const p of [render, haze, ao, view, bokeh, rays, clean, bloom, out, film]) composer.addPass(p);
+      // the eye's own arms go on after the glow: the bright sky's bloom is the world's, not drawn over them
+      for (const p of [render, haze, ao, bokeh, rays, clean, bloom, view, out, film]) composer.addPass(p);
       passes = { render, clean, haze, ao, view, bokeh, rays, bloom, out, film };
     }
     composer.setSize(W, H); passes.clean.uniforms.uPx.value.set(1 / W, 1 / H);

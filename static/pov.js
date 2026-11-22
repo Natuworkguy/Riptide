@@ -104,10 +104,11 @@
   view.scene.add(sunV, sunV.target, hemiV);
   // where each pose wants the hands, in metres from the eye (x right, y up, z back), and how curled the fingers are
   const POSES = {
-    relaxed: { at: [.24, -.5, -.26], curl: 28, palm: 0 },
-    reach: { at: [.17, -.21, -.43], curl: 16, palm: -20 },
-    spread: { at: [.46, -.07, -.36], curl: 6, palm: 10 },
-    palms: { at: [.12, -.13, -.33], curl: 6, palm: 80 },
+    // (and which way the hand points from the wrist: forwards, a little down and in, as hands held out do)
+    relaxed: { at: [.2, -.21, -.44], curl: 30, palm: 0, tip: [-.1, -.6, -1] },
+    reach: { at: [.17, -.16, -.48], curl: 14, palm: -15, tip: [-.12, -.1, -1] },
+    spread: { at: [.34, -.13, -.44], curl: 6, palm: 10, tip: [.3, .05, -1] },
+    palms: { at: [.13, -.14, -.42], curl: 6, palm: 80, tip: [-.1, .1, -1] },
   };
   const tmp = { v: new T.Vector3(), q: new T.Quaternion() };
   function aim(bone, child, to) {
@@ -119,6 +120,23 @@
     const world = bone.getWorldQuaternion(new T.Quaternion()), parent = bone.parent.getWorldQuaternion(new T.Quaternion());
     bone.quaternion.copy(parent.invert().multiply(turn.multiply(world)));
     bone.updateMatrixWorld(true);
+  }
+  // a bone's own turn in the rest pose the body was modelled in (arms out, palms down, fingers straight): the
+  // walk's or idle's turn would otherwise twist the wrists and curl the fingers under whatever is asked of them
+  function rest(g, bone) {
+    if (bone.userData.rest) return bone.userData.rest;
+    let skel = null; g.traverse(n => { if (!skel && n.isSkinnedMesh) skel = n.skeleton; });
+    const i = skel ? skel.bones.indexOf(bone) : -1, pi = skel ? skel.bones.indexOf(bone.parent) : -1;
+    if (i < 0 || pi < 0) return (bone.userData.rest = bone.quaternion.clone());
+    const world = skel.boneInverses[i].clone().invert(), parent = skel.boneInverses[pi].clone().invert();
+    const local = parent.invert().multiply(world), q = new T.Quaternion();
+    local.decompose(new T.Vector3(), q, new T.Vector3());
+    return (bone.userData.rest = q);
+  }
+  function relax(g, side) {
+    for (const n of ['Arm', 'ForeArm', 'Hand']) { const b = g.getObjectByName('mixamorig' + side + n); if (b) b.quaternion.copy(rest(g, b)); }
+    for (const f of ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky']) for (let i = 1; i <= 3; i++) {
+      const b = g.getObjectByName(`mixamorig${side}Hand${f}${i}`); if (b) b.quaternion.copy(rest(g, b)); }
   }
   function reach(g, side, hand, right, down, back) {
     // two bones from the shoulder to HAND, the elbow down and out
@@ -161,22 +179,33 @@
     hemiV.color.copy(B.hemi.color); hemiV.groundColor.copy(B.hemi.groundColor); hemiV.intensity = B.hemi.intensity;
     // the body stands upright, facing where the eyes look round to; its head (hidden) where the eyes are
     const fwd = new T.Vector3(0, 0, -1).applyQuaternion(cam.quaternion), yaw = Math.atan2(-fwd.x, -fwd.z);
-    const body = new T.Group(); body.add(person); body.rotation.y = yaw; view.scene.add(body); body.updateMatrixWorld(true);
+    // the body turns with the view, round and up and down alike, so the shoulders are always where the arms
+    // need them (a game's arms do the same): looking down never folds the arms back into the lens
+    // (the model faces +z, the camera -z: turned round half a turn inside the view, or its right arm is on the left)
+    const body = new T.Group(); body.add(person);
+    body.quaternion.copy(cam.quaternion).multiply(new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), Math.PI));
+    view.scene.add(body); body.updateMatrixWorld(true);
     const g = person, head = g.getObjectByName('mixamorigHead');
     if (head) { head.scale.setScalar(.001); }
     body.updateMatrixWorld(true);
     const eye = head ? head.getWorldPosition(new T.Vector3()) : new T.Vector3(0, 1.62, 0);
-    const front = new T.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
-    body.position.sub(eye).addScaledVector(front, -.1).add(new T.Vector3(0, -.06, 0)); body.updateMatrixWorld(true);
+    const front = new T.Vector3(0, 0, -1).applyQuaternion(cam.quaternion), upV = new T.Vector3(0, 1, 0).applyQuaternion(cam.quaternion);
+    body.position.sub(eye).addScaledVector(front, -.1).addScaledVector(upV, -.06); body.updateMatrixWorld(true);
     // where the hands go: fixed to the view, with a little life (breath, and the bob's lag)
     const right = new T.Vector3(1, 0, 0).applyQuaternion(cam.quaternion), up = new T.Vector3(0, 1, 0).applyQuaternion(cam.quaternion);
-    const back = new T.Vector3(0, 0, 1).applyQuaternion(cam.quaternion), down = new T.Vector3(0, -1, 0);
+    const back = new T.Vector3(0, 0, 1).applyQuaternion(cam.quaternion), down = up.clone().negate();
     const breath = Math.sin(t * 1.7) * .006, bob = (+o.bob || 0) / 100 * Math.sin(t * Math.PI * 1.9) * .02;
     for (const [side, sx] of [['Left', -1], ['Right', 1]]) {
       const [hx, hy, hz] = pose.at;
       const hand = right.clone().multiplyScalar(sx * hx).addScaledVector(up, hy + breath - bob).addScaledVector(back, hz);
+      relax(g, side); body.updateMatrixWorld(true);
       reach(g, side, hand, right, down, back);
-      const wrist = g.getObjectByName(`mixamorig${side}Hand`);
+      const wrist = g.getObjectByName(`mixamorig${side}Hand`), knuckle = g.getObjectByName(`mixamorig${side}HandMiddle1`);
+      if (wrist && knuckle) {
+        // the hand itself pointed where a held-out hand points, not left at whatever angle the forearm comes in at
+        const [tx, ty, tz] = pose.tip, w = wrist.getWorldPosition(new T.Vector3());
+        aim(wrist, knuckle, w.addScaledVector(right, sx * tx).addScaledVector(up, ty).addScaledVector(back, tz));
+      }
       if (wrist) wrist.quaternion.multiply(new T.Quaternion().setFromEuler(new T.Euler(0, deg(sx * pose.palm), 0)));
       fingers(g, side, pose.curl + Math.sin(t * .9 + sx) * 3, o.hands === 'spread' ? 9 : 4);
     }

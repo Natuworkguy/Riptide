@@ -3231,7 +3231,10 @@ function fullscreenView() {
     const cw = Math.round(S.w * k * dpr), ch = Math.round(S.h * k * dpr);
     if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; c.style.width = S.w * k + 'px'; c.style.height = S.h * k + 'px'; }
     renderScene(g, time, k * dpr);
-    wrap.querySelector('.fsplay').innerHTML = playing ? ICON.pause : ICON.play;
+    // the button's icon only when it changes: rewritten every frame, a click pressed on the old icon and let go on
+    // the new one never counted
+    const btn = wrap.querySelector('.fsplay'), want = playing ? 'pause' : 'play';
+    if (btn.dataset.shows !== want) { btn.innerHTML = playing ? ICON.pause : ICON.play; btn.dataset.shows = want; }
     wrap.querySelector('.fstc').textContent = `${fmtTime(time)} / ${fmtTime(S.dur)}`;
     prog.firstElementChild.style.width = (time / S.dur * 100) + '%';
     raf = requestAnimationFrame(frameLoop);
@@ -3241,7 +3244,9 @@ function fullscreenView() {
   wrap.addEventListener('pointermove', wake);
   wrap.querySelector('.fsplay').onclick = e => { e.stopPropagation(); togglePlay(); };
   wrap.querySelector('.fsclose').onclick = e => { e.stopPropagation(); close(); };
-  c.addEventListener('click', () => togglePlay());
+  const playable = S.mode !== 'image';                 // a picture has nothing to play: its bar is hidden too
+  if (!playable) bar.querySelector('.fsplay').style.display = bar.querySelector('.fsprog').style.display = bar.querySelector('.fstc').style.display = 'none';
+  c.addEventListener('click', () => { if (playable) togglePlay(); });
   prog.addEventListener('pointerdown', e => {
     e.stopPropagation(); if (playing) togglePlay();
     const mv = ev => { const r = prog.getBoundingClientRect(); time = frame(Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)) * S.dur); syncAudio(); };
@@ -3255,7 +3260,7 @@ function fullscreenView() {
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key, step = e.shiftKey ? 1 : 1 / FPS;
     const go = t => { if (playing) togglePlay(); time = frame(Math.max(0, Math.min(S.dur, t))); syncAudio(); };
     if (k === 'Escape' || k === 'f') close();
-    else if (k === ' ') togglePlay();
+    else if (k === ' ') { if (playable) togglePlay(); }
     else if (k === 'ArrowLeft') go(time - step);
     else if (k === 'ArrowRight') go(time + step);
     else if (k === 'Home') go(0);
@@ -3784,7 +3789,8 @@ const COMMANDS = [
   ['Keyframes', 'Next easing for keyframe', 'e', () => cycleEase(1)],
   ['Keyframes', 'Previous easing for keyframe', 'shift+e', () => cycleEase(-1)],
   // Timeline
-  ['Timeline', 'Play / pause', 'space', () => togglePlay()],
+  // an image has no timeline to play
+  ['Timeline', 'Play / pause', 'space', () => { if (S.mode !== 'image') togglePlay(); }],
   ['Timeline', 'Play from start', 'shift+space', () => { seek(0); if (!playing) togglePlay(); }],
   ['Timeline', 'Previous / next frame', ',|.', null],
   ['Timeline', 'Back / forward 10 frames', 'shift+arrowleft|shift+arrowright', null],

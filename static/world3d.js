@@ -39,23 +39,23 @@ const World = (() => {
   const FIELDS = ['sky', 'hdri', 'hdriTurn', 'hdriPower', 'sunEl', 'sunAz', 'sunPower', 'clouds', 'wind',
     'ground', 'groundColor', 'floorFinish', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH', 'sway', 'swayLoop',
     'peaks', 'snow', 'trees', 'road',
-    'fog', 'haze', 'hazeFall', 'hazeGlow', 'dust', 'eye', 'pov', 'hands', 'bob', 'sleeve', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao', 'render', 'samples', 'pace', 'shutter', 'letterbox', 'godrays', 'flare', 'streaks', 'rain', 'rainPools', 'wet', 'objects', 'shots'];
+    'fog', 'haze', 'hazeFall', 'hazeGlow', 'dust', 'eye', 'pov', 'hands', 'bob', 'sleeve', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao', 'render', 'samples', 'pace', 'shutter', 'letterbox', 'godrays', 'flare', 'star', 'streaks', 'rain', 'rainPools', 'wet', 'objects', 'shots'];
   const DEFAULTS = { hdri: '', hdriTurn: 0, hdriPower: 100, floorFinish: '', sky: 'sunset', sunEl: 8, sunAz: 10, sunPower: 100, clouds: 45, wind: 4, ground: 'ocean', groundColor: '#8a6a45',
     water: '#0b4a46', waves: .6, chop: 50, swell: 0, curl: .5, waveDist: 45, waveAngle: -20, plants: '#c09a48', grass: 60, grassH: .9, sway: 3, swayLoop: false,
     peaks: 900, snow: 62, trees: 70, road: 7,
-    fog: 8, haze: 0, hazeFall: 250, hazeGlow: 60, dust: 0, eye: 1.7, pov: false, hands: 'reach', bob: 0, sleeve: '#1f2833', heading: 0, pitch: 0, travel: 0, lens: 35, focus: 0, dof: 0, exposure: 0, bloom: 30, grain: 15, fringe: 10, ao: 0, render: 'preview', samples: 128, pace: 100, shutter: 0, letterbox: 'none', godrays: 0, flare: 0, streaks: 0, rain: 0, rainPools: false, wet: 0 };
+    fog: 8, haze: 0, hazeFall: 250, hazeGlow: 60, dust: 0, eye: 1.7, pov: false, hands: 'reach', bob: 0, sleeve: '#1f2833', heading: 0, pitch: 0, travel: 0, lens: 35, focus: 0, dof: 0, exposure: 0, bloom: 30, grain: 15, fringe: 10, ao: 0, render: 'preview', samples: 128, pace: 100, shutter: 0, letterbox: 'none', godrays: 0, flare: 0, star: 0, streaks: 0, rain: 0, rainPools: false, wet: 0 };
   const LABELS = { hdri: 'Sky photo', hdriTurn: 'Photo turn°', hdriPower: 'Photo light %', floorFinish: 'Ground finish', sky: 'Sky', sunEl: 'Sun height°', sunAz: 'Sun around°', sunPower: 'Sun %', clouds: 'Clouds %', wind: 'Wind m/s',
     ground: 'Ground', groundColor: 'Ground colour', water: 'Water', waves: 'Waves m', chop: 'Chop %', swell: 'Breaker m', curl: 'Curl',
     waveDist: 'Breaker at m', waveAngle: 'Breaker turn°', plants: 'Plants', grass: 'Plants %', grassH: 'Plant height m', sway: 'Sway m/s', swayLoop: 'Loop sway',
     peaks: 'Peaks m', snow: 'Snow line %', trees: 'Pines %', road: 'Road width m',
     pov: 'First person', hands: 'Hands', bob: 'Head bob %', sleeve: 'Sleeves',
     fog: 'Fog', haze: 'Height fog', hazeFall: 'Fog thins over m', hazeGlow: 'Sun in fog %', dust: 'Dust', eye: 'Eye height m', heading: 'Look around°', pitch: 'Look up°', travel: 'Travel m', lens: 'Lens mm',
-    focus: 'Focus m', dof: 'Depth of field', exposure: 'Exposure', bloom: 'Bloom', grain: 'Grain', fringe: 'Fringe', ao: 'Contact shade', render: 'Render', samples: 'Samples', pace: 'World speed %', shutter: 'Motion blur°', letterbox: 'Letterbox', godrays: 'Light shafts', flare: 'Lens flare', streaks: 'Light streaks', rain: 'Rain', rainPools: 'Rain pools', wet: 'Wet ground' };
+    focus: 'Focus m', dof: 'Depth of field', exposure: 'Exposure', bloom: 'Bloom', grain: 'Grain', fringe: 'Fringe', ao: 'Contact shade', render: 'Render', samples: 'Samples', pace: 'World speed %', shutter: 'Motion blur°', letterbox: 'Letterbox', godrays: 'Light shafts', flare: 'Lens flare', star: 'Sunstar', streaks: 'Light streaks', rain: 'Rain', rainPools: 'Rain pools', wet: 'Wet ground' };
   const COLORS = ['groundColor', 'water', 'plants', 'sleeve'];
   const NUMBERS = FIELDS.filter(k => !['sky', 'ground', 'objects', 'shots', 'swayLoop', 'rainPools', 'hdri', 'floorFinish', 'render', 'letterbox', 'pov', 'hands', ...COLORS].includes(k));
   const GROUPS = [['World', ['hdri', 'hdriTurn', 'hdriPower', 'sky', 'sunEl', 'sunAz', 'sunPower', 'clouds', 'wind', 'fog', 'haze', 'hazeFall', 'hazeGlow', 'dust', 'rain', 'rainPools', 'wet']],
     ['Ground', ['ground', 'groundColor', 'floorFinish', 'water', 'waves', 'chop', 'swell', 'curl', 'waveDist', 'waveAngle', 'plants', 'grass', 'grassH', 'sway', 'swayLoop', 'peaks', 'snow', 'trees', 'road']],
-    ['Lens', ['render', 'samples', 'pace', 'shutter', 'letterbox', 'godrays', 'flare', 'streaks', 'eye', 'pov', 'hands', 'bob', 'sleeve', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao']]];
+    ['Lens', ['render', 'samples', 'pace', 'shutter', 'letterbox', 'godrays', 'flare', 'star', 'streaks', 'eye', 'pov', 'hands', 'bob', 'sleeve', 'heading', 'pitch', 'travel', 'lens', 'focus', 'dof', 'exposure', 'bloom', 'grain', 'fringe', 'ao']]];
   const STEP = { waves: .05, curl: .01, grassH: .05, eye: .05, exposure: .05 };
   const deg = v => (+v || 0) * Math.PI / 180;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -802,17 +802,27 @@ const World = (() => {
   }
   // Light shafts: the bright sky streaked out from the sun across what stands in front of it (in the light, before
   // tone mapping).
-  const RAYS = { uniforms: { tDiffuse: { value: null }, uSun: { value: new T.Vector2(.5, .5) }, uOn: { value: 0 }, uTint: { value: new T.Color(1, .9, .7) } },
+  const RAYS = { uniforms: { tDiffuse: { value: null }, tDepth: { value: null }, uSun: { value: new T.Vector2(.5, .5) }, uOn: { value: 0 },
+      uTint: { value: new T.Color(1, .9, .7) }, uAspect: { value: 1 }, uTime: { value: 0 } },
     vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }',
-    fragmentShader: `uniform sampler2D tDiffuse; uniform vec2 uSun; uniform float uOn; uniform vec3 uTint; varying vec2 vUv;
+    fragmentShader: `uniform sampler2D tDiffuse, tDepth; uniform vec2 uSun; uniform float uOn, uAspect, uTime; uniform vec3 uTint; varying vec2 vUv;
+      float h(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233)) + uTime) * 43758.5453); }
+      // what lets light through here: open sky (nothing drawn), as bright as it is
+      vec3 open(vec2 p) { if (p.x < 0. || p.y < 0. || p.x > 1. || p.y > 1.) return vec3(0.);
+        if (texture2D(tDepth, p).x < 1.) return vec3(0.);
+        vec3 c = texture2D(tDiffuse, p).rgb; return c * smoothstep(.25, 1.6, dot(c, vec3(.3, .59, .11))); }
       void main() { vec4 base = texture2D(tDiffuse, vUv); if (uOn <= 0.) { gl_FragColor = base; return; }
-        vec2 d = (uSun - vUv) / 48.; vec2 p = vUv; float w = 1.; vec3 acc = vec3(0.);
-        for (int i = 0; i < 48; i++) { p += d; vec3 c = texture2D(tDiffuse, p).rgb; float l = dot(c, vec3(.3, .59, .11)); acc += c * smoothstep(1., 3., l) * w; w *= .965; }
-        gl_FragColor = vec4(base.rgb + acc / 48. * uOn * 3. * uTint, base.a); }` };
+        // marched toward the sun (or as far as the picture's edge), jittered so 64 steps read as a smooth shaft
+        vec2 toSun = uSun - vUv; float len = length(toSun); vec2 d = toSun / 64. * min(1., 1.4 / max(len, 1e-3));
+        vec2 p = vUv + d * h(vUv * 911.); float w = 1.; vec3 acc = vec3(0.);
+        for (int i = 0; i < 64; i++) { p += d; acc += open(p) * w; w *= .972; }
+        // the shafts are brightest looking toward the light, and fade away from it
+        float near = 1. / (1. + 1.2 * length((vUv - uSun) * vec2(uAspect, 1.)));
+        gl_FragColor = vec4(base.rgb + acc / 64. * uOn * 2.4 * uTint * near, base.a); }` };
   const FILM = { uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uGrain: { value: 0 }, uFringe: { value: 0 }, uAspect: { value: 1 },
-      uSun: { value: new T.Vector2(.5, .5) }, uFlare: { value: 0 }, uStreak: { value: 0 } },
+      uSun: { value: new T.Vector2(.5, .5) }, uFlare: { value: 0 }, uStreak: { value: 0 }, uStar: { value: 0 } },
     vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }',
-    fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime, uGrain, uFringe, uAspect, uFlare, uStreak; uniform vec2 uSun; varying vec2 vUv;
+    fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime, uGrain, uFringe, uAspect, uFlare, uStreak, uStar; uniform vec2 uSun; varying vec2 vUv;
       float h(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
       void main() { vec2 c = vUv - .5; vec2 off = c * dot(c, c) * uFringe * .06;
         vec3 col = vec3(texture2D(tDiffuse, vUv - off).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv + off).b);
@@ -826,6 +836,17 @@ const World = (() => {
             vec2 dd = (vUv - g) * vec2(uAspect, 1.); f += vec3(.9, .6 + .1 * float(i), .4 + .12 * float(i)) * smoothstep(r, r * .3, length(dd)) * .18; }
           vec2 ds = (vUv - uSun) * vec2(uAspect, 1.); f += vec3(1., .85, .6) * .25 / (1. + 90. * length(ds)) + vec3(.4, .6, 1.) * smoothstep(.006, 0., abs(ds.y)) * smoothstep(.6, 0., abs(ds.x)) * .6;
           col += f * vis * uFlare; }
+        // a sunstar: a lens stopped down makes the sun a star of spikes, two for each of its seven blades, fringed with
+        // colour at their tips; as strong as how much of the sun shows (through leaves, past a ridge: partly)
+        if (uStar > 0.) { float vis = 0.;
+          for (int i = 0; i < 9; i++) { vec2 o = vec2(mod(float(i), 3.) - 1., floor(float(i) / 3.) - 1.) * .004; vis += step(.97, dot(texture2D(tDiffuse, uSun + o).rgb, vec3(.33))); }
+          vis /= 9.;
+          vec2 dd = (vUv - uSun) * vec2(uAspect, 1.); float r = length(dd), a = atan(dd.y, dd.x) + .21;
+          float spikes = 0.; for (int k = 0; k < 14; k++) { float ang = float(k) * 3.14159 / 7.; float da = abs(mod(a - ang + 3.14159, 6.28318) - 3.14159);
+            spikes += exp(-da * da * (900. + 4000. * r)) * (k % 2 == 0 ? 1. : .7); }
+          float fall = exp(-r * 9.) * .9 + .1 / (1. + r * 60.);
+          vec3 tint = mix(vec3(1., .96, .88), vec3(.55, .75, 1.1) + vec3(.6, -.1, -.4) * sin(r * 90.), smoothstep(.04, .2, r) * .5);
+          col += tint * spikes * fall * vis * uStar * 1.4 + vec3(1., .95, .85) * vis * uStar * .35 / (1. + r * r * 2500.); }
         float n = h(vUv * vec2(1931., 1931. / uAspect) + fract(uTime * 7.31)) - .5;
         float l = dot(col, vec3(.299, .587, .114));
         col += n * uGrain * .16 * (1. - abs(l - .45) * 1.1);
@@ -861,7 +882,8 @@ const World = (() => {
       for (const rt of [composer.renderTarget1, composer.renderTarget2]) rt.depthTexture = new T.DepthTexture(W, H, T.FloatType);
       const render = new T.RenderPass(scene, cam), ao = new T.GTAOPass(scene, cam, W, H),
         bokeh = new T.BokehPass(scene, cam, { focus: 1000, aperture: 0, maxblur: .01 }),
-        bloom = new T.UnrealBloomPass(new T.Vector2(W, H), .3, .6, .82), out = new T.OutputPass(), film = new T.ShaderPass(FILM), rays = new T.ShaderPass(RAYS);
+        bloom = new T.UnrealBloomPass(new T.Vector2(W, H), .3, .6, .82), out = new T.OutputPass(), film = new T.ShaderPass(FILM), rays = new T.ShaderPass(RAYS), drawRays = rays.render.bind(rays);
+      rays.render = (rr, w, r, dt, m) => { rays.uniforms.tDepth.value = r.depthTexture; drawRays(rr, w, r, dt, m); };
       // glows (halos, light pools, flares: sprites and see-through, additive things) are not surfaces: the contact
       // shade must not see them, or it draws each one as a dark square
       const drawAo = ao.render.bind(ao);
@@ -1072,9 +1094,12 @@ const World = (() => {
     // where the sun is on the picture, for light shafts and a flare
     const sp = cam.position.clone().addScaledVector(sunDir(o), 1e5).project(cam), seen = sp.z < 1 && Math.abs(sp.x) < 1.3 && Math.abs(sp.y) < 1.3;
     const su = new T.Vector2((sp.x + 1) / 2, (sp.y + 1) / 2);
-    P.rays.enabled = (+o.godrays > 0) && seen; P.rays.uniforms.uSun.value.copy(su); P.rays.uniforms.uOn.value = clamp(+o.godrays / 100, 0, 2);
+    // shafts need the light to be in front of the eye, but not on the picture: light pouring in from above a cave mouth
+    const ahead = sp.z < 1 && Math.abs(sp.x) < 3.5 && Math.abs(sp.y) < 3.5;
+    P.rays.enabled = (+o.godrays > 0) && ahead; P.rays.uniforms.uSun.value.copy(su); P.rays.uniforms.uOn.value = clamp(+o.godrays / 100, 0, 2);
+    P.rays.uniforms.uAspect.value = W / H; P.rays.uniforms.uTime.value = t % 10;
     P.rays.uniforms.uTint.value.copy(lk.sunTint);
-    fu.uSun.value.copy(su); fu.uFlare.value = seen && !o.hdri ? clamp(+o.flare / 100, 0, 2) : 0; fu.uStreak.value = clamp(+o.streaks / 100, 0, 2);
+    fu.uSun.value.copy(su); fu.uFlare.value = seen && !o.hdri ? clamp(+o.flare / 100, 0, 2) : 0; fu.uStar.value = seen ? clamp(+o.star / 100 || 0, 0, 2) : 0; fu.uStreak.value = clamp(+o.streaks / 100, 0, 2);
     composer.render();
   }
   // the camera that films a 3D layer standing in a world, for where it lands on the canvas

@@ -538,7 +538,7 @@ def send(path: Path, name: str = "", x=None, y=None, shown_as: str = "", window:
     return f"Added {shown_as} to Riptide as {what} (layer {answer.get('id')}){where(answer)}."
 
 
-SCENES = ("wave", "bigsun", "afterglow", "goldfield", "rig", "studio", "desert", "night", "mountain", "alpine")
+SCENES = ("wave", "bigsun", "afterglow", "goldfield", "rig", "studio", "desert", "night", "mountain", "alpine", "livingroom")
 
 
 def world(scene: str = "", name: str = "", props=None, window: str = "") -> str:

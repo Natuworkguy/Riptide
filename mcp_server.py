@@ -300,7 +300,7 @@ async def export_scene(path: str, layer: str | None = None, at_time: float | str
 
 
 @mcp.tool()
-async def add_world(scene: Literal["wave", "bigsun", "afterglow", "goldfield", "alpine", "rig", "studio", "desert", "night", "mountain", "neon", "golden", "oculus", "blocks", "blockisle", "blockgrave", "blocklava", "blockdungeon", "orbits", ""] = "", name: str | None = None,
+async def add_world(scene: Literal["wave", "bigsun", "afterglow", "goldfield", "alpine", "rig", "studio", "desert", "night", "mountain", "neon", "golden", "oculus", "blocks", "blockisle", "blockgrave", "blocklava", "blockdungeon", "orbits", "livingroom", ""] = "", name: str | None = None,
                     props: dict | None = None) -> dict:
     """Add a 3D world at the bottom of the layers: a whole place to film, with a sky, a sun that casts shadows,
     the ground, the air, props, and a lens. 3D shapes and models above it stand inside it, lit and shadowed by
@@ -319,7 +319,9 @@ async def add_world(scene: Literal["wave", "bigsun", "afterglow", "goldfield", "
     trees, candles and lanterns, a tomb at the end of the path), "blocklava" (a sea of lava under a red sky, black rock,
     basalt columns, a dark bridge with lanterns, embers), "blockdungeon" (a long torchlit stone hall, barred cells, a fire
     at the far end, a block figure), "orbits" (the Earth at night in space, satellites with tags on their orbits,
-    the whole system turning slowly: for explainers); "" is an empty
+    the whole system turning slowly: for explainers), "livingroom" (a bright, lived-in living room from the doorway:
+    sofas, an oak and steel coffee table, TV unit, bookcase, framed prints, a rug, the sun through a sheer curtain;
+    build your own rooms from the parts room, sofa, table, tvunit, tv, lamp, bookcase, print, rug, pillow, plant and book); "" is an empty
     world. `props` then changes any of its settings (all the numbers and colours animate, with update_layer or
     set_keyframes like any layer's):
 

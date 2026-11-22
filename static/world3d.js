@@ -87,8 +87,15 @@ const World = (() => {
     float fbm3(vec2 p) { float a = .5, s = 0.; mat2 r = mat2(1.6, 1.2, -1.2, 1.6); for (int i = 0; i < 3; i++) { s += a * vnoise(p); p = r * p; a *= .5; } return s; }`;
   const SKY = `
     uniform vec3 uSunDir, uZen, uHor, uSun, uLit, uShade;
-    uniform float uClouds, uTime, uWind, uStars, uDisk, uFog;
+    uniform float uClouds, uTime, uWind, uStars, uDisk, uFog, uPhys;
+    uniform sampler2D uAir;
     vec3 skyBase(vec3 d) {
+      if (uPhys > .5) {
+        // the air worked out for where the sun is (airSky): round the sky across, from the horizon up
+        vec2 uv = vec2(atan(d.x, -d.z) / 6.2831853 + .5, sqrt(asin(clamp(d.y, 0., 1.)) / 1.5707963));
+        vec3 a = texture2D(uAir, uv).rgb;
+        return d.y < 0. ? mix(a, a * .55, clamp(-d.y * 5., 0., 1.)) : a;
+      }
       float y = max(d.y, 0.), mu = max(dot(d, uSunDir), 0.);
       vec3 c = mix(uHor, uZen, pow(y, .5));
       c += uSun * (pow(mu, 8.) * .22 + pow(mu, 64.) * .45) * (.35 + .65 * uDisk);
@@ -98,7 +105,7 @@ const World = (() => {
     vec3 skyColor(vec3 d) {
       vec3 c = skyBase(d);
       float mu = dot(d, uSunDir);
-      c += uSun * smoothstep(.99982, .99994, mu) * 40. * uDisk;
+      c += uSun * smoothstep(.99982, .99994, mu) * uDisk * (uPhys > .5 ? 9. * step(0., d.y) : 40.);
       if (uClouds > .001 && d.y > .002) {
         vec2 uv = d.xz / (d.y + .12) * .7 + vec2(uTime * uWind, uTime * uWind * .4) * .0035;
         float n = fbm(uv) * .8 + fbm(uv * 2.3 + 4.1) * .25, cov = 1. - uClouds * .95;
@@ -127,10 +134,117 @@ const World = (() => {
       return mix(col, hazeColor(normalize(v)), f);
     }`;
 
+  // ----- the air: a sky worked out from where the sun is -----
+  // Sunlight scattered by the air's molecules (Rayleigh: blue overhead, orange then red low down, where its path through
+  // the air is long) and by haze (Mie: the bright glow round the sun), dimmed by ozone (which keeps twilight's zenith
+  // blue), and cut off by the Earth's own shadow once the sun has set: so the sky is the colour of its moment, from
+  // noon to the pink band over the blue shadow after sunset. Worked out once per sun position into a small picture of
+  // the sky above the horizon, which the shaders read, and into the colours of the light the rest of the world takes.
+  const AIR = { R0: 6371e3, R1: 6471e3, rl: [5.802e-6, 13.558e-6, 33.1e-6], oz: [.65e-6, 1.881e-6, .085e-6],
+    mie: 3.996e-6, mieExt: 4.44e-6, hr: 8e3, hm: 1.2e3, g: .8, sun: 20 };
+  // ozone lies in a layer about 25 km up, thickest there and gone 15 km either side
+  const ozone = h => Math.max(0, 1 - Math.abs(h - 25e3) / 15e3);
+  const AIR_W = 96, AIR_H = 40;
+  // optical depth (air, haze, ozone) from point p along unit d out to space, or null when the Earth is in the way
+  function airDepth(px, py, pz, dx, dy, dz, n = 8) {
+    const pp = px * px + py * py + pz * pz, b = px * dx + py * dy + pz * dz, g = b * b - (pp - AIR.R0 * AIR.R0);
+    if (g > 0 && -b - Math.sqrt(g) > 0) return null;
+    const far = -b + Math.sqrt(Math.max(0, b * b - (pp - AIR.R1 * AIR.R1))), ds = far / n;
+    let r = 0, m = 0, o = 0;
+    for (let i = 0; i < n; i++) {
+      const s = (i + .5) * ds, x = px + dx * s, y = py + dy * s, z = pz + dz * s, h = Math.sqrt(x * x + y * y + z * z) - AIR.R0;
+      r += Math.exp(-h / AIR.hr) * ds; m += Math.exp(-h / AIR.hm) * ds; o += ozone(h) * ds;
+    }
+    return [r, m, o];
+  }
+  // what light gets through that much air and haze, per colour
+  function airThrough(r, m, o, haze) {
+    return [0, 1, 2].map(k => Math.exp(-(AIR.rl[k] * r + AIR.oz[k] * o + AIR.mieExt * haze * m)));
+  }
+  // the light reaching an eye H metres up, looking along unit d, with the sun along unit s
+  function airLook(d, s, haze, h = 2, n = 16) {
+    let [dx, dy, dz] = d; if (dy < .001) { dy = .001; const l = Math.hypot(dx, dy, dz); dx /= l; dy /= l; dz /= l; }
+    const oy = AIR.R0 + h, b = oy * dy, far = -b + Math.sqrt(b * b - (oy * oy - AIR.R1 * AIR.R1));
+    const mu = dx * s[0] + dy * s[1] + dz * s[2], g = AIR.g;
+    const pr = 3 / (16 * Math.PI) * (1 + mu * mu);
+    const pm = 3 / (8 * Math.PI) * ((1 - g * g) * (1 + mu * mu)) / ((2 + g * g) * Math.pow(1 + g * g - 2 * g * mu, 1.5));
+    let vr = 0, vm = 0, vo = 0; const sr = [0, 0, 0], sm = [0, 0, 0];
+    for (let i = 0; i < n; i++) {
+      // steps closer together near the eye: the near air is what colours most of what is seen
+      const f0 = i / n, f1 = (i + 1) / n, t = far * ((f0 + f1) / 2) ** 2, dt = far * (f1 * f1 - f0 * f0);
+      const x = dx * t, y = oy + dy * t, z = dz * t, hh = Math.sqrt(x * x + y * y + z * z) - AIR.R0;
+      const dr = Math.exp(-hh / AIR.hr) * dt, dm = Math.exp(-hh / AIR.hm) * dt;
+      vr += dr; vm += dm; vo += ozone(hh) * dt;
+      const l = airDepth(x, y, z, s[0], s[1], s[2]); if (!l) continue;
+      const T = airThrough(vr + l[0], vm + l[1], vo + l[2], haze);
+      for (let k = 0; k < 3; k++) { sr[k] += T[k] * dr; sm[k] += T[k] * dm; }
+    }
+    return [0, 1, 2].map(k => AIR.sun * (sr[k] * AIR.rl[k] * pr + sm[k] * AIR.mie * haze * pm));
+  }
+  // the sun's own light where it arrives, H metres up: none once the Earth is in the way
+  function airSun(s, haze, h = 2) {
+    const l = airDepth(0, AIR.R0 + h, 0, s[0], s[1], s[2], 24);
+    return l ? airThrough(l[0], l[1], l[2], haze).map(v => v * AIR.sun) : [0, 0, 0];
+  }
+  const lum = c => .2126 * c[0] + .7152 * c[1] + .0722 * c[2];
+  // the whole sky above the horizon, as a picture: across, all the way round; up, from the horizon (where the colour
+  // changes fastest, so it gets more of the rows) to straight up. And the light the world is lit by, all scaled by one
+  // exposure, as a photographer would: a dusk sky is far darker than noon, but not black.
+  function airSky(el, az, haze) {
+    const e = el * Math.PI / 180, a = az * Math.PI / 180, s = [Math.sin(a) * Math.cos(e), Math.sin(e), -Math.cos(a) * Math.cos(e)];
+    const px = new Float32Array(AIR_W * AIR_H * 4);
+    let sum = 0, wsum = 0;
+    for (let j = 0; j < AIR_H; j++) {
+      const v = (j + .5) / AIR_H, up = v * v * Math.PI / 2, cu = Math.cos(up), su = Math.sin(up);
+      for (let i = 0; i < AIR_W; i++) {
+        const az2 = ((i + .5) / AIR_W - .5) * 2 * Math.PI, d = [Math.sin(az2) * cu, su, -Math.cos(az2) * cu];
+        const c = airLook(d, s, haze), o = (j * AIR_W + i) * 4;
+        px[o] = c[0]; px[o + 1] = c[1]; px[o + 2] = c[2]; px[o + 3] = 1;
+        const w = cu * v; sum += lum(c) * w; wsum += w;
+      }
+    }
+    // a dark sky is shown brighter, as a photographer exposes for it, but not all the way: dusk stays dusk
+    const key = Math.max(1e-6, sum / wsum), expose = Math.min(12, Math.pow(.2 / key, .75));
+    for (let i = 0; i < px.length; i += 4) { px[i] *= expose; px[i + 1] *= expose; px[i + 2] *= expose; }
+    const look = (up, az2) => airLook([Math.sin(az2) * Math.cos(up), Math.sin(up), -Math.cos(az2) * Math.cos(up)], s, haze).map(v => v * expose);
+    const sun = airSun(s, haze).map(v => v * expose), high = airSun(s, haze, 8000).map(v => v * expose);
+    return { px, expose, key, sun, high, zen: look(Math.PI / 2, 0), hor: look(.02, a), anti: look(.02, a + Math.PI), side: look(.02, a + Math.PI / 2) };
+  }
+  // the skies worked out this way, and how hazy each one's air is; the others keep their painted colours
+  const AIR_HAZE = { sunset: 1, day: .8, dusk: .7, haze: 3 };
+  const airMade = new Map();
+  function airFor(o) {
+    const haze = AIR_HAZE[o.sky]; if (!haze || o.hdri) return null;
+    const el = clamp(+o.sunEl || 0, -10, 90), az = +o.sunAz || 0, key = `${o.sky}|${el.toFixed(1)}|${az.toFixed(1)}`;
+    let a = airMade.get(key); if (a) return a;
+    a = airSky(el, az, haze);
+    const half = new Uint16Array(a.px.length);
+    for (let i = 0; i < half.length; i++) half[i] = T.DataUtils.toHalfFloat(Math.min(a.px[i], 6e4));
+    a.tex = new T.DataTexture(half, AIR_W, AIR_H, T.RGBAFormat, T.HalfFloatType);
+    a.tex.wrapS = T.RepeatWrapping; a.tex.wrapT = T.ClampToEdgeWrapping; a.tex.magFilter = a.tex.minFilter = T.LinearFilter; a.tex.needsUpdate = true;
+    if (airMade.size >= 24) { const first = airMade.keys().next().value; airMade.get(first).tex.dispose(); airMade.delete(first); }
+    airMade.set(key, a); return a;
+  }
+  // the colours the world is lit and hazed by: from the air worked out for the sun, or the sky's painted palette
+  function look(o) {
+    const pal = PALETTE[o.sky] || PALETTE.sunset, air = airFor(o), c = v => new T.Color(v[0], v[1], v[2]);
+    if (!air) {
+      const elev = clamp(sunDir(o).y * 4 + .15, 0, 1), sun = lin(pal.sun);
+      return { air: null, pal, zen: lin(pal.zen), hor: lin(pal.hor), fog: lin(pal.hor).lerp(sun, .15), sunTint: sun, skySun: sun.clone().multiplyScalar(pal.power),
+        lit: lin(pal.lit), shade: lin(pal.shade), light: pal.power * elev, power: pal.power, disk: pal.disk };
+    }
+    const sunL = lum(air.sun), top = Math.max(air.sun[0], air.sun[1], air.sun[2], 1e-6);
+    const hor = c(air.hor).add(c(air.side).multiplyScalar(2)).add(c(air.anti)).multiplyScalar(.25);
+    return { air, pal, zen: c(air.zen), hor, fog: c(air.side).lerp(c(air.hor), .3), sunTint: sunL > 1e-4 ? c(air.sun.map(v => v / top)) : c([1, .6, .4]),
+      skySun: c(air.sun).multiplyScalar(.09), lit: c(air.high).multiplyScalar(.06), shade: c(air.zen).multiplyScalar(1.2).add(c(air.side).multiplyScalar(.3)),
+      light: Math.min(1.6, sunL / 11), power: 1, disk: 1 };
+  }
+
   function skyUniforms() {
     return { uSunDir: { value: new T.Vector3(0, .2, -1).normalize() }, uZen: { value: new T.Color() }, uHor: { value: new T.Color() },
       uSun: { value: new T.Color() }, uLit: { value: new T.Color() }, uShade: { value: new T.Color() }, uClouds: { value: .4 },
-      uTime: { value: 0 }, uWind: { value: 4 }, uStars: { value: 0 }, uDisk: { value: 1 }, uFog: { value: 0 } };
+      uTime: { value: 0 }, uWind: { value: 4 }, uStars: { value: 0 }, uDisk: { value: 1 }, uFog: { value: 0 },
+      uPhys: { value: 0 }, uAir: { value: null } };
   }
 
   // ----- the sky dome -----
@@ -790,27 +904,27 @@ const World = (() => {
 
   // Set the world up as it is at T: its sky, light, ground, props and the 3D layers in it. What films it is separate.
   function stage(L, o, t, k = 1) {
-    const Rr = renderer, B = worldFor(L), U = B.uniforms, pal = PALETTE[o.sky] || PALETTE.sunset, cam = camera(t, o, L), ground = -(+o.eye || 1.7) * M;
+    const Rr = renderer, B = worldFor(L), U = B.uniforms, lk = look(o), cam = camera(t, o, L), ground = -(+o.eye || 1.7) * M;
     // what moves by itself in the world moves on world time, slowed or sped by its speed
     const tl = t; t = worldTime(L, t); void tl;
     const sun = sunDir(o), elev = clamp(sun.y * 4 + .15, 0, 1);
     // the sky
-    U.uSunDir.value.copy(sun); U.uZen.value.copy(lin(pal.zen)); U.uHor.value.copy(lin(pal.hor)); U.uSun.value.copy(lin(pal.sun)).multiplyScalar(pal.power * (o.sunPower ?? 100) / 100);
-    U.uLit.value.copy(lin(pal.lit)); U.uShade.value.copy(lin(pal.shade)); U.uClouds.value = o.sky === 'studio' || o.sky === 'space' ? 0 : clamp((o.sky === 'overcast' ? Math.max(80, o.clouds) : +o.clouds) / 100, 0, 1);
-    U.uTime.value = t; U.uWind.value = +o.wind || 0; U.uStars.value = o.sky === 'night' ? 1 : o.sky === 'space' ? 2 : 0; U.uDisk.value = pal.disk; U.uFog.value = Math.max(0, +o.fog || 0) / 100 * .02;
+    U.uSunDir.value.copy(sun); U.uZen.value.copy(lk.zen); U.uHor.value.copy(lk.hor); U.uSun.value.copy(lk.skySun).multiplyScalar((o.sunPower ?? 100) / 100);
+    U.uLit.value.copy(lk.lit); U.uShade.value.copy(lk.shade); U.uPhys.value = lk.air ? 1 : 0; U.uAir.value = lk.air?.tex || null; U.uClouds.value = o.sky === 'studio' || o.sky === 'space' ? 0 : clamp((o.sky === 'overcast' ? Math.max(80, o.clouds) : +o.clouds) / 100, 0, 1);
+    U.uTime.value = t; U.uWind.value = +o.wind || 0; U.uStars.value = o.sky === 'night' ? 1 : o.sky === 'space' ? 2 : 0; U.uDisk.value = lk.disk; U.uFog.value = Math.max(0, +o.fog || 0) / 100 * .02;
     U.uGround.value = ground; U.uWaves.value = Math.max(0, +o.waves || 0); U.uChop.value = clamp((+o.chop || 0) / 100, 0, 1.5);
-    U.uWater.value.copy(lin(o.water)); U.uLight.value = .35 + .9 * elev * pal.power;
+    U.uWater.value.copy(lin(o.water)); U.uLight.value = lk.air ? .2 + .9 * lk.light : .35 + .9 * elev * lk.power;
     B.sky.position.copy(cam.position);
     // the light: the sun, and the sky all round
-    B.sun.color.copy(lin(pal.sun)); B.sun.intensity = 3.2 * pal.power * elev * (o.sunPower ?? 100) / 100;
+    B.sun.color.copy(lk.sunTint); B.sun.intensity = 3.2 * lk.light * (o.sunPower ?? 100) / 100;
     const stage = new T.Vector3(cam.userData.target.x, ground, cam.userData.target.z);
     B.sun.position.copy(stage).addScaledVector(sun, 20000); B.sun.target.position.copy(stage); B.sun.target.updateMatrixWorld();
-    B.hemi.color.copy(lin(pal.zen)).lerp(lin(pal.hor), .5); B.hemi.groundColor.copy(lin(o.ground === 'ocean' ? o.water : o.groundColor)).multiplyScalar(.6); B.hemi.intensity = .5 + .4 * pal.power;
-    B.scene.environment = environment(B, o); B.scene.environmentIntensity = .55 + .45 * pal.power;
+    B.hemi.color.copy(lk.zen).lerp(lk.hor, .5); B.hemi.groundColor.copy(lin(o.ground === 'ocean' ? o.water : o.groundColor)).multiplyScalar(.6); B.hemi.intensity = .5 + .4 * lk.power;
+    B.scene.environment = environment(B, o); B.scene.environmentIntensity = .55 + .45 * lk.power;
     // a sky photo (an HDRI from the library) lights and backs the world instead
     const photo = o.hdri && World.hdriHook ? World.hdriHook(B, o) : false;
     B.sky.visible = !photo; if (!photo) B.scene.background = null;
-    const fogC = lin(pal.hor).lerp(lin(pal.sun), .15);
+    const fogC = lk.fog;
     B.scene.fog = o.fog > 0 ? new T.FogExp2(fogC, (+o.fog / 100) * .02 / M) : null;
     // the ground
     rebuild(B, 'ocean', o.ground === 'ocean' ? 'ocean' : null, () => oceanMesh(U));
@@ -834,7 +948,7 @@ const World = (() => {
     // dust
     const motes = Math.round(clamp(+o.dust || 0, 0, 100) * 40), dust = rebuild(B, 'dust', motes ? motes : null, () => dustPoints(motes));
     if (dust) { const u = dust.material.uniforms; u.uTime.value = t; u.uWind.value = +o.wind || 0; u.uCenter.value.set(stage.x, ground, stage.z);
-      u.uCol.value.copy(lin(pal.sun)).multiplyScalar(.6 * elev + .1); u.uSize.value = 1.4; }
+      u.uCol.value.copy(lk.sunTint).multiplyScalar(.6 * Math.min(1, lk.light) + .1); u.uSize.value = 1.4; }
     // props: built again when they change, or every frame when they move with time; not while one is held
     const pkey = JSON.stringify(o.objects || []) + (animated(o.objects) ? '@' + t : '') + '#' + World.version;
     if (B.propsKey !== pkey && B.hold !== true) { if (B.props) { B.scene.remove(B.props); B.props.traverse(n => { if (n.isLight) n.dispose?.(); }); }
@@ -912,20 +1026,24 @@ const World = (() => {
     P.bokeh.enabled = dof > 0; P.bokeh.uniforms.focus.value = focus; P.bokeh.uniforms.aperture.value = clamp(dof / 100, 0, 2) * 3e-5;
     P.bokeh.uniforms.maxblur.value = .004 + .016 * clamp(dof / 100, 0, 1.5);
     // height fog: the sky's horizon colour, lit by how high the sun is; brighter towards the sun
-    const hz = P.haze.uniforms, pal = PALETTE[o.sky] || PALETTE.sunset, elev = clamp(sunDir(o).y * 4 + .15, 0, 1);
+    const hz = P.haze.uniforms, lk = look(o), elev = clamp(sunDir(o).y * 4 + .15, 0, 1);
     P.haze.enabled = +o.haze > 0; hz.uOn.value = +o.haze > 0 ? 1 : 0; hz.uDensity.value = clamp(+o.haze || 0, 0, 100) * 4e-5;
     hz.uFall.value = Math.max(1, +o.hazeFall || 250); hz.uGlow.value = clamp((o.hazeGlow == null ? 60 : +o.hazeGlow) / 100, 0, 3);
     hz.uGround.value = -(+o.eye || 1.7) * M; cam.updateMatrixWorld(); hz.uProjInv.value.copy(cam.projectionMatrixInverse); hz.uCamWorld.value.copy(cam.matrixWorld);
     hz.uCamPos.value.setFromMatrixPosition(cam.matrixWorld); hz.uSunDir.value.copy(sunDir(o));
-    hz.uFogCol.value.copy(lin(pal.hor)).lerp(lin(pal.zen), .15).multiplyScalar((.35 + .9 * elev) * pal.power * .75);
-    hz.uSunCol.value.copy(lin(pal.sun)).multiplyScalar(pal.power * elev * (o.sunPower ?? 100) / 100);
+    if (lk.air) hz.uFogCol.value.copy(lk.fog).lerp(lk.zen, .15);
+    else hz.uFogCol.value.copy(lk.hor).lerp(lk.zen, .15).multiplyScalar((.35 + .9 * elev) * lk.power * .75);
+    hz.uSunCol.value.copy(lk.sunTint).multiplyScalar(lk.light * (o.sunPower ?? 100) / 100);
     P.bloom.enabled = o.bloom > 0; P.bloom.strength = clamp(o.bloom / 100, 0, 3) * .6; P.bloom.radius = .55; P.bloom.threshold = 1.1;
+    // a soft knee, not a cliff: a real sky's glow round a low sun is above the threshold over a wide area, and a hard
+    // cut there drew the glow's edge as a line
+    if (P.bloom.highPassUniforms?.smoothWidth) P.bloom.highPassUniforms.smoothWidth.value = 1.5;
     const fu = P.film.uniforms; fu.uTime.value = t; fu.uGrain.value = clamp(o.grain / 100, 0, 2); fu.uFringe.value = clamp(o.fringe / 100, 0, 3); fu.uAspect.value = W / H;
     // where the sun is on the picture, for light shafts and a flare
     const sp = cam.position.clone().addScaledVector(sunDir(o), 1e5).project(cam), seen = sp.z < 1 && Math.abs(sp.x) < 1.3 && Math.abs(sp.y) < 1.3;
     const su = new T.Vector2((sp.x + 1) / 2, (sp.y + 1) / 2);
     P.rays.enabled = (+o.godrays > 0) && seen; P.rays.uniforms.uSun.value.copy(su); P.rays.uniforms.uOn.value = clamp(+o.godrays / 100, 0, 2);
-    P.rays.uniforms.uTint.value.copy(lin((PALETTE[o.sky] || PALETTE.sunset).sun));
+    P.rays.uniforms.uTint.value.copy(lk.sunTint);
     fu.uSun.value.copy(su); fu.uFlare.value = seen && !o.hdri ? clamp(+o.flare / 100, 0, 2) : 0; fu.uStreak.value = clamp(+o.streaks / 100, 0, 2);
     composer.render();
   }
@@ -989,6 +1107,21 @@ const World = (() => {
           // water pouring from it, onto the dune
           { type: 'liquid', name: 'Water', at: [0, 0, -17.76], kind: 'water', from: 'pour', flow: 70, height: 3, width: .42, carve: 60 }] },
       keys: d => ({ travel: [[0, 0, 'sineInOut'], [d, 8]] }) },
+    bigsun: { label: 'Sun on the sea', hint: 'A long lens on the setting sun, its road of light across the water',
+      p: { sky: 'sunset', sunEl: .8, sunAz: 0, sunPower: 110, clouds: 16, wind: 3, ground: 'ocean', water: '#0b3540', waves: .45, chop: 55,
+        swell: 0, fog: 1, dust: 0, eye: 2.4, heading: 0, pitch: .3, travel: 0, lens: 200, focus: 0, dof: 0,
+        exposure: -2.6, bloom: 25, grain: 16, fringe: 8, ao: 0, objects: [] },
+      keys: d => ({ sunEl: [[0, 1, 'linear'], [d, .35]] }) },
+    afterglow: { label: 'Afterglow', hint: 'The sea just after sunset: a red band on the horizon, clouds lit pink from below',
+      p: { sky: 'dusk', sunEl: -1.2, sunAz: 0, sunPower: 100, clouds: 48, wind: 2, ground: 'ocean', water: '#0a2b3a', waves: .5, chop: 35,
+        swell: 0, fog: 2, dust: 0, eye: 1.6, heading: 0, pitch: 9, travel: 0, lens: 24, focus: 0, dof: 0,
+        exposure: .15, bloom: 30, grain: 14, fringe: 6, ao: 0, objects: [] },
+      keys: d => ({ sunEl: [[0, -.8, 'linear'], [d, -1.8]], heading: [[0, -2, 'sineInOut'], [d, 2]] }) },
+    goldfield: { label: 'Golden field', hint: 'Wheat against a low sun, dust hanging in the light',
+      p: { sky: 'sunset', sunEl: 3, sunAz: 12, sunPower: 115, clouds: 25, wind: 3, ground: 'field', groundColor: '#8c6c48', plants: '#c9a24f', grass: 75, grassH: .95, sway: 3,
+        fog: 3, dust: 20, eye: 1.2, heading: 0, pitch: 2, travel: 0, lens: 50, focus: 0, dof: 45, exposure: -1.2, bloom: 30, grain: 18, fringe: 8, ao: 0,
+        godrays: 35, objects: [] },
+      keys: d => ({ travel: [[0, 0, 'sineInOut'], [d, 3]], sunEl: [[0, 3.4, 'linear'], [d, 2.4]] }) },
     night: { label: 'Night sea', hint: 'Moonlight on dark water',
       p: { sky: 'night', sunEl: 14, sunAz: 5, sunPower: 100, clouds: 25, wind: 3, ground: 'ocean', water: '#041a24', waves: .8, chop: 40,
         swell: 0, fog: 3, dust: 0, eye: 2.2, heading: 0, pitch: 3, travel: 0, lens: 35, focus: 0, dof: 0, exposure: .4, bloom: 60, grain: 25, fringe: 10, ao: 0, objects: [] },

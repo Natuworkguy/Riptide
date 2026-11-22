@@ -290,6 +290,13 @@
     if (on) { const sc = B.sun.shadow.camera; if (sc.right !== 6000) { sc.left = sc.bottom = -6000; sc.right = sc.top = 6000; sc.far = 60000; sc.updateProjectionMatrix(); } }
   });
 
+  // ----- first light on the peaks: high above the valley, the sun just up behind, mist lying in the valley -----
+  World.PRESETS.alpine = { label: 'Alpine first light', hint: 'Snowy peaks catching the first sun over a valley of mist',
+    p: { sky: 'sunset', sunEl: 2.5, sunAz: 155, sunPower: 120, clouds: 20, wind: 2, ground: 'mountains', groundColor: '#4d6436',
+      peaks: 1300, snow: 58, trees: 80, road: 5, fog: .1, haze: 40, hazeFall: 160, hazeGlow: 90, dust: 0, eye: 60, heading: 0, pitch: 4, travel: 0,
+      lens: 50, focus: 0, dof: 0, exposure: .1, bloom: 30, grain: 12, fringe: 5, ao: 0, godrays: 0, flare: 0, letterbox: '2.39', objects: [] },
+    keys: d => ({ heading: [[0, -3, 'sineInOut'], [d, 3]], sunEl: [[0, 1.8, 'linear'], [d, 3.4]] }) };
+
   // ----- the scene to start from: a car on the road up the valley, filmed from behind and above -----
   World.PRESETS.mountain = { label: 'Mountain road', hint: 'A car up a winding road through pines, under snowy peaks',
     p: { sky: 'day', sunEl: 28, sunAz: 58, sunPower: 105, clouds: 28, wind: 3, ground: 'mountains', groundColor: '#58723a',

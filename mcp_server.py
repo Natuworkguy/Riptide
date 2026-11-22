@@ -299,12 +299,15 @@ async def export_scene(path: str, layer: str | None = None, at_time: float | str
 
 
 @mcp.tool()
-async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "mountain", "neon", "golden", "oculus", "blocks", "blockisle", "blockgrave", "blocklava", "blockdungeon", "orbits", ""] = "", name: str | None = None,
+async def add_world(scene: Literal["wave", "bigsun", "afterglow", "goldfield", "alpine", "rig", "studio", "desert", "night", "mountain", "neon", "golden", "oculus", "blocks", "blockisle", "blockgrave", "blocklava", "blockdungeon", "orbits", ""] = "", name: str | None = None,
                     props: dict | None = None) -> dict:
     """Add a 3D world at the bottom of the layers: a whole place to film, with a sky, a sun that casts shadows,
     the ground, the air, props, and a lens. 3D shapes and models above it stand inside it, lit and shadowed by
     it. `scene` starts from a ready-made one, keyed with a slow camera move: "wave" (a breaking wave at golden
-    hour), "rig" (a worn film camera on a jib in a hazy wheat field, shallow focus), "studio" (a soft-lit floor
+    hour), "bigsun" (a long lens on the sun setting into the sea, its road of light on the water), "afterglow" (the sea
+    just after sunset: a red band on the horizon, high clouds lit pink from below), "goldfield" (wheat against a low
+    sun, dust in the light, light shafts), "alpine" (snowy peaks catching the first sun over a valley of mist, from
+    high up), "rig" (a worn film camera on a jib in a hazy wheat field, shallow focus), "studio" (a soft-lit floor
     for your shapes and models), "desert" (dunes and a monolith at dusk), "night" (moonlit sea), "mountain" (a red car up a winding
     road through pine forest under snowy peaks, filmed by a chase camera), "neon" (a wet city street at night in the rain:
     shopfronts, hanging neon signs, lamp posts, parked cars, traffic and people), "oculus" (looking up into a coffered
@@ -321,7 +324,12 @@ async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "
 
     sky "sunset" | "day" | "dusk" | "haze" | "overcast" | "night" | "city" (a city at night: no stars, cloud lit orange by the streets) | "studio"
     | "violet" | "ember" | "torch" | "sulfur" (dark overhead, one strong colour low down that the haze takes on: pink, red, warm, yellow-green) | "space" (black, stars all
-    round, no horizon: use ground "none"); sunEl (degrees up), sunAz (degrees
+    round, no horizon: use ground "none"). sunset, day, dusk and haze are real air, worked out from where the sun
+    is: the sun's height makes the colours (blue by day; gold, then orange and red as it sinks; after it has set,
+    down to about -6, a red band on the horizon, violet above, high clouds lit pink from below and the Earth's blue
+    shadow opposite), and the four differ only in how hazy the air is (dusk clearest, haze thickest). So for a
+    sunset set sunEl, not a colour: 8 to 4 golden, 3 to 0.5 orange with the sun on the horizon, -0.5 to -3 the
+    afterglow, -3 to -6 blue hour. sunEl (degrees up, -10 to 90), sunAz (degrees
     round: 0 is straight ahead of the camera, behind what it looks at), sunPower (%), clouds (%), wind (m/s:
     clouds, plants, dust and the sea move with it). ground "ocean" | "field" | "desert" | "mountains" | "floor" |
     "none", groundColor. Mountains: peaks (m), snow (snow line, % of the peaks), trees (pines, %), road (its width,
@@ -339,6 +347,18 @@ async def add_world(scene: Literal["wave", "rig", "studio", "desert", "night", "
     The lens: dof (depth of field, 0 off), focus (m from the camera; 0 is the point it looks at), exposure
     (stops), bloom, grain, fringe (colour fringing at the edges) and ao (contact shadows), 0 to 100. The layer's
     own grade, vignette and LUT then finish it.
+
+    A breathtaking view is made, not found: (1) The light: a low sun (sunEl 6 to -2), never noon, and key sunEl
+    down a degree or two over the shot, so the light changes as it plays. Into the sun (sunAz within 20 of 0) for
+    silhouettes, glare and a road of light on water; with the sun behind (sunAz 140 to 180) for peaks and clouds lit
+    gold or pink against a deep sky. (2) Depth in layers: something near (eye low, 0.5 to 1.5 m, plants, rocks or a
+    prop at the bottom of the frame), the subject, and far off made paler by the air (fog 2 to 10, haze 20 to 50
+    with hazeFall 100 to 200 for mist in valleys). (3) The horizon on a third, not the middle: pitch it down to a
+    low third for a sky to look at, up for land. (4) The lens tells the scale: 18 to 28 mm for a vast sky and a near
+    foreground; 135 to 300 mm with the camera low to make the sun huge on the horizon and stack ridges into
+    layers. (5) Clouds 15 to 50 at sunset, so there is something for the light to catch. (6) Slow, steady moves only
+    (travel a few metres, heading a few degrees over the whole shot), bloom 30 to 50, godrays 30 to 60 when the
+    sun is in shot behind something, grain 10 to 18, and a 2.39 letterbox for a film look.
 
     objects is a list of props, in metres, built from parts: {"type": "box" | "cylinder" | "sphere" | "cone" |
     "torus" | "capsule" | "truss" | "label" | "sketch" | "group", "at": [x, y, z] (y up, z towards the camera, from the spot

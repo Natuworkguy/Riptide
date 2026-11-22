@@ -223,6 +223,8 @@ const Interior = (() => {
       out.push([at(new T.SphereGeometry(.03, 12, 8), w / 2 - 1.22, 1.0, d / 2 - .08), plain('#c9c7c0', .3, .9)]);
       return out;
     });
+    // the rest in the world's own units, beside the room's shell (which is built in metres and scaled up)
+    const room = new T.Group(); room.add(g);
     // the curtain: a sheer panel in soft folds over the window, on a black rod
     const [ww, wz] = [1.3, -d / 2 + 1.25];
     const cg = new T.PlaneGeometry(ww * 1.1, 2.0, 60, 4), cp = cg.attributes.position;
@@ -231,14 +233,23 @@ const Interior = (() => {
     const cur = new T.Mesh(cg, sheer()); cur.position.set((w / 2 - .14) * M, 1.42 * M, wz * M); cur.scale.setScalar(M); cur.userData.noShadow = true;
     const rod = new T.Mesh(at(new T.CylinderGeometry(.012, .012, ww + .5, 10), 0, 0, 0, 0, Math.PI / 2), steel());
     rod.position.set((w / 2 - .14) * M, 2.45 * M, wz * M); rod.scale.setScalar(M);
-    g.add(cur, rod);
+    room.add(cur, rod);
     // the light a room has from its walls and ceiling: what the sun through the window bounces round it
     const fill = clamp(num(P.fill, 60), 0, 300) / 100;
     if (fill > 0) {
-      const sky = new T.HemisphereLight('#fff6ea', '#c9b59a', fill * .9); sky.position.set(0, h * M, 0); g.add(sky);
-      const bounce = new T.PointLight('#ffe9cc', fill * 3.5, 9 * M, 1.4); bounce.position.set((w / 2 - 1.2) * M, 1.4 * M, wz * M); bounce.castShadow = false; g.add(bounce);
+      const sky = new T.HemisphereLight('#fff6ea', '#c9b59a', fill * .9); sky.position.set(0, h * M, 0); room.add(sky);
+      const bounce = new T.PointLight('#ffe9cc', fill * 20, 9 * M, 1.4); bounce.position.set((w / 2 - 1.2) * M, 1.4 * M, wz * M); bounce.castShadow = false; room.add(bounce);
+      // the daylight from the window itself, the sky seen through it: a broad, soft light from the window's place
+      // across the room, falling off away from it, its shadows soft-edged as a big window's are
+      const day = new T.SpotLight('#f3f6ff', fill * 400, 12 * M, deg(62), 1, 1.2);
+      day.position.set((w / 2 - .05) * M, 1.75 * M, wz * M); day.target.position.set(-w / 2 * M, .3 * M, (wz + .9) * M);
+      day.castShadow = true; day.shadow.mapSize.set(1024, 1024); day.shadow.radius = 9; day.shadow.blurSamples = 16;
+      day.shadow.bias = -.0002; day.shadow.normalBias = .02 * M; day.shadow.camera.near = .05 * M; day.shadow.camera.far = 12 * M;
+      room.add(day, day.target);
+      // a little of the sky off the far wall, back into the room: the side the window does not reach is not black
+      const back = new T.PointLight('#fff3e2', fill * 10, 8 * M, 1.6); back.position.set(-w / 4 * M, 2.2 * M, (d / 2 - 1) * M); room.add(back);
     }
-    return g;
+    return room;
   };
 
   // a sofa: base, arms, seat and back cushions, on short metal feet. size [width, height, depth]; seats: how many

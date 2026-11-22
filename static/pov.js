@@ -148,7 +148,11 @@
     const person = Actors.realPerson({ body: 'man', move: 'idle', height: 1.78, shirt: o.sleeve || '#1f2833', id: 'pov' }, t);
     if (!person) return null;                       // still loading
     // the eye's camera: the same lens and way of looking as the world's, its own near and far
-    const vc = view.camera; vc.fov = cam.fov; vc.aspect = cam.aspect; vc.near = .01; vc.far = 20; vc.updateProjectionMatrix();
+    // (in a tall picture the world's lens is narrow across: the arms would fill it, so they keep at least 70° across
+    // of their own, the way a game keeps its arms the same whatever the view)
+    const across = 2 * Math.atan(Math.tan(deg(cam.fov) / 2) * cam.aspect), wide = deg(70);
+    const vc = view.camera; vc.fov = across >= wide ? cam.fov : 2 * Math.atan(Math.tan(wide / 2) / cam.aspect) * 180 / Math.PI;
+    vc.aspect = cam.aspect; vc.near = .01; vc.far = 20; vc.updateProjectionMatrix();
     vc.position.set(0, 0, 0); vc.quaternion.copy(cam.quaternion); vc.updateMatrixWorld();
     for (const n of [...view.scene.children]) if (n !== sunV && n !== sunV.target && n !== hemiV) view.scene.remove(n);
     // lit as the world is

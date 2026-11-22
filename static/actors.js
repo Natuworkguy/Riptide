@@ -104,7 +104,9 @@ const Actors = (() => {
     if (!Rr || !B.props) return;
     const mats = new Set(); B.props.traverse(n => { if (n.isMesh && n.material?.userData?.carEnv) mats.add(n.material); });
     if (!mats.size) return;
-    if (!B.carCube) { B.carCube = new T.WebGLCubeRenderTarget(128, { type: T.HalfFloatType, generateMipmaps: true, minFilter: T.LinearMipmapLinearFilter });
+    if (!B.carCube) { // eight bits a channel: a pixel some part of the world draws as not-a-number is written as nothing here, where in
+      // half floats it was carried into the paint and the glass, and spread by bloom over the whole picture
+      B.carCube = new T.WebGLCubeRenderTarget(128, { type: T.UnsignedByteType, colorSpace: T.SRGBColorSpace, generateMipmaps: true, minFilter: T.LinearMipmapLinearFilter });
       B.carCam = new T.CubeCamera(.1 * M, 3000 * M, B.carCube); }
     B.carCam.position.set(cam.position.x, ground + 1.1 * M, cam.position.z - 3 * M);
     const hide = [B.wetFx, B.rainFx].filter(Boolean), was = hide.map(h => h.visible); hide.forEach(h => { h.visible = false; });

@@ -257,7 +257,10 @@ const World = (() => {
   function skyMesh(uniforms) {
     const mat = new T.ShaderMaterial({ uniforms, side: T.BackSide, depthWrite: false, fog: false,
       vertexShader: `varying vec3 vP; void main() { vec4 w = modelMatrix * vec4(position, 1.); vP = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; gl_Position.z = gl_Position.w; }`,
-      fragmentShader: `${NOISE}${SKY} varying vec3 vP; void main() { vec3 d = normalize(vP - cameraPosition); gl_FragColor = vec4(skyColor(d), 1.); }` });
+      fragmentShader: `${NOISE}${SKY} varying vec3 vP; void main() { vec3 d = normalize(vP - cameraPosition);
+        // kept inside what a half-float target holds: the sun's disk is brighter than that, and a reflection caught
+        // of it (a car's paint) would turn to infinity, then to holes that bloom spreads over the whole picture
+        gl_FragColor = vec4(clamp(skyColor(d), 0., 2e4), 1.); }` });
     const m = new T.Mesh(new T.SphereGeometry(1, 64, 32), mat); m.frustumCulled = false; m.renderOrder = -10; m.scale.setScalar(5e5);
     return m;
   }
@@ -873,10 +876,23 @@ const World = (() => {
       // what is right in front of the eye, drawn over the world with its own camera and depth: first person's
       // own arms and body (pov.js), sharp at a few centimetres however far off the ground below is
       const view = new T.RenderPass(new T.Scene(), new T.PerspectiveCamera()); view.clear = false; view.clearDepth = true; view.enabled = false;
-      for (const p of [render, haze, ao, view, bokeh, rays, bloom, out, film]) composer.addPass(p);
-      passes = { render, haze, ao, view, bokeh, rays, bloom, out, film };
+      // a pixel gone to infinity or not-a-number (a highlight past what half floats hold, a shader dividing by
+      // nothing) is black on its own, but bloom would spread it over the whole picture: such pixels are mended from
+      // their neighbours, and the brightest kept within range, before the glow is worked out
+      const clean = new T.ShaderPass({ uniforms: { tDiffuse: { value: null }, uPx: { value: new T.Vector2(1 / W, 1 / H) } },
+        vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.); }',
+        fragmentShader: `uniform sampler2D tDiffuse; uniform vec2 uPx; varying vec2 vUv;
+          bool bad(vec3 c) { return any(isnan(c)) || any(isinf(c)); }
+          void main() { vec4 c = texture2D(tDiffuse, vUv);
+            if (bad(c.rgb)) { vec3 s = vec3(0.); float n = 0.;
+              for (int i = 0; i < 8; i++) { float a = float(i) * .785398; for (float r = 2.; r < 40.; r *= 2.) {
+                vec3 q = texture2D(tDiffuse, vUv + vec2(cos(a), sin(a)) * uPx * r).rgb; if (!bad(q)) { s += q; n += 1.; break; } } }
+              c.rgb = n > 0. ? s / n : vec3(0.); }
+            gl_FragColor = vec4(min(c.rgb, vec3(3e4)), c.a); }` });
+      for (const p of [render, haze, ao, view, bokeh, rays, clean, bloom, out, film]) composer.addPass(p);
+      passes = { render, clean, haze, ao, view, bokeh, rays, bloom, out, film };
     }
-    composer.setSize(W, H);
+    composer.setSize(W, H); passes.clean.uniforms.uPx.value.set(1 / W, 1 / H);
     for (const p of [passes.render, passes.ao, passes.bokeh]) { p.scene = scene; p.camera = cam; }
     return passes;
   }

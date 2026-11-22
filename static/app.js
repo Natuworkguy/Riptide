@@ -3849,6 +3849,10 @@ const COMMANDS = [
   // View
   ['View', 'Command palette', 'mod+p|mod+shift+p', () => palette()],
   ['View', 'Keyboard shortcuts', '?', () => cheatSheet()],
+  ['View', 'Scopes (waveform, parade, vectorscope, histogram)', 'shift+s', () => Scopes.toggle()],
+  ['Edit', 'Remove pauses from the clip', '', withL(L => L.type === 'video' ? Cutter.menu(L)[0].act() : status('Select a video clip'))],
+  ['Edit', 'Split the clip at its scene cuts', '', withL(L => L.type === 'video' ? Cutter.menu(L)[1].act() : status('Select a video clip'))],
+  ['Edit', 'Ripple delete (close the gap)', '', () => Cutter.rippleDelete()],
   ['View', 'Tutorial', 'f1', () => Tutorial.resume()],
   ['View', 'Focus mode (hide panels)', 'f', () => focusMode()],
   ['Layer', 'Lock / unlock aspect ratio', 'shift+l', withL(L => { L.lockAspect = !aspectLocked(L); refresh(); status(L.lockAspect ? 'Aspect ratio locked' : 'Aspect ratio unlocked'); })],

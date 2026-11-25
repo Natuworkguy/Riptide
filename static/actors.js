@@ -241,6 +241,15 @@ const Actors = (() => {
   // the photographed people, and the classic ones (MakeHuman's CC0 body, built by tools/make_people.py), whose
   // clothes, skin and hair take any colours
   const BODIES = { man: 'people/man.glb', woman: 'people/woman.glb', classicMan: 'people/classic-man.glb', classicWoman: 'people/classic-woman.glb' };
+  // twelve more photographed people, Rocketbox avatars too (MIT), built by tools/make_people_more.py: Man 2 to Man 8
+  // and Woman 2 to Woman 6 in the Body menu, and all of them in a crowd set to People (everyone)
+  const MORE_MEN = ['01', '03', '05', '06', '08', '10', '12'], MORE_WOMEN = ['01', '04', '05', '08', '10'];
+  for (const n of MORE_MEN) BODIES['rb-male-' + n] = `people/rocketbox/male-adult-${n}.glb`;
+  for (const n of MORE_WOMEN) BODIES['rb-female-' + n] = `people/rocketbox/female-adult-${n}.glb`;
+  const PEOPLE = { m: ['man', ...MORE_MEN.map(n => 'rb-male-' + n)], f: ['woman', ...MORE_WOMEN.map(n => 'rb-female-' + n)] };
+  const BODY_CHOICES = [['man', 'Man'], ...MORE_MEN.map((n, i) => ['rb-male-' + n, `Man ${i + 2}`]), ['woman', 'Woman'], ...MORE_WOMEN.map((n, i) => ['rb-female-' + n, `Woman ${i + 2}`]),
+    ['classicMan', 'Man (classic)'], ['classicWoman', 'Woman (classic)'], ['mannequin', 'Mannequin']];
+  const isPhoto = b => /^(man|woman|rb-)/.test(b || 'man');
   const bodyCache = new Map();
   function body(kind) {
     let c = bodyCache.get(kind);
@@ -721,6 +730,9 @@ material.sheenRoughness = mix( .75, .35, hairAmt );`)
   function rng(seed) { let s = seed >>> 0 || 1; return () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296; }
   World.custom.crowd = (P, t = 0) => {
     if (P.asset === 'mannequin') P = { ...P, asset: '', body: 'mannequin' };
+    // everyone: each person one of all fourteen photographed people, picked with a dice of their own, so the rest of
+    // the crowd (where they walk, how fast, how tall) is the same as with two faces
+    const everyone = P.asset === 'everyone'; if (everyone) P = { ...P, asset: '' };
     const g = new T.Group(), n = clamp(Math.round(+P.count || 20), 1, 200), [w, , d] = (P.size || [12, 1, 8]).map(Number), r = rng(+P.seed || 7), move = P.move || 'walk';
     for (let i = 0; i < n; i++) {
       const x0 = (r() - .5) * w, z0 = (r() - .5) * d, speed = move === 'run' ? 3 + r() * 1.5 : move === 'walk' ? 1.1 + r() * .5 : 0;
@@ -738,6 +750,7 @@ material.sheenRoughness = mix( .75, .35, hairAmt );`)
       // real-looking men and women, mixed (the mannequin only while their bodies load, or if asked for)
       const who = { ...look, body: r() < .5 ? 'woman' : 'man', move, phase: ph * 4, dist: speed ? s : null };
       who.height = who.body === 'woman' ? 1.55 + (h - 1.58) * .6 : 1.66 + (h - 1.58) * .6;
+      if (everyone) { const set = PEOPLE[who.body === 'woman' ? 'f' : 'm']; who.body = set[Math.floor(rng((+P.seed || 7) * 7919 + i * 104729)() * set.length)]; }
       const node = P.asset ? World.custom.model({ asset: P.asset, clip: P.clip, clipOffset: ph * 3, clipSpeed: P.clipSpeed }, t)
         : (P.body !== 'mannequin' && realPerson(who, t)) || person({ ...look, height: h, move, phase: ph * 4, dist: speed ? s : null }, t);
       if (!node) continue;
@@ -761,14 +774,14 @@ material.sheenRoughness = mix( .75, .35, hairAmt );`)
       if (P.type === 'car') return `<div class="hd">Car</div><label class="f"><span>Kind</span>${opt('model', P.model || 'sedan', CAR_KINDS)}</label><label class="f"><span>Lights</span>${opt('lights', P.lights === false ? 'off' : '', [['', 'On'], ['off', 'Off']])}</label>
         <label class="f"><span>Beams</span>${opt('beams', P.beams ? '1' : '', [['', 'None'], ['1', 'Light the road (night)']])}</label>
         <p class="note">Key its place two or more times and it drives: its wheels turn and steer, and it faces the way it goes.</p>`;
-      if (P.type === 'person') return `<div class="hd">Person</div><label class="f"><span>Body</span>${opt('body', P.body || 'man', [['man', 'Man'], ['woman', 'Woman'], ['classicMan', 'Man (classic)'], ['classicWoman', 'Woman (classic)'], ['mannequin', 'Mannequin']])}</label>
+      if (P.type === 'person') return `<div class="hd">Person</div><label class="f"><span>Body</span>${opt('body', P.body || 'man', BODY_CHOICES)}</label>
         <label class="f"><span>Does</span>${opt('move', P.move || 'idle', MOVES)}</label>
         <label class="f"><span>Height m</span><input type="number" step=".01" data-k="height" value="${+P.height || 1.75}"></label>
-        ${/^(man|woman)$/.test(P.body || 'man') ? `<label class="f"><span>Says</span><textarea data-k="say" rows="2" placeholder="Words to lip sync">${Array.isArray(P.say) ? '' : (P.say || '').replace(/</g, '&lt;')}</textarea></label>
+        ${isPhoto(P.body) ? `<label class="f"><span>Says</span><textarea data-k="say" rows="2" placeholder="Words to lip sync">${Array.isArray(P.say) ? '' : (P.say || '').replace(/</g, '&lt;')}</textarea></label>
         ${Array.isArray(P.say) ? `<p class="note">${P.say.length} line${P.say.length > 1 ? 's' : ''} to say, set by an agent.</p>` : ''}
         <label class="f"><span>From s</span><input type="number" step=".1" data-k="sayAt" value="${+P.sayAt || 0}"></label>
         <label class="f"><span>Voice</span>${opt('voice', P.voice || '', [['', 'None (the words alone)'], ['mix', 'The soundtrack'], ...(S.audioTracks || []).map(T => [T.id, T.name || 'A track'])])}</label>` : ''}
-        ${/^(man|woman)$/.test(P.body || 'man') ? `<label class="f"><span>Blinks</span>${opt('blink', P.blink === false || P.blink === 'off' ? 'off' : '', [['', 'Now and then'], ['off', 'Never']])}</label>` : ''}
+        ${isPhoto(P.body) ? `<label class="f"><span>Blinks</span>${opt('blink', P.blink === false || P.blink === 'off' ? 'off' : '', [['', 'Now and then'], ['off', 'Never']])}</label>` : ''}
         <label class="f"><span>Outfit</span>${opt('outfit', P.outfit || '', [['', 'Clothes'], ['holo', 'Holographic shards'], ['chrome', 'Chrome'], ['glow', 'Glowing'], ['gold', 'Gold']])}</label>
         ${/^(classic|mannequin)/.test(P.body || '') ? color('skin', P.skin || '#c8906e', 'Skin') + color('shirt', P.shirt || '#2f5d8a', 'Top') + color('pants', P.pants || '#2b2b33', 'Trousers') + color('hairColor', P.hairColor || '#1c140e', 'Hair') + color('shoes', P.shoes || '#1a1a1a', 'Shoes')
           : '<p class="note">They wear their own clothes and hair. The classic man and woman take any colours.</p>'}
@@ -777,7 +790,7 @@ material.sheenRoughness = mix( .75, .35, hairAmt );`)
         return `<div class="hd">Crowd</div><label class="f"><span>People</span><input type="number" step="1" min="1" max="200" data-k="count" value="${+P.count || 20}"></label>
         <label class="f"><span>Do</span>${opt('move', P.move || 'walk', MOVES.filter(m => m[0] !== 'sit'))}</label>
         <label class="f"><span>Mix</span><input type="number" step="1" data-k="seed" value="${+P.seed || 7}" title="Another number, another crowd"></label>
-        <label class="f"><span>As</span>${opt('asset', P.asset || '', [['', 'People'], ['mannequin', 'Mannequins'], ...models])}</label>
+        <label class="f"><span>As</span>${opt('asset', P.asset || '', [['', 'People'], ['everyone', 'People (everyone)'], ['mannequin', 'Mannequins'], ...models])}</label>
         ${P.asset ? `<label class="f"><span>Clip</span>${opt('clip', P.clip || '', [['', 'None'], ...World.clipsOf(P.asset).map(c => [c, c])])}</label>` : ''}
         <p class="note">They come and go across its size (width and depth, in metres).</p>`; }
       if (P.type === 'model') { const clips = World.clipsOf(P.asset); if (!clips.length) return '';

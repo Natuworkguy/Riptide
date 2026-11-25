@@ -392,7 +392,9 @@ async def add_world(scene: Literal["wave", "bigsun", "afterglow", "goldfield", "
     parts like a vase or a wheel). A "person" is a real-looking built-in person (photographed skin, clothes and hair):
     "move" "walk" | "run" | "idle" | "wave" | "dance" | "sit" | "skate" | "ollie" | "kickflip" (the last three on a
     skateboard), "height", and "outfit" (any finish, e.g. "holo", over the whole body), "body" "man" | "woman" (each
-    dressed as they come) | "classicMan" | "classicWoman" (the earlier, simpler people) | "mannequin" (a plain figure);
+    dressed as they come), twelve more photographed people "rb-male-01" | "rb-male-03" | "rb-male-05" | "rb-male-06" |
+    "rb-male-08" | "rb-male-10" | "rb-male-12" | "rb-female-01" | "rb-female-04" | "rb-female-05" | "rb-female-08" |
+    "rb-female-10" (Man 2 to 8 and Woman 2 to 6 in the editor; they blink and talk like the man and the woman) | "classicMan" | "classicWoman" (the earlier, simpler people) | "mannequin" (a plain figure);
     the classic people and the mannequin are coloured with "skin", "shirt", "pants", "hairColor", "shoes",
     and "pose": {bone name: [x, y, z] degrees} to turn any joint (bones are named like
     "mixamorigRightArm"); "pose": {"@look": [up, across, 0]} aims the eyes (degrees up, and across to the viewer's
@@ -405,7 +407,8 @@ async def add_world(scene: Literal["wave", "bigsun", "afterglow", "goldfield", "
     A "car" is a real-looking car: "model" "sedan" | "hatch" | "suv" | "taxi" | "classic" (the old block car), "color",
     "lights" false to switch its lights off (parked), "beams" true to light the road ahead; key its "at" and it drives,
     wheels turning and steering, with "face": "travel" so it points the way it goes. A "crowd" ("count", "move",
-    "size" [w, 1, d], "seed") fills an area with real-looking men and women coming and going. City parts: a "street"
+    "size" [w, 1, d], "seed") fills an area with real-looking men and women coming and going ("asset": "everyone" casts all fourteen
+    photographed people instead of the two). City parts: a "street"
     ("roadWidth" m, "pavement" m, "size" [1, 1, length]: tarmac with markings, kerbs, paving slabs with grime), a
     "building" ("size" [w, h, d], "seed", "lit" %, "wall" "brick" | "darkbrick" | "concrete" | "tile" | "panel":
     storeys of lit rooms over shopfronts), a "sign" (a sign hanging out over a pavement: "text", "color", "kind" "neon"

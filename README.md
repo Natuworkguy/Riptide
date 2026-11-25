@@ -214,6 +214,16 @@ Canvas size: the Composition **Preset** menu has social (Instagram, Story/Reel, 
 video (720p to 4K, vertical, cinema) and web sizes, plus Custom. **Scale content** fits the existing design into the new
 frame; **Keep size** only re-centres it. **Rotate** swaps width and height.
 
+## Credits
+
+- Photographed people (`static/people/man.glb`, `woman.glb` and `static/people/rocketbox/`): avatars from the
+  [Microsoft Rocketbox Avatar Library](https://github.com/microsoft/Microsoft-Rocketbox), Copyright (c) 2020 Microsoft,
+  MIT License (its notice is in `static/people/LICENSE.txt`). Rebuilt for Riptide: turned to face forward in metres,
+  arms let down, skeleton renamed the Mixamo way. The twelve in `rocketbox/` came from the copies Sunreach City fetched
+  (Female_Adult_01, 04, 05, 08, 10; Male_Adult_01, 03, 05, 06, 08, 10, 12); having no specular maps, they are given an
+  even roughness.
+- Classic people: MakeHuman's body via MPFB2, CC0. Cars: made by `tools/make_cars.py` from numbers alone.
+
 ## Contributing
 
 Work happens on the `dev` branch; `main` holds releases. See [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -231,8 +241,10 @@ Work happens on the `dev` branch; `main` holds releases. See [CONTRIBUTING.md](C
 - **Zoom blur** (any layer, or an adjustment layer for the whole frame): a rush forward, the middle kept sharp.
 - **Pixel smear** (any layer, or an adjustment layer): bright pixels dragged out into streaks, the datamosh look.
 - **Speed lines** (a layer of its own): streaks rushing out from the middle.
-- In 3D worlds a person is a real-looking man or woman, photographed skin, clothes and hair (two of the Microsoft
-  Rocketbox avatars, MIT, rebuilt for Riptide by `tools/make_people_rocketbox.js`), dressed as they come; or the
+- In 3D worlds a person is a real-looking man or woman, photographed skin, clothes and hair (fourteen of the Microsoft
+  Rocketbox avatars, MIT: Man and Woman, rebuilt by `tools/make_people_rocketbox.js`, and Man 2 to 8 and Woman 2 to 6,
+  rebuilt the same way by `tools/make_people_more.py`), dressed as they come; a Crowd set to **People (everyone)** casts
+  all fourteen; or the
   classic man or woman (MakeHuman's free CC0 body: see `tools/make_people.py`), whose clothes, skin and hair take any colours. They walk, run, dance, sit, or
   **skate**, **ollie** and **kickflip** on a board, and in the scene editor every joint can be posed by hand, or keyed
   pose to pose. Any person or model can wear an **outfit** finish such as **holo** (rainbow foil shards). Particles have

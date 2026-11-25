@@ -11,6 +11,10 @@ rebuilt for Riptide by tools/make_people_rocketbox.js: turned to face +Z in metr
 arms let down to the sides, the skeleton renamed the way Mixamo names it, and the
 textures resized.
 
+rocketbox/*.glb are twelve more avatars from the same library (Female_Adult_01, 04, 05,
+08 and 10, and Male_Adult_01, 03, 05, 06, 08, 10 and 12), rebuilt the same way by
+tools/make_people_more.py. They are covered by the same MIT License, below.
+
 MIT License
 
 Copyright (c) 2020 Microsoft

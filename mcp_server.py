@@ -300,7 +300,7 @@ async def export_scene(path: str, layer: str | None = None, at_time: float | str
 
 
 @mcp.tool()
-async def add_world(scene: Literal["wave", "bigsun", "afterglow", "goldfield", "alpine", "rig", "studio", "desert", "night", "mountain", "neon", "golden", "oculus", "blocks", "blockisle", "blockgrave", "blocklava", "blockdungeon", "orbits", "livingroom", "mist", "cavern", "wintersun", "firesky", "drowned", "aboveclouds", ""] = "", name: str | None = None,
+async def add_world(scene: Literal["wave", "bigsun", "afterglow", "goldfield", "alpine", "rig", "studio", "desert", "night", "mountain", "neon", "golden", "oculus", "blocks", "blockisle", "blockgrave", "blocklava", "blockdungeon", "orbits", "livingroom", "mist", "cavern", "wintersun", "firesky", "drowned", "aboveclouds", "cartoon", ""] = "", name: str | None = None,
                     props: dict | None = None) -> dict:
     """Add a 3D world at the bottom of the layers: a whole place to film, with a sky, a sun that casts shadows,
     the ground, the air, props, and a lens. 3D shapes and models above it stand inside it, lit and shadowed by
@@ -321,7 +321,9 @@ async def add_world(scene: Literal["wave", "bigsun", "afterglow", "goldfield", "
     at the far end, a block figure), "orbits" (the Earth at night in space, satellites with tags on their orbits,
     the whole system turning slowly: for explainers), "livingroom" (a bright, lived-in living room from the doorway:
     sofas, an oak and steel coffee table, TV unit, bookcase, framed prints, a rug, the sun through a sheer curtain;
-    build your own rooms from the parts room, sofa, table, tvunit, tv, lamp, bookcase, print, rug, pillow, plant and book); "" is an empty
+    build your own rooms from the parts room, sofa, table, tvunit, tv, lamp, bookcase, print, rug, pillow, plant and book),
+    "cartoon" (a ten second cartoon in a park: a family, a big jump, six shots cut together, in the animated feature
+    look; set the project to 10 s; see "Animated films" below); "" is an empty
     world. `props` then changes any of its settings (all the numbers and colours animate, with update_layer or
     set_keyframes like any layer's):
 
@@ -448,6 +450,33 @@ async def add_world(scene: Literal["wave", "bigsun", "afterglow", "goldfield", "
     from a spout "height" m up, out the way the part faces: aim it with "turn") | "spring" | "flood" (in from the far
     side) | "rain" (over the patch; turn the world's rain up to see it fall), "flow" (%, keyable to start and stop it),
     "carve" (%). Delete the part to take it away. The "desert" scene has one pouring from its monolith.
+    Animated films: a "toon" is a stylized cartoon character: "build" "kid" | "tiny" | "adult" | "strong" | "round" |
+    "tall", "height" (m), "hairStyle" "short" | "spiky" | "swoop" | "bob" | "bun" | "ponytail" | "curly" | "bald", colours
+    "skin", "hair", "eyes", "top", "bottom", "shoes", "outfit" "casual" | "suit" (a hero suit; "accent" colours its gloves
+    and boots), "sleeves" "long" | "short" | "none", "legs" "trousers" | "shorts" | "skirt", and "squash" (% of squash and
+    stretch, 100 by default). "acts": [{"t": seconds, "do": "idle" | "walk" | "run" | "sneak" | "jump" | "wave" | "talk" |
+    "cheer" | "think" | "shrug" | "point" | "take" (a surprised take) | "dance" | "proud" | "look", "mood": its face while
+    it does it, "height": m, for a jump}] is what it does and when: each eases into the next, and a jump, shrug or take
+    goes back to standing when it is done. "mood" (or "moods": [{"t", "mood"}] to change it) is its face: "neutral" |
+    "happy" | "joy" | "laugh" | "sad" | "angry" | "surprised" | "scared" | "smug" | "determined" | "worried" | "think" |
+    "unsure" | "sleepy" | "shout". It talks with "say" and "sayAt" as a person does. "look" (a prop's id, or "camera")
+    turns its head and then its eyes there; "looks": [{"t", "at"}] changes that over time ("at": null looks ahead again).
+    Key its "at" and, with no acts, it walks there ("move": "run" to run), its steps matching the ground it covers;
+    "face": "travel" turns it the way it goes. "pose" turns any joint on top of the acting ("Hips", "Spine", "Spine1",
+    "Neck", "Head", "LeftArm", "LeftForeArm", "LeftHand", "LeftUpLeg", "LeftLeg", "LeftFoot" and the Right ones).
+    Stage people so the camera sees their faces when they look at each other: the one looked at nearer the camera.
+    A "scenery" is cartoon scenery to go with them: "kind" "lawn" (a lawn "size" [across] wide rolling into hills at its
+    edge; use ground "none") | "tree" | "bush" | "rock" | "bench" | "fence" ("size" [length]) | "lamp" | "flowers",
+    "color", "color2" (the trunk, the iron, the stalks) and "seed" (another shape).
+    The world's "style" draws it as an animated film is drawn: "natural" (as it is) | "feature" (soft light that never
+    leaves the shade black, a rim of light round the characters from behind, "rim" % for its strength, richer colour,
+    warm in the light and cool in the shade) | "toon" (cel shaded: a few flat bands of light, ink lines round every
+    shape and along its creases, "ink" % for their weight) | "painted" (flat brush strokes on paper, a faint line).
+    Cameras and cuts: a "camera" prop films the world when it is cut to: "lens" (mm), "lookAt" (a prop's id: it stays
+    turned to it), "aim" ("face" | "body" | "feet" on a character, or metres up; a character's face by default),
+    "focusOn" (a prop's id), "dof", "shake" (hand-held, 0 to 100), and "follow" (a prop's id: it rides along "offset"
+    [x, y, z] m from it, "lag" seconds behind it, looking at it unless lookAt says otherwise); key its "at" to fly it.
+    The world's "shots": [{"t": seconds, "cam": a camera's id}] is the edit: from each t on, that camera films.
     See the result with see_frame."""
     return await acall("add_world", {"scene": scene, "name": name, "props": props or {}})
 

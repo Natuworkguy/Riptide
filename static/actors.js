@@ -804,5 +804,5 @@ material.sheenRoughness = mix( .75, .35, hairAmt );`)
   // the inspector's values come back as text: what they mean
   const was = World.custom.car;
   World.custom.car = (P, t) => was({ ...P, lights: P.lights === 'off' || P.lights === false ? false : true, beams: P.beams === '1' || P.beams === true }, t);
-  return { pose, person, realPerson, travelled, MOVES };
+  return { pose, person, realPerson, travelled, MOVES, mouthAt, blinkAt };
 })();

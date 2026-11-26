@@ -50,11 +50,15 @@ const Shots = (() => {
       return `<div class="hd">Camera</div>
         <label class="f"><span>Lens mm</span><input type="number" step="1" data-k="lens" value="${+P.lens || 35}"></label>
         <label class="f"><span>Looks at</span>${sel('lookAt', P.lookAt, props(L, P.id), 'Where it is turned')}</label>
+        <label class="f"><span>Aim at</span>${sel('aim', typeof P.aim === 'string' ? P.aim : '', [['face', 'The face'], ['body', 'The body'], ['feet', 'The feet']], 'A face, or the middle')}</label>
+        <label class="f"><span>Follows</span>${sel('follow', P.follow, props(L, P.id), 'Nothing')}</label>
+        ${P.follow ? `<div class="vec"><div class="vh"><span>Offset m</span></div><div class="v3">${(P.offset || [0, 1.5, 4]).map((v, i) => `<input data-k="offset" data-i="${i}" type="number" step=".1" value="${+v}">`).join('')}</div></div>
+        <label class="f"><span>Lag s</span><input type="number" step=".05" min="0" data-k="lag" value="${P.lag ?? .3}"></label>` : ''}
         <label class="f"><span>Focus on</span>${sel('focusOn', P.focusOn, props(L, P.id), 'What it looks at')}</label>
         <label class="f"><span>Focus m</span><input type="number" step=".1" data-k="focus" value="${+P.focus || 0}" title="0: what it looks at, or focuses on"></label>
         <label class="f"><span>Depth of field</span><input type="number" step="5" data-k="dof" value="${+P.dof || 0}" title="0: the world's"></label>
         <label class="f"><span>Hand-held</span><input type="number" step="5" min="0" max="100" data-k="shake" value="${+P.shake || 0}"></label>
-        <p class="note">${cuts ? `Cut to at ${cuts}.` : 'Not in the edit yet.'} Key its place and turn to fly it; three keys or more make a smooth path.</p>
+        <p class="note">${cuts ? `Cut to at ${cuts}.` : 'Not in the edit yet.'} Key its place and turn to fly it; three keys or more make a smooth path. Following a prop, it keeps Offset from it and trails it by Lag.</p>
         <div class="acts"><button class="tb small" data-shot="cut">Cut to it here</button><button class="tb small" data-shot="look">Look through it</button></div>`;
     },
     worldInspector(L) {

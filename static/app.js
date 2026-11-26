@@ -3428,6 +3428,8 @@ function applyWorld(L, name, announce = true) {
   Object.assign(L.p, structuredClone(P.p)); L.name = P.label; L.p.shots = [];
   // a scene that builds its props for the composition's length, and films them with its own camera
   if (P.objects) { L.p.objects = World.ensureIds(P.objects(S.dur)); const cam = L.p.objects.find(x => x.type === 'camera'); if (cam) L.p.shots = [{ t: 0, cam: cam.id }]; }
+  // a scene cut between several cameras brings its own cuts
+  if (P.shots && L.p.objects?.length) L.p.shots = structuredClone(P.shots);
   for (const [k, ks] of Object.entries(P.keys?.(S.dur) || {})) for (const [t, v, ease] of ks) setKey(L, k, t, v, ease || 'easeInOut');
   if (P.camera) { const C = S.layers.find(x => x.type === 'camera') || addCamera(true); Object.assign(C.p, P.camera(S.h)); }
   if (announce) { refresh(); status(`${L.name}: ${P.hint}`); }

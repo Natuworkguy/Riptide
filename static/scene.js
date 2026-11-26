@@ -418,15 +418,17 @@ const SceneEd = (() => {
   }
   function onInsp(e, record = true) {
     const i = e.target, k = i.dataset.k, Y = selLayer(); if (Y && k) { if (record) onLayerInsp(Y, i); return; }
-    const P = sel(); if (!k || !P) return;
+    const P = sel(); if (!P) return;
+    // a module's own controls (a character's list of acts): it changes the prop itself
+    if (!k) { if (extras.some(x => x.input?.(i, P))) { dirty = true; if (record) { refresh(); renderInsp(); } } return; }
     let v = i.type === 'number' ? +i.value : i.value;
     if (i.dataset.i != null) { const idx = +i.dataset.i;
-      const base = k === 'at' ? cur(P, 'at', P.at || [0, 0, 0]) : k === 'turn' ? cur(P, 'turn', P.turn || [0, 0, 0]) : k === 'scale' ? [].concat(cur(P, 'scale', P.scale ?? 1)) : (P[k] || [0, 0, 0]);
+      const base = k === 'at' ? cur(P, 'at', P.at || [0, 0, 0]) : k === 'turn' ? cur(P, 'turn', P.turn || [0, 0, 0]) : k === 'scale' ? [].concat(cur(P, 'scale', P.scale ?? 1)) : (P[k] || (k === 'offset' ? [0, 1.5, 4] : [0, 0, 0]));
       const arr = (base.length === 1 ? [base[0], base[0], base[0]] : [...base]).map(Number); arr[idx] = v; v = arr; }
     if (['at', 'turn', 'scale'].includes(k)) setVal(P, k, k === 'scale' && v.every(x => x === v[0]) ? v[0] : v);
     else if (k === 'name') { if (v) P.name = v; else delete P.name; renderTree(); }
     else P[k] = v;
-    if (k === 'light' || (P.type === 'liquid' && (k === 'from' || k === 'kind')) || (P.type === 'structure' && k === 'build') || (P.type === 'blocky' && ['hold', 'holdLeft', 'hat', 'skin'].includes(k)) || (P.type === 'person' && k === 'body')) renderInsp();
+    if (k === 'light' || (P.type === 'liquid' && (k === 'from' || k === 'kind')) || (P.type === 'structure' && k === 'build') || (P.type === 'blocky' && ['hold', 'holdLeft', 'hat', 'skin'].includes(k)) || (P.type === 'person' && k === 'body') || (P.type === 'toon' && ['build', 'outfit'].includes(k)) || (P.type === 'camera' && k === 'follow') || (P.type === 'scenery' && k === 'kind')) renderInsp();
     dirty = true; if (record) refresh();
   }
 
